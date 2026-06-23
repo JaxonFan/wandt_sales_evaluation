@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% block body %}
+<div class="card">
+  <h2>Closure candidates · silence detector</h2>
+  <p class="hint">Accounts silent for more than 3× their <b>own</b> normal order gap (some order daily, some monthly).
+    Confirm a genuinely closed store as <b>Exempt</b> — it's dropped from scoring and excluded from churn going forward.</p>
+  <table>
+    <thead><tr><th>Customer</th><th>Account</th><th class="num">Median gap (days)</th><th class="num">Days silent</th><th></th></tr></thead>
+    <tbody>
+    {% for c in candidates %}
+      <tr>
+        <td>{{ c.customer }}</td><td class="mut">{{ c.account }}</td>
+        <td class="num">{{ c.median_gap_days }}</td><td class="num">{{ c.days_silent }}</td>
+        <td>
+          {% if c.account in exempt %}<span class="badge b-ramp">exempt</span>
+          {% elif nav.is_current %}
+          <form method="post" action="/closures/exempt" class="ov-form" style="margin:0">
+            <input type="hidden" name="account" value="{{ c.account }}"><input type="hidden" name="p" value="{{ nav.idx }}">
+            <input name="note" placeholder="note" style="width:140px">
+            <button type="submit" class="ghost">confirm closed</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="mut">No silent accounts.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

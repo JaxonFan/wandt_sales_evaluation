@@ -1,0 +1,60 @@
+{% extends "base.html" %}{% block body %}
+<div class="card">
+  <div class="pbar">
+    {% if nav.prev_idx is not none %}<a class="pnav" href="/?p={{ nav.prev_idx }}">◀ prev</a>
+    {% else %}<span class="pnav dis">◀ prev</span>{% endif %}
+    <div class="mid">
+      <div class="ttl">Period {{ nav.n }} · {{ nav.start }} ~ {{ nav.end }}</div>
+      <div class="hint" style="margin:3px 0 4px">
+        {% if nav.is_current %}<span class="badge b-ok">current</span>{% else %}<span class="badge b-ramp">locked · read-only</span>{% endif %}
+        {{ nav.total }} periods · {{ nav.rel }}</div>
+      <select class="psel" onchange="if(this.value!=='')location.href='/?p='+this.value">
+        {% for o in nav.options %}
+        <option value="{{ o.idx }}" {{ 'selected' if o.idx==nav.idx }}>Period {{ o.n }} · {{ o.start }} ~ {{ o.end }}{% if o.is_current %} (current){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if nav.next_idx is not none %}<a class="pnav" href="/?p={{ nav.next_idx }}">next ▶</a>
+    {% else %}<span class="pnav dis">next ▶</span>{% endif %}
+  </div>
+</div>
+<div class="card">
+  <h2>Team overview · suggested bonus</h2>
+  <p class="hint">Trailing 13 weeks ending {{ data_through }} · market drift {{ market_drift }}% · click a row for detail.
+    Headline is <b>profit vs market</b> (neutralizes a floor-wide margin change); <b>real growth</b> is the volume signal.
+    Bonus = <b>Defend</b> (profit retained) + <b>Grow</b> ($ above target) + <b>Acquire</b> (new-account ramp).</p>
+  <form method="get" action="/" class="ov-form" style="margin:0 0 12px">
+    <input type="hidden" name="p" value="{{ nav.idx }}">
+    Pool $<input name="pool" type="number" step="100" value="{{ pool }}" style="width:90px">
+    &nbsp; Defend <input name="defend" type="number" min="0" max="100" step="5" value="{{ defend_pct }}" style="width:56px">%
+    &nbsp;·&nbsp; Grow {{ 100 - defend_pct }}%
+    <button type="submit">Re-allocate</button>
+  </form>
+  <table>
+    <thead><tr><th>Sales rep</th><th class="num">Accounts</th>
+      <th class="num">Profit vs market</th><th class="num">Real growth</th>
+      <th class="num">New</th><th class="num">Defend</th><th class="num">Grow</th>
+      <th class="num">Acquire</th><th class="num">Suggested</th><th class="num">Award</th></tr></thead>
+    <tbody>
+    {% for c in cards %}{% set a = alloc[c.associate] %}
+      <tr class="click" onclick="location='/associate/{{ c.associate }}?p={{ nav.idx }}'">
+        <td><strong>{{ c.associate }}</strong></td>
+        <td class="num">{{ c.accounts }}</td>
+        <td class="num {{ 'pos' if (c.profit_vs_market_pct or 0)>=0 else 'neg' }}">
+          {% if c.profit_vs_market_pct is not none %}{{ '%+.1f'|format(c.profit_vs_market_pct) }}%{% else %}—{% endif %}</td>
+        <td class="num {{ 'pos' if (c.real_growth_pct or 0)>=0 else 'neg' }}">
+          {% if c.real_growth_pct is not none %}{{ '%+.1f'|format(c.real_growth_pct) }}%{% else %}—{% endif %}</td>
+        <td class="num">{% if c.new_accounts %}<span class="badge b-new">{{ c.new_accounts }}</span>{% else %}<span class="mut">—</span>{% endif %}</td>
+        <td class="num">${{ '{:,.0f}'.format(a.defend) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(a.grow) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(a.acquire) }}</td>
+        <td class="num"><strong>${{ '{:,.0f}'.format(a.total) }}</strong></td>
+        <td class="num">{% if c.associate in awards %}${{ '%.0f'|format(awards[c.associate].award_amount) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="hint" style="margin-top:10px">Suggested amounts are a <b>fair starting point</b>; the manager confirms or adjusts each rep's award.
+    Acquire is commission-style on new-account profit (separate from the Defend+Grow pool).</p>
+</div>
+{% endblock %}

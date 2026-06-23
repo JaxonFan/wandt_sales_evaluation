@@ -1,0 +1,20 @@
+# Raw business data (kept local; seeded to RDS from your machine)
+sales_data/
+*.xlsx
+*.xls
+*.XLSX
+*.docx
+*.pdf
+*.csv
+
+# Local venv & app DB
+sales_evaluation/
+app/data/
+*.db
+*.sqlite*
+
+# Python / OS cruft
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/

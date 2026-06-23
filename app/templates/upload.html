@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block body %}
+<div class="card" style="max-width:560px">
+  <h2>Import sales data</h2>
+  <p class="hint">Upload an item-level invoice export (same columns as the source files: SOP Type/Number, Item Number,
+    QTY, Unit/Extended Price & Cost, Customer Number/Name, Document Date, Batch Number). Idempotent — re-uploading an
+    order replaces its lines. Only the 5 sales reps' lines are stored.</p>
+  {% if msg %}<p class="pos" style="font-size:13px">{{ msg }}</p>{% endif %}
+  <form method="post" action="/upload" enctype="multipart/form-data">
+    <p>Sales file: <input name="sales_file" type="file" accept=".xlsx,.xls" required></p>
+    <button type="submit">Import</button>
+  </form>
+</div>
+{% endblock %}

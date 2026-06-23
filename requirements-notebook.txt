@@ -1,0 +1,6 @@
+# Notebook-only deps (analysis/validation; not needed in the app image)
+-r requirements.txt
+matplotlib
+nbclient
+nbformat
+ipykernel

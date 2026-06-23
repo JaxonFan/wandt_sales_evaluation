@@ -1,0 +1,48 @@
+{% extends "base.html" %}{% block body %}
+<div class="card">
+  <div class="pbar">
+    <div class="mid"><div class="ttl">Limited-stock items · Period {{ nav.n }} · {{ nav.start }} ~ {{ nav.end }}</div>
+      <div class="hint" style="margin:3px 0">{% if nav.is_current %}<span class="badge b-ok">current</span>{% else %}<span class="badge b-ramp">locked</span>{% endif %}</div></div>
+  </div>
+</div>
+<div class="card">
+  <h2>Constrained items this period</h2>
+  <p class="hint">Items you couldn't fully supply this period. They're removed from <b>both</b> the current and the
+    baseline window (apples-to-apples), so a drop caused by "couldn't ship it" isn't charged to the rep.</p>
+  <table>
+    <thead><tr><th>Item #</th><th>Note</th><th></th></tr></thead>
+    <tbody>
+    {% for c in current %}
+      <tr><td>{{ c.item_number }}</td><td class="mut">{{ c.note or '' }}</td>
+        <td><form method="post" action="/constrained/remove" style="margin:0">
+          <input type="hidden" name="item_number" value="{{ c.item_number }}"><input type="hidden" name="p" value="{{ nav.idx }}">
+          <button type="submit" class="ghost">remove</button></form></td></tr>
+    {% else %}
+      <tr><td colspan="3" class="mut">None yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/constrained/add" class="ov-form" style="margin-top:12px">
+    <input type="hidden" name="p" value="{{ nav.idx }}">
+    Add item # <input name="item_number" required style="width:160px">
+    Note <input name="note" style="width:200px">
+    <button type="submit">Add</button>
+  </form>
+</div>
+<div class="card">
+  <h2>Auto-detected candidates (confirm only)</h2>
+  <p class="hint">Suggestions by revenue concentration in this window — not auto-excluded. Add the ones that were truly supply-constrained.</p>
+  <table>
+    <thead><tr><th>Item #</th><th>Description</th><th class="num">Revenue</th><th class="num">Share</th><th></th></tr></thead>
+    <tbody>
+    {% for c in candidates %}
+      <tr><td>{{ c.item_number }}</td><td>{{ c.description }}</td>
+        <td class="num">${{ '{:,}'.format(c.revenue) }}</td><td class="num">{{ c.share }}%</td>
+        <td><form method="post" action="/constrained/add" style="margin:0">
+          <input type="hidden" name="item_number" value="{{ c.item_number }}"><input type="hidden" name="p" value="{{ nav.idx }}">
+          <button type="submit" class="ghost">add</button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

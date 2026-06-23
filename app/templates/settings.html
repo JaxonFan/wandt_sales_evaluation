@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block body %}
+<div class="card" style="max-width:600px">
+  <h2>Settings · metric dials</h2>
+  <p class="hint">Defaults from the 2-year analysis. (PoC: read-only display.)</p>
+  <table>
+    <tr><td>Measurement window (weeks)</td><td class="num">{{ settings.window_weeks }}</td></tr>
+    <tr><td>Review/pay cadence (weeks)</td><td class="num">{{ settings.period_weeks }}</td></tr>
+    <tr><td>Provisional baseline threshold (weeks)</td><td class="num">{{ settings.provisional_min_weeks }}</td></tr>
+    <tr><td>Familiar: min handled weeks (past year)</td><td class="num">{{ settings.familiar_min_weeks }}</td></tr>
+    <tr><td>Familiar: max gap since last touch (weeks)</td><td class="num">{{ settings.familiar_max_gap_weeks }}</td></tr>
+    <tr><td>Acquisition ramp bonus rate (% of new-account profit)</td><td class="num">{{ (settings.acquisition_pct * 100)|round(1) }}%</td></tr>
+    <tr><td>Acquisition ramp length (periods)</td><td class="num">{{ settings.acquisition_ramp_periods }}</td></tr>
+    <tr><td>Holiday selling weight (0 = dead day)</td><td class="num">{{ settings.holiday_weight }}</td></tr>
+    <tr><td>Behavior-churn fine ($)</td><td class="num">{{ settings.fine_amount }}</td></tr>
+    <tr><td>Bonus pool default ($)</td><td class="num">{{ settings.bonus_pool }}</td></tr>
+    <tr><td>Defend / Grow split (default)</td><td class="num">{{ (settings.defend_pct * 100)|round|int }}% / {{ (100 - settings.defend_pct * 100)|round|int }}%</td></tr>
+  </table>
+  <p class="hint" style="margin-top:10px">Metric = profit dollars (revenue − cost), headline market-adjusted. No margin floor (reps don't set margin).</p>
+</div>
+{% endblock %}

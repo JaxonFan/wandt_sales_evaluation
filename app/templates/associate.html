@@ -1,0 +1,106 @@
+{% extends "base.html" %}{% block body %}
+<p style="font-size:13px"><a href="/?p={{ nav.idx }}" style="color:var(--blue);text-decoration:none">‹ Team overview</a></p>
+<div class="card">
+  <div class="pbar">
+    {% if nav.prev_idx is not none %}<a class="pnav" href="/associate/{{ name }}?p={{ nav.prev_idx }}">◀ prev</a>
+    {% else %}<span class="pnav dis">◀ prev</span>{% endif %}
+    <div class="mid">
+      <div class="ttl">{{ name }} · Period {{ nav.n }} · {{ nav.start }} ~ {{ nav.end }}</div>
+      <div class="hint" style="margin:3px 0 4px">
+        {% if nav.is_current %}<span class="badge b-ok">current</span>{% else %}<span class="badge b-ramp">locked · read-only</span>{% endif %}
+        {{ nav.total }} periods · {{ nav.rel }}</div>
+      <select class="psel" onchange="if(this.value!=='')location.href='/associate/{{ name }}?p='+this.value">
+        {% for o in nav.options %}
+        <option value="{{ o.idx }}" {{ 'selected' if o.idx==nav.idx }}>Period {{ o.n }} · {{ o.start }} ~ {{ o.end }}{% if o.is_current %} (current){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if nav.next_idx is not none %}<a class="pnav" href="/associate/{{ name }}?p={{ nav.next_idx }}">next ▶</a>
+    {% else %}<span class="pnav dis">next ▶</span>{% endif %}
+  </div>
+</div>
+<div class="card">
+  <h2>{{ name }} · this period</h2>
+  <p class="hint">Trailing 13 months vs the same 13 weeks last year, by account, each vs its own baseline.</p>
+  {% if card %}
+  <div class="kpi primary"><div class="label">Profit vs market (pay basis)</div>
+    <div class="val">{% if card.profit_vs_market_pct is not none %}{{ '%+.1f'|format(card.profit_vs_market_pct) }}%{% else %}—{% endif %}</div></div>
+  <div class="kpi"><div class="label">Real (volume) growth</div>
+    <div class="val {{ 'pos' if (card.real_growth_pct or 0)>=0 else 'neg' }}">{% if card.real_growth_pct is not none %}{{ '%+.1f'|format(card.real_growth_pct) }}%{% else %}—{% endif %}</div></div>
+  <div class="kpi"><div class="label">Profit vs target</div>
+    <div class="val {{ 'pos' if (card.profit_perf_pct or 0)>=0 else 'neg' }}">{% if card.profit_perf_pct is not none %}{{ '%+.1f'|format(card.profit_perf_pct) }}%{% else %}—{% endif %}</div></div>
+  <div class="kpi"><div class="label">Accounts</div><div class="val">{{ card.accounts }}</div></div>
+  <div class="kpi"><div class="label">New accounts (ramp)</div>
+    <div class="val">{% if card.new_accounts %}{{ card.new_accounts }} · ${{ '{:,.0f}'.format(card.acquisition_bonus) }}{% else %}—{% endif %}</div></div>
+  {% endif %}
+  <p class="hint" style="margin-top:8px"><b>Profit vs market</b> = pay basis (each account vs its own baseline, size- and market-adjusted, so a floor-wide
+    margin change set by management washes out). <b>Real growth</b> isolates volume from price/inflation. New accounts earn a separate ramp bonus
+    for ~1 quarter, then graduate into normal scoring.</p>
+</div>
+
+<div class="card">
+  <h2>Manager award</h2>
+  {% if nav.is_current %}
+  <p class="hint">{% if proposed_bonus %}Suggested (fair start): <b>Defend ${{ '%.0f'|format(proposed_bonus.defend) }} + Grow ${{ '%.0f'|format(proposed_bonus.grow) }} + Acquire ${{ '%.0f'|format(proposed_bonus.acquire) }} = ${{ '%.0f'|format(proposed_bonus.total) }}</b>
+    (pool & split on the team page).{% endif %} Prefilled below — adjust as needed:</p>
+  <form method="post" action="/award" class="ov-form">
+    <input type="hidden" name="associate" value="{{ name }}">
+    <input type="hidden" name="p" value="{{ nav.idx }}">
+    Award $<input name="award_amount" type="number" step="50" value="{{ award.award_amount|round(0)|int if award else (proposed_bonus.total|round(0)|int if proposed_bonus else 0) }}" style="width:90px">
+    &nbsp; Behavior-churn fine $<input name="fine_amount" type="number" step="50" value="{{ award.fine_amount|round(0)|int if award else 0 }}" style="width:80px">
+    &nbsp; Note <input name="note" value="{{ award.note or '' if award else '' }}" style="width:200px">
+    <button type="submit">Save</button>
+  </form>
+  {% else %}
+  <p class="lock-note">Historical period is read-only — award: {% if award %}${{ award.award_amount|round(0)|int }}{% if award.note %} · {{ award.note }}{% endif %}{% else %}not set{% endif %}</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Per-account · manager review</h2>
+  <p class="hint">Needs-attention first.
+    <span class="badge b-ramp">ramping (new to this account: grew counts, declines don't)</span>
+    <span class="badge b-prov">provisional (under a year: vs own prior quarter)</span>
+    <span class="badge b-new">new account (ramp bonus, no baseline)</span></p>
+  <table>
+    <thead><tr><th>Customer</th><th class="num">Actual profit</th><th class="num">Target</th><th class="num">vs target</th>
+      <th class="num">Real growth</th><th>Status</th><th>Manager action</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      {% set a = actions.get(r.account) %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td class="num">${{ '{:,}'.format(r.actual_profit) }}</td>
+        <td class="num">{% if r.profit_target is not none %}${{ '{:,}'.format(r.profit_target) }}{% else %}—{% endif %}</td>
+        <td class="num {{ 'pos' if (r.perf or 0)>=0 else 'neg' }}">{% if r.perf is not none %}{{ '%+.0f'|format(r.perf) }}%{% else %}—{% endif %}</td>
+        <td class="num {{ 'pos' if (r.real_growth or 0)>=0 else 'neg' }}">{% if r.real_growth is not none %}{{ '%+.0f'|format(r.real_growth) }}%{% else %}—{% endif %}</td>
+        <td>{% if r.status=='ramping' %}<span class="badge b-ramp">ramping</span>
+            {% elif r.status=='new' %}<span class="badge b-new">new</span>
+            {% elif r.tier=='provisional' %}<span class="badge b-prov">provisional</span>
+            {% else %}<span class="badge b-ok">scored</span>{% endif %}</td>
+        <td>
+          {% if nav.is_current %}
+          <form method="post" action="/override" class="ov-form">
+            <input type="hidden" name="account" value="{{ r.account }}">
+            <input type="hidden" name="associate" value="{{ name }}">
+            <input type="hidden" name="p" value="{{ nav.idx }}">
+            <select name="status">
+              <option value="normal" {{ 'selected' if (not a or a.status=='normal') }}>Normal</option>
+              <option value="exempt" {{ 'selected' if (a and a.status=='exempt') }}>Exempt</option>
+              <option value="rebaseline" {{ 'selected' if (a and a.status=='rebaseline') }}>Rebaseline</option>
+            </select>
+            <input name="rebaseline_value" type="number" placeholder="sugg ${{ r.proposed }}"
+                   value="{{ a.rebaseline_value|round(0)|int if (a and a.rebaseline_value) else '' }}" style="width:88px" title="System suggestion: ${{ r.proposed }} (recent run-rate)">
+            <label class="mut" style="font-size:11px"><input type="checkbox" name="called" {{ 'checked' if a and a.called }}>called</label>
+            <button type="submit" class="ghost">Save</button>
+          </form>
+          {% else %}
+          <span class="mut" style="font-size:12px">{% if a and a.status=='exempt' %}Exempt{% elif a and a.status=='rebaseline' %}Rebaseline ${{ a.rebaseline_value|round(0)|int if a.rebaseline_value else '—' }}{% else %}Normal{% endif %}{% if a and a.note %} · {{ a.note }}{% endif %}</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
