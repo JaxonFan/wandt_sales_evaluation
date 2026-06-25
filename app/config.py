@@ -29,7 +29,7 @@ DEFAULTS = {
     "growth_large_pct": 0.02,      # growth ask for large (mature) accounts
     "growth_medium_pct": 0.05,     # growth ask for medium accounts
     "growth_small_pct": 0.10,      # growth ask for small accounts (most headroom)
-    "growth_payout_rate": 0.085,   # $ earned per sales-dollar above the (inflation-adjusted) growth target
+    "growth_payout_rate": 0.18,    # $ earned per sales-dollar above the (inflation-adjusted) growth target
     "part_time_factor": 0.5,       # part-time reps' growth STRETCH scaled by this (full-time = 1.0)
 
     # --- Acquisition (new accounts: an elevated revenue share for ~1 quarter) ---

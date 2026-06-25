@@ -242,11 +242,13 @@ CNY_DATES = [pd.Timestamp(d) for d in
              ["2023-01-22", "2024-02-10", "2025-01-29", "2026-02-17", "2027-02-06", "2028-01-26"]]
 
 
-def cny_aligned_offset_days(period_start, period_end, default_days=364):
-    """If a CNY falls within the period, return days to the prior-year CNY (aligns the spike); else 364."""
+def cny_aligned_offset_days(period_start, period_end, default_days=364, window_days=21):
+    """If the period OVERLAPS a CNY +/- window_days (its ~3-week spike), return days to the prior-year
+    CNY so the year-ago window lines up the spike (catches the adjacent spillover period too); else 364."""
     for i in range(1, len(CNY_DATES)):
-        if period_start <= CNY_DATES[i] <= period_end:
-            return (CNY_DATES[i] - CNY_DATES[i - 1]).days
+        cny = CNY_DATES[i]
+        if period_start <= cny + pd.Timedelta(days=window_days) and period_end >= cny - pd.Timedelta(days=window_days):
+            return (cny - CNY_DATES[i - 1]).days
     return default_days
 
 
@@ -309,13 +311,27 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     trailing_year = df[(df["document_date"] > period_end - ONE_YEAR) & (df["document_date"] <= period_end)]
     account_annual_sales = trailing_year.groupby("account")["extended_price"].sum()
 
+    # --- provisional baseline (for accounts past the ramp but < 1yr old, no year-ago baseline) ---
+    # the account's OWN prior quarter, normalized by the COMPANY's quarter-over-quarter seasonal swing
+    # measured LAST year (so a rep isn't credited/penalized for a season-wide move).
+    QUARTER = pd.Timedelta(weeks=13)
+    prior_quarter = df[(df["document_date"] > period_start - QUARTER) & (df["document_date"] <= period_end - QUARTER)]
+    account_prior_quarter_sales = prior_quarter.groupby("account")["extended_price"].sum()
+    ya_current = df[(df["document_date"] > period_start - ONE_YEAR) & (df["document_date"] <= period_end - ONE_YEAR)]
+    ya_prior = df[(df["document_date"] > period_start - ONE_YEAR - QUARTER) & (df["document_date"] <= period_end - ONE_YEAR - QUARTER)]
+    company_seasonal_factor = 1.0
+    if ya_current["extended_price"].sum() and ya_prior["extended_price"].sum():
+        company_seasonal_factor = min(max(ya_current["extended_price"].sum() / ya_prior["extended_price"].sum(), 0.5), 2.0)
+
+    BASELINE_MIN = 100.0  # an account needs a real baseline above this to count in growth (else line-items only)
+
     def account_status(account_id):
         seen = first_seen.get(account_id)
         if seen is None:
-            return "normal"
+            return "scored"
         is_new = (seen > period_start) or ((period_end - seen).days <= acq_ramp_periods * period_days)
         if not is_new:
-            return "normal"
+            return "scored"
         if account_id in not_rep_won:                 # manager flagged "not rep-won" -> house account
             return "house"
         return "landing" if seen > period_start else "ramp"
@@ -334,6 +350,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         acct_total = float(account_current_sales.get(account_id, 0.0))
         work_share = rep_sales / acct_total if acct_total else 0.0
         last_year_for_rep = float(account_last_year_sales.get(account_id, 0.0)) * work_share
+        prior_quarter_for_rep = float(account_prior_quarter_sales.get(account_id, 0.0)) * work_share * company_seasonal_factor
         annual = float(account_annual_sales.get(account_id, 0.0))
         tier_pct = growth_tier_pct(annual, growth_thresholds, growth_pcts)
         status = account_status(account_id)
@@ -341,6 +358,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
 
         t = rep_totals[rep]
         t["items"] += items
+        baseline_for_rep = None
         if status in ("landing", "ramp"):
             t["acquisition"] += acq_revenue_pct * rep_sales       # single elevated revenue share
             if status == "landing":
@@ -348,15 +366,23 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         elif status == "house":
             pass                                                   # line items only (no growth, no acquisition)
         else:
-            t["growth_base"] += last_year_for_rep
-            t["growth_stretch"] += last_year_for_rep * tier_pct * pt
-            t["growth_actual"] += rep_sales
+            # baseline ladder: year-ago (mature) -> own prior quarter, season-normalized (provisional) -> none
+            if last_year_for_rep > BASELINE_MIN:
+                baseline_for_rep, status = last_year_for_rep, "mature"
+            elif prior_quarter_for_rep > BASELINE_MIN:
+                baseline_for_rep, status = prior_quarter_for_rep, "provisional"
+            else:
+                status = "no_basis"                                # no real baseline -> line items only
+            if baseline_for_rep is not None:
+                t["growth_base"] += baseline_for_rep
+                t["growth_stretch"] += baseline_for_rep * tier_pct * pt
+                t["growth_actual"] += rep_sales
 
         account_rows.append(dict(
             associate=rep, account=account_id, status=status, tier=(
                 "large" if annual >= growth_thresholds[0] else "medium" if annual >= growth_thresholds[1] else "small"),
             rep_sales=rep_sales, last_year_for_rep=last_year_for_rep,
-            account_target=(last_year_for_rep * (1 + tier_pct * pt)) if status == "normal" else None,
+            account_target=(baseline_for_rep * (1 + tier_pct * pt)) if baseline_for_rep is not None else None,
             annual_sales=annual))
 
     cards = []
@@ -372,4 +398,4 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
             total_bonus=contribution_bonus + growth_bonus + t["acquisition"]))
     return dict(scorecards=pd.DataFrame(cards), accounts=pd.DataFrame(account_rows),
                 capacity_current=capacity_current, capacity_last_year=capacity_last_year,
-                inflation_overall=overall_factor)
+                inflation_overall=overall_factor, company_seasonal_factor=company_seasonal_factor)

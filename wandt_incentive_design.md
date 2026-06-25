@@ -28,8 +28,15 @@ today's prices using per-item **cost** inflation, so the target is a concrete nu
 front — and beating it means *real* growth, not just price rises. (A flat-volume rep facing 5% cost
 inflation needs +5% sales just to reach target.)
 
-**Lunar New Year** is a moving holiday with a big demand spike, so for CNY periods the comparison is
-auto-aligned to *last year's* CNY (not a fixed 364 days back) so both sides contain the spike.
+**Lunar New Year** is a moving holiday with a big demand spike, so any period within ~3 weeks of CNY
+is auto-aligned to *last year's* CNY (not a fixed 364 days back) so both sides contain the spike.
+
+**Accounts without a full year of history** aren't compared to a fake $0 baseline (which would double-pay
+a new account as acquisition *and* "growth"). Instead: a brand-new account earns **acquisition** for its
+first quarter; then, until it has a year of history, it's **provisional** — measured against its **own
+prior quarter, normalized by the company's seasonal swing** (so a rep isn't credited for a season-wide
+move); once it has a full year it graduates to year-over-year. Accounts too sparse for any baseline earn
+line-item contribution only. So a new account is never simultaneously in acquisition and growth.
 **Part-time reps:** their growth *stretch* is scaled to the hours they work (≈ half), so a part-timer with a small book gets a lighter, fair target — but the **same payout rate** per dollar grown.
 
 ### 3. Acquisition — an elevated 1% revenue share on new accounts
@@ -65,7 +72,7 @@ Each rep also gets a **"where am I vs my target"** dashboard: one target number,
 
 ## Dials the manager sets (all editable in the app)
 - Contribution: **$ per line item** (≈ $0.10)
-- Growth: size thresholds & tier %s (≈ +2 / +5 / +10), **payout per $ above target** (≈ 8.5%), **part-time factor** (≈ 0.5)
+- Growth: size thresholds & tier %s (≈ +2 / +5 / +10), **payout per $ above target** (≈ 18%), **part-time factor** (≈ 0.5)
 - Acquisition: **revenue share** (≈ 1%), "new" window (**1 quarter**)
 *(Calibrated so total bonus lands ~$3,000/period across the team; tune to your budget.)*
 

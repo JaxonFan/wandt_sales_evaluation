@@ -41,7 +41,9 @@
 <div class="card">
   <h2>Per-account this period</h2>
   <p class="hint">New / ramping accounts pay through Acquisition; the rest count toward Growth.
-    <span class="badge b-new">new (landing)</span> <span class="badge b-ramp">ramp (still earning)</span> <span class="badge b-ok">growth</span></p>
+    <span class="badge b-new">new (landing)</span> <span class="badge b-ramp">ramp</span>
+    <span class="badge b-ok">mature (vs last yr)</span> <span class="badge b-prov">provisional (vs own prior qtr)</span>
+    <span class="mut">no-basis / inbound = line items only</span></p>
   <table>
     <thead><tr><th>Customer</th><th>Tier</th><th class="num">Sales</th><th class="num">Last year</th>
       <th class="num">Target</th><th class="num">vs target</th><th>Status</th><th>Manager</th></tr></thead>
@@ -54,7 +56,11 @@
         <td class="num">${{ '{:,}'.format(r.last_year) }}</td>
         <td class="num">{% if r.target is not none %}${{ '{:,}'.format(r.target) }}{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num {{ 'pos' if (r.perf or 0)>=0 else 'neg' }}">{% if r.perf is not none %}{{ '%+.0f'|format(r.perf) }}%{% else %}—{% endif %}</td>
-        <td>{% if r.status=='landing' %}<span class="badge b-new">new</span>{% elif r.status=='ramp' %}<span class="badge b-ramp">ramp</span>{% else %}<span class="badge b-ok">growth</span>{% endif %}</td>
+        <td>{% if r.status=='landing' %}<span class="badge b-new">new</span>
+            {% elif r.status=='ramp' %}<span class="badge b-ramp">ramp</span>
+            {% elif r.status=='provisional' %}<span class="badge b-prov">provisional</span>
+            {% elif r.status=='mature' %}<span class="badge b-ok">growth</span>
+            {% else %}<span class="mut">line items</span>{% endif %}</td>
         <td>
           {% if nav.is_current %}
           <form method="post" action="/override" class="ov-form">
