@@ -11,18 +11,34 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 SALES_ROLES = {"full time sales", "part time sales"}
 
 # Metric dials (defaults from the 2-year analysis; the engine reads overrides from settings).
+# The bonus is THREE direct, self-computable pieces (per 4-week period), no pool:
+#   Contribution = items_placed x item_rate
+#   Growth       = max(0, sales - target) x growth_payout_rate ; target is size-tiered + part-time-scaled
+#   Acquisition  = landing (% of a new account's first-period sales) + ramp (% for the rest of ~1 quarter)
 DEFAULTS = {
-    "window_weeks": 13,            # trailing measurement window ("last 3 months")
-    "period_weeks": 4,            # review/pay cadence (4-week period)
-    "provisional_min_weeks": 13,   # history before an account leaves 'new' for a prior-quarter baseline
-    "defend_pct": 0.35,           # share of the fixed bonus pool to Defend; rest is Grow (Grow-heavy)
-    "acquisition_pct": 0.02,       # acquisition ramp bonus = this % of a new account's profit
-    "acquisition_ramp_periods": 3, # a new account earns the ramp bonus for ~1 quarter, then graduates
-    "familiar_min_weeks": 4,       # 'experienced' on an account if handled it >= this many distinct weeks last year
-    "familiar_max_gap_weeks": 26,  # ...AND last touch within this many weeks (else ramping)
+    "period_weeks": 4,             # review/pay cadence (4-week period); the bonus is assessed per period
+    "window_weeks": 13,            # trailing window used for closure cadence / context
     "holiday_weight": 0.0,         # selling capacity assigned to a federal holiday (0 = a dead day)
+
+    # --- Contribution (items placed) ---
+    "item_rate": 0.20,             # $ earned per invoice line-item written this period (manager-set dial)
+
+    # --- Growth (grow your book to a size-tiered target) ---
+    "growth_large_min": 100000,    # account's prior-year sales >= this -> "large" tier
+    "growth_medium_min": 20000,    # ... >= this (and < large) -> "medium"; below -> "small"
+    "growth_large_pct": 0.02,      # growth ask for large (mature) accounts
+    "growth_medium_pct": 0.05,     # growth ask for medium accounts
+    "growth_small_pct": 0.10,      # growth ask for small accounts (most headroom)
+    "growth_payout_rate": 0.10,    # $ earned per sales-dollar above the growth target
+    "part_time_factor": 0.5,       # part-time reps' growth STRETCH scaled by this (full-time = 1.0)
+
+    # --- Acquisition (land new accounts; size-scaled; 1-quarter ramp) ---
+    "acq_landing_pct": 0.10,       # bonus = this % of a new account's sales in the period it first orders
+    "acq_ramp_pct": 0.05,          # bonus = this % of its sales for the remaining periods of the ramp
+    "acq_ramp_periods": 3,         # a new account earns for ~1 quarter (3 periods incl. landing), then graduates
+
+    # --- closure decision-support ---
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)
-    "bonus_pool": 1000,            # fixed Defend+Grow pool to split each period ($)
 }
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")

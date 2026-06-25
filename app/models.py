@@ -27,7 +27,8 @@ class User(Base):
     user_id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)     # pbkdf2
-    role = Column(String, default="manager")           # manager | admin
+    role = Column(String, default="manager")           # manager | admin | rep
+    associate_name = Column(String)                    # for role='rep': which sales rep this login is
     is_active = Column(Boolean, default=True)
 
 

@@ -1,7 +1,9 @@
 # Deployment — W&T Sales Scorecard (AWS, us-east-1)
 
 Live URL: **https://wa-1689405f24e2438ba20406d4b16ed235.ecs.us-east-1.on.aws**
-(login page; demo credentials `manager/demo123` and `admin/demo123` — **rotate before real use**.)
+(demo logins — **rotate before real use**: managers `manager/demo123`, `admin/demo123`;
+read-only **rep logins** `an` / `garmi` / `ting` / `vanessa` / `wendy` (all `demo123`) →
+each lands on their own `/me` goal page. Metric model: see `wandt_incentive_design.md`.)
 
 ## Architecture
 Public HTTPS via **Amazon ECS Express Mode** (Fargate + managed ALB/SSL + autoscaling). The container image

@@ -1,7 +1,7 @@
 """Bridge between the DB and the pure engine: load sales lines, settings, overrides; run scorecards."""
 import pandas as pd
 from sqlalchemy import func
-from .engine import compute_wandt
+from .engine import compute_period_bonus, day_of_week_weights, selling_day_capacity
 from . import models as M
 from .config import DEFAULTS, SALES_ROLES
 
@@ -200,34 +200,84 @@ def run_engine(db, idx=None):
     return res, period, s, nav
 
 
-# ---------- bonus split & decision support ----------
-def allocate_bonus(cards, pool, defend_pct):
-    """3-way split: Defend (pool*defend_pct by profit contribution) + Grow (rest by $ above target)
-    + Acquire (commission-style on new-account profit, separate from the pool)."""
-    defend_pct = max(0.0, min(1.0, float(defend_pct)))
-    pool = float(pool or 0)
-    contribs = {c["associate"]: max(0.0, float(c.get("defend_dollars", 0) or 0)) for c in cards}
-    grows = {c["associate"]: max(0.0, float(c.get("grow_dollars", 0) or 0)) for c in cards}
-    tot_c, tot_g = sum(contribs.values()), sum(grows.values())
-    defend_pool, grow_pool = pool * defend_pct, pool * (1 - defend_pct)
-    out = {}
-    for c in cards:
-        a = c["associate"]
-        defend = defend_pool * contribs[a] / tot_c if tot_c else 0.0
-        grow = grow_pool * grows[a] / tot_g if tot_g else 0.0
-        acquire = float(c.get("acquisition_bonus", 0) or 0)
-        out[a] = {"defend": defend, "grow": grow, "acquire": acquire, "total": defend + grow + acquire,
-                  "contribution": float(c.get("defend_dollars", 0) or 0),
-                  "grow_dollars": float(c.get("grow_dollars", 0) or 0),
-                  "contribution_share": (contribs[a] / tot_c * 100) if tot_c else 0.0}
-    return out
+# ---------- the direct-formula period bonus (Contribution / Growth / Acquisition) ----------
+def part_time_associates(db):
+    return {a.name for a in db.query(M.Associate).filter(M.Associate.role == "part time sales") if a.name}
 
 
-def proposed_rebaseline(res, account_id):
-    acct = res["account"]
-    if len(acct) and account_id in acct.index:
-        return round(float(acct.loc[account_id, "recent_profit"] or 0))
-    return 0
+def _dials(s):
+    """Pull the bonus dials out of settings into compute_period_bonus kwargs."""
+    return dict(
+        item_rate=float(s["item_rate"]),
+        growth_thresholds=(float(s["growth_large_min"]), float(s["growth_medium_min"])),
+        growth_pcts={"large": float(s["growth_large_pct"]), "medium": float(s["growth_medium_pct"]),
+                     "small": float(s["growth_small_pct"])},
+        growth_payout_rate=float(s["growth_payout_rate"]), part_time_factor=float(s["part_time_factor"]),
+        acq_landing_pct=float(s["acq_landing_pct"]), acq_ramp_pct=float(s["acq_ramp_pct"]),
+        acq_ramp_periods=int(s["acq_ramp_periods"]), period_days=PERIOD_DAYS,
+        holiday_weight=float(s["holiday_weight"]))
+
+
+def run_period_bonus(db, idx=None):
+    """Compute the three-piece bonus for grid period `idx` (default current). Returns
+    (res, period, settings, nav, as_of). Mid-period, actuals run to the latest data date."""
+    s = get_settings(db)
+    ww = s["window_weeks"]
+    _, idx_cur0, anchor = period_grid(db, ww)
+    if idx is None:
+        idx = idx_cur0
+    period, as_of, idx, idx_min, idx_cur, is_current = resolve_period(db, idx, ww)
+    df = _lines_cached(db, _data_version(db))
+    _, _, team = attribution_maps(db)
+    res = compute_period_bonus(df, period.start_date, period.end_date, team, as_of=as_of,
+                               part_time_associates=part_time_associates(db), **_dials(s))
+    nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
+    return res, period, s, nav, as_of
+
+
+def compute_rep_goal(db, associate, idx=None):
+    """The rep-facing dashboard payload: one target, where they are vs a calendar-aware pace,
+    run-rate to finish, the three bonus pieces, new accounts, and accounts-to-watch."""
+    res, period, s, nav, as_of = run_period_bonus(db, idx)
+    cards = res["scorecards"]
+    card = next((c for c in cards.to_dict("records") if c["associate"] == associate), None)
+    df = _lines_cached(db, _data_version(db))
+    names = customer_names(db)
+    period_start = pd.Timestamp(period.start_date); period_end = pd.Timestamp(period.end_date)
+    as_of = pd.Timestamp(as_of)
+
+    # calendar-aware pace (selling-day-equivalents so weekends/holidays don't jolt the line)
+    dow = day_of_week_weights(df) if len(df) else None
+    def cap(a, b):
+        return selling_day_capacity(dow, a, b, float(s["holiday_weight"])) if (dow is not None and b >= a) else 0.0
+    full = cap(period_start + pd.Timedelta(days=1), period_end)
+    elapsed = cap(period_start + pd.Timedelta(days=1), as_of)
+    remaining = cap(as_of + pd.Timedelta(days=1), period_end)
+    pace_fraction = (elapsed / full) if full else 0.0
+
+    target = float(card["growth_target"]) if card else 0.0
+    actual = float(card["growth_actual"]) if card else 0.0
+    expected_to_date = target * pace_fraction
+    run_rate_needed = max(0.0, target - actual) / remaining if remaining else 0.0
+
+    rep_accounts = res["accounts"]
+    rep_accounts = rep_accounts[rep_accounts["associate"] == associate] if len(rep_accounts) else rep_accounts
+    new_accounts = []
+    if len(rep_accounts):
+        for _, r in rep_accounts[rep_accounts["status"].isin(["landing", "ramp"])].iterrows():
+            new_accounts.append({"customer": names.get(r["account"], r["account"]),
+                                 "status": r["status"], "sales": round(float(r["rep_sales"]))})
+
+    # accounts to watch = silent accounts in this rep's book (touched in the trailing window)
+    book_cut = period_end - pd.Timedelta(weeks=s["window_weeks"])
+    rep_book = set(df[(df["associate"] == associate) & (df["document_date"] > book_cut)]["account"]) if len(df) else set()
+    watch = [w for w in flag_silent_accounts(db) if w["account"] in rep_book][:6]
+
+    return {"associate": associate, "card": card, "period": period, "nav": nav,
+            "target": target, "actual": actual, "pct": (actual / target * 100) if target else 0.0,
+            "expected_to_date": expected_to_date, "ahead_behind": actual - expected_to_date,
+            "run_rate_needed": run_rate_needed, "pace_pct": pace_fraction * 100,
+            "new_accounts": new_accounts, "watch": watch}
 
 
 def flag_silent_accounts(db, gap_multiple=3.0, min_orders=5):

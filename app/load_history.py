@@ -78,6 +78,13 @@ def main():
     if db.query(M.User).count() == 0:
         db.add(M.User(username="manager", password_hash=hash_password("demo123"), role="manager"))
         db.add(M.User(username="admin", password_hash=hash_password("demo123"), role="admin"))
+        # one read-only rep login per sales associate (username = first name, lowercased)
+        from .service import attribution_maps
+        _, _, sales_team = attribution_maps(db)
+        for name in sales_team:
+            username = name.split()[0].lower()
+            db.add(M.User(username=username, password_hash=hash_password("demo123"),
+                          role="rep", associate_name=name))
     if db.query(M.Setting).filter(M.Setting.key != "period_anchor").count() == 0:
         for k, v in DEFAULTS.items():
             db.add(M.Setting(key=k, value=str(v)))

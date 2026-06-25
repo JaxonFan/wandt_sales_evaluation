@@ -213,3 +213,120 @@ def compute_wandt(df, as_of, sales_team, *, window_weeks=13, provisional_min_wee
     scorecards["total_bonus"] = scorecards.defend_bonus + scorecards.grow_bonus + scorecards.acquisition_bonus
     return dict(as_of=as_of, market_drift=market_drift, account=account, lines=lines, scorecards=scorecards,
                 capacity_recent=capacity_recent, capacity_year_ago=capacity_year_ago)
+
+
+# =====================================================================================
+# Direct-formula bonus (per 4-week period) — the understandable model used by the app.
+#   Contribution = items placed x item_rate
+#   Growth       = max(0, sales - target) x growth_payout_rate ; target size-tiered + part-time
+#   Acquisition  = landing (% of a new account's first-period sales) + ramp (% for ~1 quarter)
+# Each piece is a direct formula on the rep's OWN numbers — no pool, no peer ranking.
+# =====================================================================================
+ONE_YEAR = pd.Timedelta(days=364)   # 52 weeks — keeps weekday composition aligned
+
+
+def growth_tier_pct(annual_sales, thresholds, pcts):
+    """Pick a growth % by the account's trailing-year size. thresholds=(large_min, medium_min)."""
+    large_min, medium_min = thresholds
+    if annual_sales >= large_min:
+        return pcts["large"]
+    if annual_sales >= medium_min:
+        return pcts["medium"]
+    return pcts["small"]
+
+
+def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None,
+                         part_time_associates=frozenset(), period_days=28, holiday_weight=0.0,
+                         item_rate=0.20, growth_thresholds=(100000, 20000),
+                         growth_pcts=None, growth_payout_rate=0.10, part_time_factor=0.5,
+                         acq_landing_pct=0.10, acq_ramp_pct=0.05, acq_ramp_periods=3):
+    """Return dict(scorecards: per-rep DataFrame, accounts: per (rep, account) detail DataFrame).
+
+    Target/last-year use the FULL period; actuals use [period_start, as_of] (defaults period_end)
+    so the same function serves both a finished period and a live mid-period dashboard.
+    """
+    growth_pcts = growth_pcts or {"large": 0.02, "medium": 0.05, "small": 0.10}
+    period_start = pd.Timestamp(period_start).normalize()
+    period_end = pd.Timestamp(period_end).normalize()
+    as_of = period_end if as_of is None else min(pd.Timestamp(as_of).normalize(), period_end)
+    empty = dict(scorecards=pd.DataFrame(), accounts=pd.DataFrame())
+    if not len(df):
+        return empty
+    dow_weight = day_of_week_weights(df)
+
+    current = df[(df["document_date"] > period_start) & (df["document_date"] <= as_of)]
+    last_year = df[(df["document_date"] > period_start - ONE_YEAR) & (df["document_date"] <= period_end - ONE_YEAR)]
+    capacity_current = selling_day_capacity(dow_weight, period_start + pd.Timedelta(days=1), period_end, holiday_weight)
+    capacity_last_year = selling_day_capacity(dow_weight, period_start - ONE_YEAR + pd.Timedelta(days=1), period_end - ONE_YEAR, holiday_weight)
+    scale = capacity_current / capacity_last_year if capacity_last_year else 1.0
+
+    account_current_sales = current.groupby("account")["extended_price"].sum()
+    account_last_year_sales = last_year.groupby("account")["extended_price"].sum() * scale
+    first_seen = df.groupby("account")["document_date"].min()
+    trailing_year = df[(df["document_date"] > period_end - ONE_YEAR) & (df["document_date"] <= period_end)]
+    account_annual_sales = trailing_year.groupby("account")["extended_price"].sum()
+
+    def account_status(account_id):
+        seen = first_seen.get(account_id)
+        if seen is None:
+            return "normal"
+        if seen > period_start:                                   # first order during this period
+            return "landing"
+        if (period_end - seen).days <= acq_ramp_periods * period_days:
+            return "ramp"
+        return "normal"
+
+    # per (rep, account) rows for the period
+    team_current = current[current["associate"].isin(sales_team)]
+    rep_account = team_current.groupby(["associate", "account"]).agg(
+        rep_sales=("extended_price", "sum"), items=("extended_price", "size")).reset_index()
+
+    account_rows, rep_totals = [], {a: dict(items=0, growth_base=0.0, growth_stretch=0.0, growth_actual=0.0,
+                                            landing=0.0, ramp=0.0, new_accounts=0) for a in sales_team}
+    for _, r in rep_account.iterrows():
+        rep, account_id = r["associate"], r["account"]
+        rep_sales = float(r["rep_sales"])
+        items = int(r["items"])
+        acct_total = float(account_current_sales.get(account_id, 0.0))
+        work_share = rep_sales / acct_total if acct_total else 0.0
+        last_year_for_rep = float(account_last_year_sales.get(account_id, 0.0)) * work_share
+        annual = float(account_annual_sales.get(account_id, 0.0))
+        tier_pct = growth_tier_pct(annual, growth_thresholds, growth_pcts)
+        status = account_status(account_id)
+        pt = part_time_factor if rep in part_time_associates else 1.0
+
+        t = rep_totals[rep]
+        t["items"] += items
+        if status in ("landing", "ramp"):
+            if status == "landing":
+                t["landing"] += acq_landing_pct * rep_sales
+                t["new_accounts"] += 1
+            else:
+                t["ramp"] += acq_ramp_pct * rep_sales
+        else:
+            t["growth_base"] += last_year_for_rep
+            t["growth_stretch"] += last_year_for_rep * tier_pct * pt
+            t["growth_actual"] += rep_sales
+
+        account_rows.append(dict(
+            associate=rep, account=account_id, status=status, tier=(
+                "large" if annual >= growth_thresholds[0] else "medium" if annual >= growth_thresholds[1] else "small"),
+            rep_sales=rep_sales, last_year_for_rep=last_year_for_rep,
+            account_target=(last_year_for_rep * (1 + tier_pct * pt)) if status == "normal" else None,
+            annual_sales=annual))
+
+    cards = []
+    for rep in sales_team:
+        t = rep_totals[rep]
+        growth_target = t["growth_base"] + t["growth_stretch"]
+        growth_bonus = max(0.0, t["growth_actual"] - growth_target) * growth_payout_rate
+        contribution_bonus = t["items"] * item_rate
+        acquisition_bonus = t["landing"] + t["ramp"]
+        cards.append(dict(
+            associate=rep, items_placed=t["items"], contribution_bonus=contribution_bonus,
+            growth_base=t["growth_base"], growth_target=growth_target, growth_actual=t["growth_actual"],
+            growth_bonus=growth_bonus, acq_landing=t["landing"], acq_ramp=t["ramp"],
+            acquisition_bonus=acquisition_bonus, new_accounts=t["new_accounts"],
+            total_bonus=contribution_bonus + growth_bonus + acquisition_bonus))
+    return dict(scorecards=pd.DataFrame(cards), accounts=pd.DataFrame(account_rows),
+                capacity_current=capacity_current, capacity_last_year=capacity_last_year)

@@ -19,42 +19,34 @@
   </div>
 </div>
 <div class="card">
-  <h2>Team overview · suggested bonus</h2>
-  <p class="hint">Trailing 13 weeks ending {{ data_through }} · market drift {{ market_drift }}% · click a row for detail.
-    Headline is <b>profit vs market</b> (neutralizes a floor-wide margin change); <b>real growth</b> is the volume signal.
-    Bonus = <b>Defend</b> (profit retained) + <b>Grow</b> ($ above target) + <b>Acquire</b> (new-account ramp).</p>
-  <form method="get" action="/" class="ov-form" style="margin:0 0 12px">
-    <input type="hidden" name="p" value="{{ nav.idx }}">
-    Pool $<input name="pool" type="number" step="100" value="{{ pool }}" style="width:90px">
-    &nbsp; Defend <input name="defend" type="number" min="0" max="100" step="5" value="{{ defend_pct }}" style="width:56px">%
-    &nbsp;·&nbsp; Grow {{ 100 - defend_pct }}%
-    <button type="submit">Re-allocate</button>
-  </form>
+  <h2>Team — bonus this period</h2>
+  <p class="hint">Through {{ data_through }}. Bonus = three direct formulas on each rep's own numbers:
+    <b>Contribution</b> (items sold × rate) + <b>Growth</b> ($ above their size-tiered target × rate) +
+    <b>Acquisition</b> (new accounts: landing + 1-quarter ramp). Click a rep for detail.</p>
   <table>
-    <thead><tr><th>Sales rep</th><th class="num">Accounts</th>
-      <th class="num">Profit vs market</th><th class="num">Real growth</th>
-      <th class="num">New</th><th class="num">Defend</th><th class="num">Grow</th>
-      <th class="num">Acquire</th><th class="num">Suggested</th><th class="num">Award</th></tr></thead>
+    <thead><tr><th>Rep</th>
+      <th class="num">Items</th><th class="num">Contribution</th>
+      <th class="num">Growth target</th><th class="num">Growth actual</th><th class="num">Growth $</th>
+      <th class="num">New</th><th class="num">Acquisition</th>
+      <th class="num">Suggested bonus</th><th class="num">Award</th></tr></thead>
     <tbody>
-    {% for c in cards %}{% set a = alloc[c.associate] %}
+    {% for c in cards %}
       <tr class="click" onclick="location='/associate/{{ c.associate }}?p={{ nav.idx }}'">
         <td><strong>{{ c.associate }}</strong></td>
-        <td class="num">{{ c.accounts }}</td>
-        <td class="num {{ 'pos' if (c.profit_vs_market_pct or 0)>=0 else 'neg' }}">
-          {% if c.profit_vs_market_pct is not none %}{{ '%+.1f'|format(c.profit_vs_market_pct) }}%{% else %}—{% endif %}</td>
-        <td class="num {{ 'pos' if (c.real_growth_pct or 0)>=0 else 'neg' }}">
-          {% if c.real_growth_pct is not none %}{{ '%+.1f'|format(c.real_growth_pct) }}%{% else %}—{% endif %}</td>
+        <td class="num">{{ '{:,}'.format(c.items_placed) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(c.contribution_bonus) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(c.growth_target) }}</td>
+        <td class="num {{ 'pos' if c.growth_actual>=c.growth_target else 'neg' }}">${{ '{:,.0f}'.format(c.growth_actual) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td>
         <td class="num">{% if c.new_accounts %}<span class="badge b-new">{{ c.new_accounts }}</span>{% else %}<span class="mut">—</span>{% endif %}</td>
-        <td class="num">${{ '{:,.0f}'.format(a.defend) }}</td>
-        <td class="num">${{ '{:,.0f}'.format(a.grow) }}</td>
-        <td class="num">${{ '{:,.0f}'.format(a.acquire) }}</td>
-        <td class="num"><strong>${{ '{:,.0f}'.format(a.total) }}</strong></td>
+        <td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td>
+        <td class="num"><strong>${{ '{:,.0f}'.format(c.total_bonus) }}</strong></td>
         <td class="num">{% if c.associate in awards %}${{ '%.0f'|format(awards[c.associate].award_amount) }}{% else %}<span class="mut">—</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
-  <p class="hint" style="margin-top:10px">Suggested amounts are a <b>fair starting point</b>; the manager confirms or adjusts each rep's award.
-    Acquire is commission-style on new-account profit (separate from the Defend+Grow pool).</p>
+  <p class="hint" style="margin-top:10px">Suggested bonus is what the formulas produce; the manager confirms or
+    adjusts each rep's award on their page. Acquisition is bigger for bigger new accounts (it's a % of their sales).</p>
 </div>
 {% endblock %}

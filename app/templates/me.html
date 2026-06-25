@@ -1,0 +1,67 @@
+{% extends "base.html" %}{% block body %}
+{% set c = g.card %}
+{% if g.viewer == 'manager' %}<p style="font-size:13px"><a href="/?p={{ g.nav.idx }}" style="color:var(--blue);text-decoration:none">‹ Team</a></p>{% endif %}
+
+<div class="card">
+  <div class="pbar">
+    {% if g.nav.prev_idx is not none %}<a class="pnav" href="?p={{ g.nav.prev_idx }}">◀ prev</a>{% else %}<span class="pnav dis">◀ prev</span>{% endif %}
+    <div class="mid"><div class="ttl">{{ g.associate }} · your goal</div>
+      <div class="hint" style="margin:3px 0">Period {{ g.nav.n }} · {{ g.nav.start }} ~ {{ g.nav.end }}{% if not g.nav.is_current %} <span class="badge b-ramp">past</span>{% endif %}</div></div>
+    {% if g.nav.next_idx is not none %}<a class="pnav" href="?p={{ g.nav.next_idx }}">next ▶</a>{% else %}<span class="pnav dis">next ▶</span>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Where you are</h2>
+  {% set pct = g.pct if g.pct < 100 else 100 %}
+  <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
+    <span>Sales so far <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
+    <span>Target <b>${{ '{:,.0f}'.format(g.target) }}</b></span>
+  </div>
+  <div style="background:#eef2f6;border-radius:10px;height:22px;overflow:hidden;border:1px solid var(--line)">
+    <div style="width:{{ pct }}%;height:100%;background:{{ 'var(--green)' if g.ahead_behind>=0 else 'var(--amber)' }}"></div>
+  </div>
+  <div style="margin-top:8px;font-size:13.5px">
+    {{ '%.0f'|format(g.pct) }}% of target ·
+    {% if g.ahead_behind >= 0 %}<span class="pos">on pace (ahead ${{ '{:,.0f}'.format(g.ahead_behind) }})</span>
+    {% else %}<span class="neg">behind pace by ${{ '{:,.0f}'.format(-g.ahead_behind) }}</span>{% endif %}
+    {% if g.nav.is_current %}· by today you'd usually be at ~${{ '{:,.0f}'.format(g.expected_to_date) }}
+    · to finish: ~<b>${{ '{:,.0f}'.format(g.run_rate_needed) }}/selling-day</b>{% endif %}
+  </div>
+  <p class="hint" style="margin-top:8px">Your target is what your accounts bought this same stretch last year, grown a bit
+    (more for small accounts, less for big ones). The pace line allows for slow weekends, so a quiet Sunday doesn't put you "behind."</p>
+</div>
+
+<div class="card">
+  <h2>Your bonus this period</h2>
+  <table>
+    <tr><td>Sell items <span class="mut">— {{ '{:,}'.format(c.items_placed) }} items</span></td><td class="num">${{ '{:,.0f}'.format(c.contribution_bonus) }}</td></tr>
+    <tr><td>Grow your book <span class="mut">— ${{ '{:,.0f}'.format(c.growth_actual) }} of ${{ '{:,.0f}'.format(c.growth_target) }}</span></td><td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td></tr>
+    <tr><td>New accounts <span class="mut">— {{ c.new_accounts }} landed{% if c.acq_ramp %} + ramping{% endif %}</span></td><td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td></tr>
+    <tr><td><b>Total so far</b></td><td class="num"><b>${{ '{:,.0f}'.format(c.total_bonus) }}</b></td></tr>
+  </table>
+  <p class="hint" style="margin-top:8px">Every line is "you did this → you earned this." Grow pays on sales above your target;
+    each new account pays you for its first quarter (bigger account → bigger payout).</p>
+</div>
+
+{% if g.new_accounts %}
+<div class="card">
+  <h2>New accounts earning for you</h2>
+  <table><thead><tr><th>Customer</th><th>Stage</th><th class="num">Sales this period</th></tr></thead><tbody>
+    {% for n in g.new_accounts %}<tr><td>{{ n.customer }}</td>
+      <td>{% if n.status=='landing' %}<span class="badge b-new">just landed</span>{% else %}<span class="badge b-ramp">in ramp</span>{% endif %}</td>
+      <td class="num">${{ '{:,}'.format(n.sales) }}</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+
+{% if g.watch %}
+<div class="card">
+  <h2>Accounts to watch</h2>
+  <p class="hint">These usually order more often than they have lately — worth a call to keep them active.</p>
+  <table><thead><tr><th>Customer</th><th class="num">Quiet for</th></tr></thead><tbody>
+    {% for w in g.watch %}<tr><td>{{ w.customer }}</td><td class="num">{{ w.days_silent }} days</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+{% endblock %}

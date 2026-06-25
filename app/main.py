@@ -1,6 +1,6 @@
-"""FastAPI manager dashboard — login, overview, associate drilldown/overrides/award,
-upload (item-level), per-period constrained items, closure candidates, settings, export."""
-import io, math, datetime as dt
+"""FastAPI dashboard — manager views (team / rep drilldown / overrides / award / constrained /
+closures / upload / settings / export) and a rep-facing goal dashboard (/me)."""
+import io, datetime as dt
 import pandas as pd
 from fastapi import FastAPI, Request, Depends, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
@@ -12,13 +12,17 @@ import os
 from .db import get_db, engine, Base
 from . import models as M
 from .auth import verify_password
-from .config import SECRET_KEY
+from .config import SECRET_KEY, DEFAULTS
 from . import service
 
 Base.metadata.create_all(engine)
 app = FastAPI(title="W&T Sales Scorecard")
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=8 * 3600)
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
+
+EDITABLE_DIALS = ["item_rate", "growth_large_min", "growth_medium_min", "growth_large_pct",
+                  "growth_medium_pct", "growth_small_pct", "growth_payout_rate", "part_time_factor",
+                  "acq_landing_pct", "acq_ramp_pct", "acq_ramp_periods", "fine_amount"]
 
 
 def current_user(request: Request, db: Session):
@@ -29,13 +33,6 @@ def current_user(request: Request, db: Session):
 def audit(db, user, action, entity, details):
     db.add(M.AuditLog(user_id=user.user_id if user else None, action=action, entity=str(entity), details=details))
     db.commit()
-
-
-def _clean(card):
-    """pandas turns None into float NaN in numeric columns; convert back so Jinja's `is none` works."""
-    if not card:
-        return card
-    return {k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in card.items()}
 
 
 def resolve_p(db, p):
@@ -57,7 +54,7 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     user = db.query(M.User).filter(M.User.username == username, M.User.is_active == True).first()
     if user and verify_password(password, user.password_hash):
         request.session["uid"] = user.user_id
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse("/me" if user.role == "rep" else "/", status_code=303)
     return templates.TemplateResponse("login.html", {"request": request, "error": "Wrong username or password"})
 
 
@@ -67,90 +64,95 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
-# ---------- team overview ----------
-@app.get("/", response_class=HTMLResponse)
-def overview(request: Request, db: Session = Depends(get_db), p: int = None,
-             pool: float = None, defend: float = None):
+# ---------- rep goal dashboard ----------
+@app.get("/me", response_class=HTMLResponse)
+def my_goal(request: Request, db: Session = Depends(get_db), p: int = None):
     user = current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    res, period, settings, nav = service.run_engine(db, p)
-    cards = [_clean(c) for c in res["scorecards"].to_dict("records")] if len(res["scorecards"]) else []
-    pool = settings.get("bonus_pool", 1000) if pool is None else pool
-    defend_pct = (settings.get("defend_pct", 0.35) if defend is None else defend / 100.0)
-    alloc = service.allocate_bonus(cards, pool, defend_pct)
+    if user.role == "rep" and not user.associate_name:
+        return RedirectResponse("/logout", status_code=303)
+    name = user.associate_name if user.role == "rep" else None
+    if not name:  # a manager hitting /me with no rep -> send to team page
+        return RedirectResponse("/", status_code=303)
+    goal = service.compute_rep_goal(db, name, p)
+    return templates.TemplateResponse("me.html", {"request": request, "user": user, "g": goal, "viewer": "self"})
+
+
+@app.get("/rep/{name}", response_class=HTMLResponse)
+def rep_goal_view(name: str, request: Request, db: Session = Depends(get_db), p: int = None):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login" if not user else "/me", status_code=303)
+    goal = service.compute_rep_goal(db, name, p)
+    return templates.TemplateResponse("me.html", {"request": request, "user": user, "g": goal, "viewer": "manager"})
+
+
+# ---------- team overview (manager) ----------
+@app.get("/", response_class=HTMLResponse)
+def overview(request: Request, db: Session = Depends(get_db), p: int = None):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if user.role == "rep":
+        return RedirectResponse("/me", status_code=303)
+    res, period, settings, nav, as_of = service.run_period_bonus(db, p)
+    cards = res["scorecards"].sort_values("total_bonus", ascending=False).to_dict("records") if len(res["scorecards"]) else []
     awards = {a.associate: a for a in db.query(M.Award).filter(M.Award.period_id == period.period_id)}
     last_import = db.query(M.SalesLine).order_by(M.SalesLine.imported_at.desc()).first()
     return templates.TemplateResponse("overview.html", {
         "request": request, "user": user, "cards": cards, "period": period, "nav": nav,
-        "market_drift": round((res["market_drift"] - 1) * 100, 1),
-        "awards": awards, "data_through": period.window_end, "alloc": alloc,
-        "pool": round(float(pool)), "defend_pct": round(defend_pct * 100),
+        "awards": awards, "data_through": as_of,
         "imported_at": last_import.imported_at if last_import else None})
 
 
-# ---------- associate drilldown + overrides + award ----------
+# ---------- rep drilldown + overrides + award (manager) ----------
 @app.get("/associate/{name}", response_class=HTMLResponse)
 def associate(name: str, request: Request, db: Session = Depends(get_db), p: int = None):
     user = current_user(request, db)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-    res, period, settings, nav = service.run_engine(db, p)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login" if not user else "/me", status_code=303)
+    res, period, settings, nav, as_of = service.run_period_bonus(db, p)
     names = service.customer_names(db)
-    lines = res["lines"]
-    sub = lines[lines["associate"] == name].copy() if len(lines) else lines
+    accounts = res["accounts"]
+    sub = accounts[accounts["associate"] == name].copy() if len(accounts) else accounts
     rows = []
     if len(sub):
         for _, r in sub.iterrows():
-            account_id = r["account"]
-            target = r["profit_target"]
-            perf = ((r["actual_profit"] / target - 1) * 100) if (pd.notna(target) and target) else None
-            real = ((r["volume_dollars"] / r["baseline_revenue_share"]) * 100) if r["baseline_revenue_share"] else None
-            rows.append(dict(
-                account=account_id, name=names.get(account_id, account_id),
-                actual_profit=round(r["actual_profit"] or 0),
-                profit_target=(round(target) if pd.notna(target) else None),
-                perf=(round(perf, 1) if perf is not None else None),
-                real_growth=(round(real, 1) if real is not None else None),
-                status=r["status"], tier=r["tier"], proposed=service.proposed_rebaseline(res, account_id)))
-        rows.sort(key=lambda x: (not (x["status"] != "scored" or (x["perf"] or 0) < -20), -(x["actual_profit"] or 0)))
-    cards = [_clean(c) for c in res["scorecards"].to_dict("records")] if len(res["scorecards"]) else []
-    card = next((c for c in cards if c["associate"] == name), None)
-    alloc = service.allocate_bonus(cards, settings.get("bonus_pool", 1000), settings.get("defend_pct", 0.35))
-    proposed_bonus = alloc.get(name)
+            target = r["account_target"]
+            sales = float(r["rep_sales"])
+            perf = ((sales / target - 1) * 100) if (target and pd.notna(target)) else None
+            rows.append(dict(account=r["account"], name=names.get(r["account"], r["account"]),
+                             sales=round(sales), last_year=round(float(r["last_year_for_rep"])),
+                             target=(round(float(target)) if (target and pd.notna(target)) else None),
+                             perf=(round(perf, 0) if perf is not None else None),
+                             status=r["status"], tier=r["tier"]))
+        rows.sort(key=lambda x: (x["status"] == "normal", -(x["sales"] or 0)))
+    card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == name), None)
     actions = {a.account: a for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id)}
     award = db.query(M.Award).filter(M.Award.period_id == period.period_id, M.Award.associate == name).first()
     return templates.TemplateResponse("associate.html", {
         "request": request, "user": user, "name": name, "card": card, "rows": rows,
-        "actions": actions, "award": award, "period": period, "nav": nav, "proposed_bonus": proposed_bonus})
+        "actions": actions, "award": award, "period": period, "nav": nav})
 
 
 @app.post("/override")
 def override(request: Request, account: str = Form(...), associate: str = Form(...),
-             status: str = Form(...), rebaseline_value: float = Form(None),
-             called: str = Form(None), note: str = Form(""), p: int = Form(None),
+             status: str = Form(...), note: str = Form(""), p: int = Form(None),
              db: Session = Depends(get_db)):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     period, idx, is_current = resolve_p(db, p)
-    if not is_current:
-        return RedirectResponse(f"/associate/{associate}?p={idx}", status_code=303)
-    a = db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id,
-                                         M.ManagerAction.account == account).first()
-    if not a:
-        a = M.ManagerAction(period_id=period.period_id, account=account)
-        db.add(a)
-    a.associate = associate
-    a.status = status
-    a.rebaseline_value = rebaseline_value if status == "rebaseline" else None
-    a.called = (called == "on")
-    a.note = note
-    a.user_id = user.user_id
-    a.created_at = dt.datetime.utcnow()
-    db.commit()
-    audit(db, user, "override", f"account:{account}",
-          {"period": period.period_id, "status": status, "value": rebaseline_value, "called": a.called, "note": note})
+    if is_current:
+        a = db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id,
+                                             M.ManagerAction.account == account).first()
+        if not a:
+            a = M.ManagerAction(period_id=period.period_id, account=account); db.add(a)
+        a.associate = associate; a.status = status; a.note = note
+        a.user_id = user.user_id; a.created_at = dt.datetime.utcnow()
+        db.commit()
+        audit(db, user, "override", f"account:{account}", {"period": period.period_id, "status": status})
     return RedirectResponse(f"/associate/{associate}?p={idx}", status_code=303)
 
 
@@ -159,20 +161,17 @@ def set_award(request: Request, associate: str = Form(...), award_amount: float 
               fine_amount: float = Form(0), note: str = Form(""), p: int = Form(None),
               db: Session = Depends(get_db)):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     period, idx, is_current = resolve_p(db, p)
-    if not is_current:
-        return RedirectResponse(f"/associate/{associate}?p={idx}", status_code=303)
-    aw = db.query(M.Award).filter(M.Award.period_id == period.period_id, M.Award.associate == associate).first()
-    if not aw:
-        aw = M.Award(period_id=period.period_id, associate=associate)
-        db.add(aw)
-    aw.award_amount, aw.fine_amount, aw.note = award_amount, fine_amount, note
-    aw.user_id, aw.created_at = user.user_id, dt.datetime.utcnow()
-    db.commit()
-    audit(db, user, "set_award", f"associate:{associate}",
-          {"period": period.period_id, "award": award_amount, "fine": fine_amount})
+    if is_current:
+        aw = db.query(M.Award).filter(M.Award.period_id == period.period_id, M.Award.associate == associate).first()
+        if not aw:
+            aw = M.Award(period_id=period.period_id, associate=associate); db.add(aw)
+        aw.award_amount, aw.fine_amount, aw.note = award_amount, fine_amount, note
+        aw.user_id, aw.created_at = user.user_id, dt.datetime.utcnow()
+        db.commit()
+        audit(db, user, "set_award", f"associate:{associate}", {"period": period.period_id, "award": award_amount})
     return RedirectResponse(f"/associate/{associate}?p={idx}", status_code=303)
 
 
@@ -180,42 +179,36 @@ def set_award(request: Request, associate: str = Form(...), award_amount: float 
 @app.get("/constrained", response_class=HTMLResponse)
 def constrained_page(request: Request, db: Session = Depends(get_db), p: int = None):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
-    _res, period, _s, nav = service.run_engine(db, p)
+    _res, period, _s, nav, _as_of = service.run_period_bonus(db, p)
     current = db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period.period_id).all()
-    # auto-detect candidates from the latest window (high revenue share + volatile qty)
     df = service.load_lines_df(db)
     candidates = []
     if len(df):
         df = df[df["document_date"] > pd.to_datetime(period.window_start)]
         if len(df):
-            desc = (db.query(M.SalesLine.item_number, M.SalesLine.item_description).distinct())
-            num_to_desc = {i: d for i, d in desc}
+            num_to_desc = {i: d for i, d in db.query(M.SalesLine.item_number, M.SalesLine.item_description).distinct()}
             summary = df.groupby("item_number").agg(revenue=("extended_price", "sum")).sort_values("revenue", ascending=False).head(10)
-            total = summary.revenue.sum() or 1
+            total = df["extended_price"].sum() or 1
             candidates = [{"item_number": i, "description": num_to_desc.get(i, ""),
-                           "revenue": round(row.revenue), "share": round(row.revenue / df["extended_price"].sum() * 100, 1)}
+                           "revenue": round(row.revenue), "share": round(row.revenue / total * 100, 1)}
                           for i, row in summary.iterrows()]
     return templates.TemplateResponse("constrained.html", {
-        "request": request, "user": user, "period": period, "nav": nav,
-        "current": current, "candidates": candidates})
+        "request": request, "user": user, "period": period, "nav": nav, "current": current, "candidates": candidates})
 
 
 @app.post("/constrained/add")
 def constrained_add(request: Request, item_number: str = Form(...), note: str = Form(""),
                     p: int = Form(None), db: Session = Depends(get_db)):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
-    period, idx, is_current = resolve_p(db, p)
-    existing = db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period.period_id,
-                                                  M.ConstrainedItem.item_number == item_number.strip()).first()
-    if not existing:
+    period, idx, _ = resolve_p(db, p)
+    if not db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period.period_id,
+                                              M.ConstrainedItem.item_number == item_number.strip()).first():
         db.add(M.ConstrainedItem(period_id=period.period_id, item_number=item_number.strip(),
-                                 note=note, user_id=user.user_id))
-        db.commit()
-        audit(db, user, "constrained_add", f"item:{item_number}", {"period": period.period_id})
+                                 note=note, user_id=user.user_id)); db.commit()
     return RedirectResponse(f"/constrained?p={idx}", status_code=303)
 
 
@@ -223,7 +216,7 @@ def constrained_add(request: Request, item_number: str = Form(...), note: str = 
 def constrained_remove(request: Request, item_number: str = Form(...), p: int = Form(None),
                        db: Session = Depends(get_db)):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     period, idx, _ = resolve_p(db, p)
     db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period.period_id,
@@ -232,45 +225,41 @@ def constrained_remove(request: Request, item_number: str = Form(...), p: int = 
     return RedirectResponse(f"/constrained?p={idx}", status_code=303)
 
 
-# ---------- closure candidates (silence detector) ----------
+# ---------- closure candidates ----------
 @app.get("/closures", response_class=HTMLResponse)
 def closures_page(request: Request, db: Session = Depends(get_db), p: int = None):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
-    _res, period, _s, nav = service.run_engine(db, p)
+    _res, period, _s, nav, _as_of = service.run_period_bonus(db, p)
     candidates = service.flag_silent_accounts(db)
     exempt = {a.account for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id,
                                                                   M.ManagerAction.status == "exempt")}
     return templates.TemplateResponse("closures.html", {
-        "request": request, "user": user, "period": period, "nav": nav,
-        "candidates": candidates, "exempt": exempt})
+        "request": request, "user": user, "period": period, "nav": nav, "candidates": candidates, "exempt": exempt})
 
 
 @app.post("/closures/exempt")
 def closures_exempt(request: Request, account: str = Form(...), note: str = Form(""),
                     p: int = Form(None), db: Session = Depends(get_db)):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     period, idx, _ = resolve_p(db, p)
     a = db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id,
                                          M.ManagerAction.account == account).first()
     if not a:
-        a = M.ManagerAction(period_id=period.period_id, account=account)
-        db.add(a)
+        a = M.ManagerAction(period_id=period.period_id, account=account); db.add(a)
     a.status = "exempt"; a.note = note or "confirmed closed"; a.user_id = user.user_id
-    a.created_at = dt.datetime.utcnow()
-    db.commit()
-    audit(db, user, "closure_exempt", f"account:{account}", {"period": period.period_id})
+    a.created_at = dt.datetime.utcnow(); db.commit()
     return RedirectResponse(f"/closures?p={idx}", status_code=303)
 
 
-# ---------- data upload (item-level; idempotent by sop_number) ----------
+# ---------- item-level upload (idempotent by sop_number) ----------
 @app.get("/upload", response_class=HTMLResponse)
 def upload_form(request: Request, db: Session = Depends(get_db)):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse("upload.html", {"request": request, "user": user, "msg": None})
 
@@ -278,7 +267,7 @@ def upload_form(request: Request, db: Session = Depends(get_db)):
 @app.post("/upload")
 async def upload(request: Request, sales_file: UploadFile = File(...), db: Session = Depends(get_db)):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     prefix_map, variant_map, sales_team = service.attribution_maps(db)
     raw = pd.read_excel(io.BytesIO(await sales_file.read()))
@@ -288,8 +277,6 @@ async def upload(request: Request, sales_file: UploadFile = File(...), db: Sessi
     sales["Document Date"] = pd.to_datetime(sales["Document Date"], errors="coerce")
     sales["associate"] = sales["Batch Number"].apply(lambda b: service.resolve_associate(b, prefix_map, variant_map))
     sales = sales[sales["associate"].isin(sales_team)].dropna(subset=["Document Date"])
-
-    # idempotent: replace all existing lines for each uploaded sop_number
     sop_numbers = {str(s).strip() for s in sales["SOP Number"]}
     if sop_numbers:
         db.query(M.SalesLine).filter(M.SalesLine.sop_number.in_(sop_numbers)).delete(synchronize_session=False)
@@ -315,28 +302,43 @@ async def upload(request: Request, sales_file: UploadFile = File(...), db: Sessi
         "msg": f"Imported {n:,} rep sales lines across {len(sop_numbers):,} orders."})
 
 
-# ---------- settings & export ----------
+# ---------- settings (editable dials) & export ----------
 @app.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request, db: Session = Depends(get_db)):
+def settings_page(request: Request, db: Session = Depends(get_db), saved: int = 0):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse("settings.html", {"request": request, "user": user,
-                                                        "settings": service.get_settings(db)})
+        "settings": service.get_settings(db), "editable": EDITABLE_DIALS, "saved": bool(saved)})
+
+
+@app.post("/settings")
+async def settings_save(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    form = await request.form()
+    for key in EDITABLE_DIALS:
+        if key in form and str(form[key]).strip() != "":
+            row = db.get(M.Setting, key) or M.Setting(key=key)
+            row.value = str(form[key]).strip(); db.merge(row)
+    db.commit()
+    service._ENGINE_CACHE.clear()
+    audit(db, user, "settings", "dials", {k: form.get(k) for k in EDITABLE_DIALS if k in form})
+    return RedirectResponse("/settings?saved=1", status_code=303)
 
 
 @app.get("/export.csv")
 def export_csv(request: Request, db: Session = Depends(get_db), p: int = None):
     user = current_user(request, db)
-    if not user:
+    if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
-    res, period, _, _ = service.run_engine(db, p)
+    res, period, _s, _nav, _as_of = service.run_period_bonus(db, p)
     df = res["scorecards"].copy()
     awards = {a.associate: a for a in db.query(M.Award).filter(M.Award.period_id == period.period_id)}
     if len(df):
         df["award_usd"] = df["associate"].map(lambda a: awards[a].award_amount if a in awards else 0)
         df["fine_usd"] = df["associate"].map(lambda a: awards[a].fine_amount if a in awards else 0)
     buf = io.StringIO(); df.to_csv(buf, index=False); buf.seek(0)
-    fn = f"wandt_scorecard_{period.window_end}.csv"
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
-                             headers={"Content-Disposition": f"attachment; filename={fn}"})
+                             headers={"Content-Disposition": f"attachment; filename=wandt_bonus_{period.end_date}.csv"})
