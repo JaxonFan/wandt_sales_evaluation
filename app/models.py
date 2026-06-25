@@ -20,6 +20,8 @@ class Associate(Base):
     other_names = Column(String)                        # free-text batch variant (MORGANW, ...)
     role = Column(String)                               # full time sales | part time sales | manager
     status = Column(String, default="Active")          # Active | Inactive
+    hours_per_day = Column(Float)                       # parsed from the roster Hours column (e.g. 6.5)
+    salary_raw = Column(String)                         # raw roster Salary string (e.g. "$23/hour"); for a future ROI view
 
 
 class User(Base):

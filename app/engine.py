@@ -287,11 +287,11 @@ def _size_band_factors(baseline_q, recent_q, n_bands):
 
 
 def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None,
-                         part_time_associates=frozenset(), not_rep_won=frozenset(),
+                         fte_by_rep=None, not_rep_won=frozenset(),
                          period_days=28, holiday_weight=0.0, item_rate=0.10,
                          growth_window_weeks=13, size_band_count=5, growth_stretch_pct=0.03,
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
-                         part_time_factor=0.5, acq_revenue_pct=0.01, acq_ramp_periods=3):
+                         acq_revenue_pct=0.01, acq_ramp_periods=3):
     """Return dict(scorecards: per-rep DataFrame, accounts: per (rep, account) detail DataFrame).
 
     Bonus = Contribution (line items x item_rate) + Growth + Acquisition (acq_revenue_pct x a new
@@ -305,6 +305,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     period_end = pd.Timestamp(period_end).normalize()
     as_of = period_end if as_of is None else min(pd.Timestamp(as_of).normalize(), period_end)
     not_rep_won = set(not_rep_won)
+    fte_by_rep = fte_by_rep or {}                                 # rep -> FTE (hours-based); default 1.0
     if not len(df):
         return dict(scorecards=pd.DataFrame(), accounts=pd.DataFrame())
 
@@ -364,7 +365,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         account_q = float(account_recent_q.get(account_id, 0.0))
         work_share = rep_q / account_q if account_q else 0.0
         status = account_status(account_id)
-        pt = part_time_factor if rep in part_time_associates else 1.0
+        pt = fte_by_rep.get(rep, 1.0)                             # FTE from actual hours scales the stretch
         baseline_q = float(account_baseline_q.get(account_id, 0.0))
         prior_q = float(account_prior_q.get(account_id, 0.0))
 

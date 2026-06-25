@@ -36,7 +36,9 @@ contribution, so we don't pay twice. Key properties (each fixes a real failure m
   double-pay a new account as acquisition *and* "growth"). New accounts earn **acquisition** for their
   first quarter; then **provisional** (their own prior quarter × the company's seasonal swing) until they
   have a year; then year-over-year. Too-sparse accounts earn line-item contribution only.
-**Part-time reps:** their growth *stretch* is scaled to the hours they work (≈ half), so a part-timer with a small book gets a lighter, fair target — but the **same payout rate** per dollar grown.
+**Part-time reps:** their growth *stretch* is scaled to the hours they **actually work** (each rep's FTE =
+their hours/day ÷ a full day, from the roster), so a 6.5-hour rep is ~0.81 and a full-timer is 1.0 — a
+lighter, fair target — but the **same payout rate** per dollar grown.
 
 ### 3. Acquisition — an elevated 1% revenue share on new accounts
 A new account (first order within the last ~quarter) pays the rep an **elevated 1% of its revenue**

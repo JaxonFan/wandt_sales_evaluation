@@ -17,6 +17,7 @@ in plain words:
 > accounts your size are actually growing right now, plus a small stretch.**
 
 Worked example:
+
 - Your accounts bought **$520,000** in these 3 months last year.
 - Accounts your size are running about **+10%** this year (the market's up). So we bump the bar to ~$572k.
 - Plus a small **+3% stretch** → your target is about **$590,000**.
@@ -29,6 +30,8 @@ target comes down too, so you're not punished for a slump everyone's in.)
 
 **Why 3 months and not one?** Sales are lumpy week to week — one big order or one slow week shouldn't swing
 your bonus. We look at a rolling 3 months so it's steady.
+
+**Part-time?** Your stretch is scaled to the hours you actually work, so you're not held to a full-timer's bar.
 
 **"I hit my target — why no growth bonus?"** Hitting your target means you're **on pace**, and that's
 already paid — by your salary, your per-line pay, and any new-account pay. The growth bonus is the **extra

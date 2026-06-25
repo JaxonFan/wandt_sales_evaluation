@@ -3,6 +3,7 @@ Run:  DATABASE_URL=... python -m app.load_history
 """
 import warnings; warnings.filterwarnings("ignore")
 import glob
+from datetime import datetime
 import pandas as pd
 from .auth import hash_password
 from .db import engine, SessionLocal, Base
@@ -15,6 +16,19 @@ ROSTER_PATH = f"{ROOT}/w&t_sales_associate_roster.xlsx"
 SALES_GLOB = f"{ROOT}/sales_data/*.XLSX"
 
 
+def parse_hours_per_day(s):
+    """'8:00am-2:30pm' -> 6.5 (clock duration in hours). Null-safe; returns None if unparseable."""
+    if not isinstance(s, str) or "-" not in s:
+        return None
+    start, end = s.split("-", 1)
+    try:
+        t0 = datetime.strptime(start.strip().lower().replace(" ", ""), "%I:%M%p")
+        t1 = datetime.strptime(end.strip().lower().replace(" ", ""), "%I:%M%p")
+        return round((t1 - t0).total_seconds() / 3600, 2)
+    except Exception:
+        return None
+
+
 def seed_associates(db):
     roster = pd.read_excel(ROSTER_PATH)
     roster["Batch Initial"] = roster["Batch Initial"].astype(str).str.strip().str.upper()
@@ -24,11 +38,13 @@ def seed_associates(db):
     roster["Role"] = roster["Role"].astype(str).str.strip().str.lower()
     roster = roster[roster["Status"].isin(["Active", "Inactive"])]   # drop trailing junk row
     for _, r in roster.iterrows():
+        hours = parse_hours_per_day(r["Hours"]) if "Hours" in roster.columns else None
+        salary = (str(r["Salary"]).strip() if "Salary" in roster.columns and pd.notna(r["Salary"]) else None)
         db.add(M.Associate(
             name=(r["Sales Person Name"] if r["Sales Person Name"] not in ("", "nan") else None),
             batch_initial=(r["Batch Initial"] if r["Batch Initial"] not in ("", "NAN") else None),
             other_names=(r["Other Names"] if r["Other Names"] not in ("", "NAN") else None),
-            role=r["Role"], status=r["Status"]))
+            role=r["Role"], status=r["Status"], hours_per_day=hours, salary_raw=salary))
     db.commit()
 
 

@@ -31,7 +31,8 @@ DEFAULTS = {
     "growth_payout_rate": 0.045,   # $ earned per sales-dollar above target (calibrated to ~$3k/period total)
     "growth_cap_multiple": 2.0,    # an account counts toward growth up to this x its target; excess is held back
     "growth_review_min": 20000,    # held-back above this $ flags the account on the manager's review list
-    "part_time_factor": 0.5,       # part-time reps' STRETCH scaled by this (full-time = 1.0)
+    "full_time_hours": 8.0,        # a full work day; each rep's FTE = min(1, their hours/day ÷ this) scales their stretch
+    "part_time_factor": 0.5,       # fallback STRETCH factor for a part-time rep with no hours on file
 
     # --- Acquisition (new accounts: an elevated revenue share for ~1 quarter) ---
     "acq_revenue_pct": 0.01,       # bonus = this % of a NEW account's revenue, each period it is "new"

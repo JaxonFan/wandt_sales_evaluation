@@ -15,7 +15,8 @@
       <tr><td>Payout per $ above target</td><td class="num"><input name="growth_payout_rate" type="number" step="0.005" value="{{ settings.growth_payout_rate }}" style="width:90px"></td></tr>
       <tr><td>Per-account cap (× target)</td><td class="num"><input name="growth_cap_multiple" type="number" step="0.5" value="{{ settings.growth_cap_multiple }}" style="width:90px"> (2 = count up to 2× target)</td></tr>
       <tr><td>Flag for review when held-back > $</td><td class="num"><input name="growth_review_min" type="number" step="1000" value="{{ settings.growth_review_min }}" style="width:110px"></td></tr>
-      <tr><td>Part-time stretch factor</td><td class="num"><input name="part_time_factor" type="number" step="0.05" value="{{ settings.part_time_factor }}" style="width:90px"></td></tr>
+      <tr><td>Full work day (hours) — for FTE</td><td class="num"><input name="full_time_hours" type="number" step="0.5" value="{{ settings.full_time_hours }}" style="width:90px"> (each rep's FTE = their hours/day ÷ this, capped at 1)</td></tr>
+      <tr><td>Part-time stretch (fallback if no hours on file)</td><td class="num"><input name="part_time_factor" type="number" step="0.05" value="{{ settings.part_time_factor }}" style="width:90px"></td></tr>
       <tr><th colspan="2">Acquisition (new accounts)</th></tr>
       <tr><td>Acquisition revenue share (% of a new account's revenue)</td><td class="num"><input name="acq_revenue_pct" type="number" step="0.005" value="{{ settings.acq_revenue_pct }}" style="width:90px"> (e.g. 0.01 = 1%)</td></tr>
       <tr><td>"New" window (periods ≈ 1 quarter)</td><td class="num"><input name="acq_ramp_periods" type="number" step="1" value="{{ settings.acq_ramp_periods }}" style="width:90px"></td></tr>

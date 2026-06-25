@@ -205,6 +205,20 @@ def part_time_associates(db):
     return {a.name for a in db.query(M.Associate).filter(M.Associate.role == "part time sales") if a.name}
 
 
+def fte_by_rep(db, full_time_hours, part_time_factor):
+    """Each sales rep's FTE = min(1, their hours/day ÷ a full day). Falls back to the role-based
+    part_time_factor if no hours are on file. Scales the growth stretch (more hours -> bigger stretch)."""
+    out = {}
+    for a in db.query(M.Associate).all():
+        if not a.name or (a.role or "").strip().lower() not in SALES_ROLES:
+            continue
+        if a.hours_per_day and full_time_hours:
+            out[a.name] = min(1.0, float(a.hours_per_day) / float(full_time_hours))
+        else:
+            out[a.name] = part_time_factor if (a.role or "").strip().lower() == "part time sales" else 1.0
+    return out
+
+
 def not_rep_won_set(db):
     """Accounts the manager has marked as NOT a real rep win (no acquisition credit)."""
     return {r.account for r in db.query(M.AcquisitionReview).filter(M.AcquisitionReview.rep_won == False)}
@@ -217,7 +231,7 @@ def _dials(s):
         growth_window_weeks=int(s["growth_window_weeks"]), size_band_count=int(s["size_band_count"]),
         growth_stretch_pct=float(s["growth_stretch_pct"]),
         growth_payout_rate=float(s["growth_payout_rate"]), growth_cap_multiple=float(s["growth_cap_multiple"]),
-        growth_review_min=float(s["growth_review_min"]), part_time_factor=float(s["part_time_factor"]),
+        growth_review_min=float(s["growth_review_min"]),
         acq_revenue_pct=float(s["acq_revenue_pct"]), acq_ramp_periods=int(s["acq_ramp_periods"]),
         period_days=PERIOD_DAYS, holiday_weight=float(s["holiday_weight"]))
 
@@ -233,9 +247,9 @@ def run_period_bonus(db, idx=None):
     period, as_of, idx, idx_min, idx_cur, is_current = resolve_period(db, idx, ww)
     df = _lines_cached(db, _data_version(db))
     _, _, team = attribution_maps(db)
+    fte = fte_by_rep(db, float(s["full_time_hours"]), float(s["part_time_factor"]))
     res = compute_period_bonus(df, period.start_date, period.end_date, team, as_of=as_of,
-                               part_time_associates=part_time_associates(db),
-                               not_rep_won=not_rep_won_set(db), **_dials(s))
+                               fte_by_rep=fte, not_rep_won=not_rep_won_set(db), **_dials(s))
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of
 
