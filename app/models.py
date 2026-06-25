@@ -105,6 +105,17 @@ class ConstrainedItem(Base):
     __table_args__ = (UniqueConstraint("period_id", "item_number"),)
 
 
+class AcquisitionReview(Base):
+    """Manager review of new accounts. rep_won=False = 'not rep-won (inbound)' -> no acquisition credit.
+    Keyed by account (persists across periods — 'didn't really win it' is permanent)."""
+    __tablename__ = "acquisition_reviews"
+    account = Column(String, primary_key=True)         # customer_number
+    rep_won = Column(Boolean, default=True)
+    note = Column(String)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class Award(Base):
     __tablename__ = "awards"
     id = Column(Integer, primary_key=True, autoincrement=True)

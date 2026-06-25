@@ -16,7 +16,7 @@
 {% if card %}
 <div class="card">
   <h2>{{ name }} · bonus this period</h2>
-  <div class="kpi"><div class="label">Contribution ({{ '{:,}'.format(card.items_placed) }} items)</div><div class="val">${{ '{:,.0f}'.format(card.contribution_bonus) }}</div></div>
+  <div class="kpi"><div class="label">Contribution ({{ '{:,}'.format(card.items_placed) }} line items)</div><div class="val">${{ '{:,.0f}'.format(card.contribution_bonus) }}</div></div>
   <div class="kpi"><div class="label">Growth (${{ '{:,.0f}'.format(card.growth_actual) }} vs ${{ '{:,.0f}'.format(card.growth_target) }})</div><div class="val">${{ '{:,.0f}'.format(card.growth_bonus) }}</div></div>
   <div class="kpi"><div class="label">Acquisition ({{ card.new_accounts }} new)</div><div class="val">${{ '{:,.0f}'.format(card.acquisition_bonus) }}</div></div>
   <div class="kpi primary"><div class="label">Suggested total</div><div class="val">${{ '{:,.0f}'.format(card.total_bonus) }}</div></div>

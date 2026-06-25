@@ -7,7 +7,7 @@
   <form method="post" action="/settings">
     <table>
       <tr><th colspan="2">Contribution</th></tr>
-      <tr><td>$ per item placed</td><td class="num"><input name="item_rate" type="number" step="0.01" value="{{ settings.item_rate }}" style="width:90px"></td></tr>
+      <tr><td>$ per line item placed</td><td class="num"><input name="item_rate" type="number" step="0.01" value="{{ settings.item_rate }}" style="width:90px"></td></tr>
       <tr><th colspan="2">Growth — size tiers (by account's trailing-year sales)</th></tr>
       <tr><td>Large account ≥ $</td><td class="num"><input name="growth_large_min" type="number" step="1000" value="{{ settings.growth_large_min }}" style="width:110px"></td></tr>
       <tr><td>Medium account ≥ $</td><td class="num"><input name="growth_medium_min" type="number" step="1000" value="{{ settings.growth_medium_min }}" style="width:110px"></td></tr>
@@ -17,9 +17,8 @@
       <tr><td>Payout per $ above target</td><td class="num"><input name="growth_payout_rate" type="number" step="0.01" value="{{ settings.growth_payout_rate }}" style="width:90px"> (e.g. 0.10 = 10¢/$)</td></tr>
       <tr><td>Part-time growth factor</td><td class="num"><input name="part_time_factor" type="number" step="0.05" value="{{ settings.part_time_factor }}" style="width:90px"> (0.5 = half the growth ask)</td></tr>
       <tr><th colspan="2">Acquisition (new accounts)</th></tr>
-      <tr><td>Landing bonus (% of first-period sales)</td><td class="num"><input name="acq_landing_pct" type="number" step="0.01" value="{{ settings.acq_landing_pct }}" style="width:90px"></td></tr>
-      <tr><td>Ramp bonus (% of sales, per period)</td><td class="num"><input name="acq_ramp_pct" type="number" step="0.01" value="{{ settings.acq_ramp_pct }}" style="width:90px"></td></tr>
-      <tr><td>Ramp length (periods ≈ 1 quarter)</td><td class="num"><input name="acq_ramp_periods" type="number" step="1" value="{{ settings.acq_ramp_periods }}" style="width:90px"></td></tr>
+      <tr><td>Acquisition revenue share (% of a new account's revenue)</td><td class="num"><input name="acq_revenue_pct" type="number" step="0.005" value="{{ settings.acq_revenue_pct }}" style="width:90px"> (e.g. 0.01 = 1%)</td></tr>
+      <tr><td>"New" window (periods ≈ 1 quarter)</td><td class="num"><input name="acq_ramp_periods" type="number" step="1" value="{{ settings.acq_ramp_periods }}" style="width:90px"></td></tr>
       <tr><th colspan="2">Other</th></tr>
       <tr><td>Behavior-churn fine ($)</td><td class="num"><input name="fine_amount" type="number" step="50" value="{{ settings.fine_amount }}" style="width:90px"></td></tr>
     </table>

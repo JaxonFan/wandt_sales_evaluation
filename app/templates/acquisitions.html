@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block body %}
+<div class="card">
+  <h2>New accounts · review (Period {{ nav.n }} · {{ nav.start }} ~ {{ nav.end }})</h2>
+  <p class="hint">Accounts in their first ~quarter earn the rep a <b>1% acquisition share</b> on revenue.
+    If one "flew in" or was randomly assigned (not actually won by the rep), mark it
+    <b>not rep-won (inbound)</b> — it stops paying acquisition and just counts toward line items until it has history.</p>
+  <table>
+    <thead><tr><th>Customer</th><th>Rep</th><th>Stage</th><th class="num">Sales</th><th>Rep-won?</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.customer }}</td><td>{{ r.associate }}</td>
+        <td>{% if r.status=='landing' %}<span class="badge b-new">just landed</span>
+            {% elif r.status=='ramp' %}<span class="badge b-ramp">in ramp</span>
+            {% else %}<span class="badge b-floor" style="background:#eee;color:#555">inbound (house)</span>{% endif %}</td>
+        <td class="num">${{ '{:,}'.format(r.sales) }}</td>
+        <td>
+          {% if nav.is_current %}
+          <form method="post" action="/acquisitions/flag" class="ov-form" style="margin:0">
+            <input type="hidden" name="account" value="{{ r.account }}"><input type="hidden" name="p" value="{{ nav.idx }}">
+            <select name="rep_won" onchange="this.form.submit()">
+              <option value="yes" {{ 'selected' if r.rep_won }}>Yes — rep won it</option>
+              <option value="no" {{ 'selected' if not r.rep_won }}>No — inbound / not rep-won</option>
+            </select>
+          </form>
+          {% else %}<span class="mut">{{ 'rep-won' if r.rep_won else 'inbound' }}</span>{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="mut">No new accounts this period.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

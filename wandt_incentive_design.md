@@ -21,27 +21,37 @@ Each account gets a growth target based on its size, because big accounts can't 
 | Medium ($20k–$100k) | +5% |
 | Small (< $20k) — lots of room | +10% |
 
-A rep's target = each account's sales in **this same stretch last year**, grown by its tier. The rep sees **one number** ("grow your book to $441k"), and earns **a cut of every dollar above it** (e.g. 10¢ per $1). Holding the base book is already paid by salary + contribution, so we're not paying twice.
+A rep's target = each account's sales in **this same stretch last year**, grown by its tier. The rep sees **one number** ("grow your book to $441k"), and earns **a cut of every dollar above it**. Holding the base book is already paid by salary + contribution, so we're not paying twice.
+
+**Inflation is built into the target (forward, not retroactive).** Last year's basket is restated at
+today's prices using per-item **cost** inflation, so the target is a concrete number the rep knows up
+front — and beating it means *real* growth, not just price rises. (A flat-volume rep facing 5% cost
+inflation needs +5% sales just to reach target.)
+
+**Lunar New Year** is a moving holiday with a big demand spike, so for CNY periods the comparison is
+auto-aligned to *last year's* CNY (not a fixed 364 days back) so both sides contain the spike.
 **Part-time reps:** their growth *stretch* is scaled to the hours they work (≈ half), so a part-timer with a small book gets a lighter, fair target — but the **same payout rate** per dollar grown.
 
-### 3. Acquisition — landing bonus + a one-quarter ramp, bigger for bigger accounts
-Every new account pays the rep two ways, both a **% of the account's sales** (so a bigger account pays more):
-- A **landing bonus** the period it first orders (≈ 10% of its sales that period).
-- A **ramp bonus** (≈ 5% of its sales each period) for the rest of **one quarter**, then it graduates into the normal book.
-No quota — a quiet period costs nothing; landing pays well.
+### 3. Acquisition — an elevated 1% revenue share on new accounts
+A new account (first order within the last ~quarter) pays the rep an **elevated 1% of its revenue**
+each period it's "new," then it graduates into the normal book. Simple, and bigger accounts pay
+more (it's a % of their revenue). No quota — a quiet period costs nothing.
+**Manager review:** new accounts sometimes "fly in" or get randomly assigned. The manager can mark
+any new account **"not rep-won (inbound)"** on the *New accounts* page → it stops paying acquisition
+(it just counts toward line items until it has history).
 
 ## What the associate sees
 ```
 An Cao — this period
-   Sales so far     $488,000        Target  $441,000   (111% — on pace)
+   Sales so far     $488,000      Target  $483,000  (inflation-adjusted; ~on pace)
    Your bonus:
-     Sell items       1,015 items × $0.20            = $203
-     Grow your book   $488k vs $441k target × 10%    = $4,721
-     New accounts     0 this period                  = $37 (ramp)
+     Sell line items   1,015 lines × $0.10              = $102
+     Grow your book    $488k vs $483k target × 8.5%     = $467
+     New accounts      1% revenue share on new accounts = $7
      ─────────────────────────────────────────────────────
-     Total so far                                    ≈ $4,961
+     Total so far                                       ≈ $576
 ```
-*(Real figures from the latest 4-week period in the data.)*
+*(Illustrative, latest 4-week period; team total lands ~$3,000. Dials are tunable in Settings.)*
 
 Each rep also gets a **"where am I vs my target"** dashboard: one target number, how far along they are, whether they're ahead or behind a **calendar-aware pace line** (it allows for slow weekends, so a quiet Sunday doesn't read as "behind"), a "to finish, ~$X/selling-day" guide, the three bonus lines as a running tally, the new accounts still earning for them, and a short **accounts-to-watch** list (customers that have gone quieter than usual — worth a call).
 
@@ -54,9 +64,10 @@ Each rep also gets a **"where am I vs my target"** dashboard: one target number,
 - **Finding customers is slow** — acquisition has no quota; a dry period costs nothing.
 
 ## Dials the manager sets (all editable in the app)
-- Contribution: **$ per item** (≈ $0.20)
-- Growth: size thresholds & tier %s (≈ +2 / +5 / +10), **payout per $ above target** (≈ 10%), **part-time factor** (≈ 0.5)
-- Acquisition: landing % (≈ 10%), ramp % (≈ 5%), ramp length (**1 quarter**)
+- Contribution: **$ per line item** (≈ $0.10)
+- Growth: size thresholds & tier %s (≈ +2 / +5 / +10), **payout per $ above target** (≈ 8.5%), **part-time factor** (≈ 0.5)
+- Acquisition: **revenue share** (≈ 1%), "new" window (**1 quarter**)
+*(Calibrated so total bonus lands ~$3,000/period across the team; tune to your budget.)*
 
 *(Numbers are illustrative starting points — set them to land at your intended bonus budget, with acquisition weighted as you like.)*
 

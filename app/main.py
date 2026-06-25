@@ -22,7 +22,7 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 EDITABLE_DIALS = ["item_rate", "growth_large_min", "growth_medium_min", "growth_large_pct",
                   "growth_medium_pct", "growth_small_pct", "growth_payout_rate", "part_time_factor",
-                  "acq_landing_pct", "acq_ramp_pct", "acq_ramp_periods", "fine_amount"]
+                  "acq_revenue_pct", "acq_ramp_periods", "fine_amount"]
 
 
 def current_user(request: Request, db: Session):
@@ -253,6 +253,42 @@ def closures_exempt(request: Request, account: str = Form(...), note: str = Form
     a.status = "exempt"; a.note = note or "confirmed closed"; a.user_id = user.user_id
     a.created_at = dt.datetime.utcnow(); db.commit()
     return RedirectResponse(f"/closures?p={idx}", status_code=303)
+
+
+# ---------- new-account review (mark "not rep-won") ----------
+@app.get("/acquisitions", response_class=HTMLResponse)
+def acquisitions_page(request: Request, db: Session = Depends(get_db), p: int = None):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    res, period, _s, nav, _as_of = service.run_period_bonus(db, p)
+    names = service.customer_names(db)
+    accounts = res["accounts"]
+    flags = {r.account: r.rep_won for r in db.query(M.AcquisitionReview)}
+    rows = []
+    if len(accounts):
+        new = accounts[accounts["status"].isin(["landing", "ramp", "house"])]
+        for _, r in new.sort_values("rep_sales", ascending=False).iterrows():
+            rows.append(dict(account=r["account"], customer=names.get(r["account"], r["account"]),
+                             associate=r["associate"], status=r["status"], sales=round(float(r["rep_sales"])),
+                             rep_won=flags.get(r["account"], True)))
+    return templates.TemplateResponse("acquisitions.html", {
+        "request": request, "user": user, "period": period, "nav": nav, "rows": rows})
+
+
+@app.post("/acquisitions/flag")
+def acquisitions_flag(request: Request, account: str = Form(...), rep_won: str = Form(...),
+                      p: int = Form(None), db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    _, idx, _ = resolve_p(db, p)
+    rev = db.get(M.AcquisitionReview, account) or M.AcquisitionReview(account=account)
+    rev.rep_won = (rep_won == "yes"); rev.user_id = user.user_id; rev.created_at = dt.datetime.utcnow()
+    db.merge(rev); db.commit()
+    service._ENGINE_CACHE.clear()
+    audit(db, user, "acq_review", f"account:{account}", {"rep_won": rev.rep_won})
+    return RedirectResponse(f"/acquisitions?p={idx}", status_code=303)
 
 
 # ---------- item-level upload (idempotent by sop_number) ----------

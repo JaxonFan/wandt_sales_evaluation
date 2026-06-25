@@ -35,9 +35,9 @@
 <div class="card">
   <h2>Your bonus this period</h2>
   <table>
-    <tr><td>Sell items <span class="mut">— {{ '{:,}'.format(c.items_placed) }} items</span></td><td class="num">${{ '{:,.0f}'.format(c.contribution_bonus) }}</td></tr>
+    <tr><td>Sell line items <span class="mut">— {{ '{:,}'.format(c.items_placed) }} lines</span></td><td class="num">${{ '{:,.0f}'.format(c.contribution_bonus) }}</td></tr>
     <tr><td>Grow your book <span class="mut">— ${{ '{:,.0f}'.format(c.growth_actual) }} of ${{ '{:,.0f}'.format(c.growth_target) }}</span></td><td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td></tr>
-    <tr><td>New accounts <span class="mut">— {{ c.new_accounts }} landed{% if c.acq_ramp %} + ramping{% endif %}</span></td><td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td></tr>
+    <tr><td>New accounts <span class="mut">— {{ c.new_accounts }} new (1% share)</span></td><td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td></tr>
     <tr><td><b>Total so far</b></td><td class="num"><b>${{ '{:,.0f}'.format(c.total_bonus) }}</b></td></tr>
   </table>
   <p class="hint" style="margin-top:8px">Every line is "you did this → you earned this." Grow pays on sales above your target;

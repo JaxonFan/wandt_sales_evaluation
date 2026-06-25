@@ -36,10 +36,10 @@ def resolve_associate(batch_number, prefix_map, variant_map):
 # ---------- data loading ----------
 def load_lines_df(db):
     rows = db.query(M.SalesLine.customer_number, M.SalesLine.associate, M.SalesLine.document_date,
-                    M.SalesLine.line_profit, M.SalesLine.extended_price, M.SalesLine.qty,
-                    M.SalesLine.item_number, M.SalesLine.customer_name).all()
+                    M.SalesLine.line_profit, M.SalesLine.extended_price, M.SalesLine.extended_cost,
+                    M.SalesLine.qty, M.SalesLine.item_number, M.SalesLine.customer_name).all()
     df = pd.DataFrame(rows, columns=["account", "associate", "document_date", "line_profit",
-                                     "extended_price", "qty", "item_number", "customer_name"])
+                                     "extended_price", "extended_cost", "qty", "item_number", "customer_name"])
     if len(df):
         df["document_date"] = pd.to_datetime(df["document_date"])
     return df
@@ -205,6 +205,11 @@ def part_time_associates(db):
     return {a.name for a in db.query(M.Associate).filter(M.Associate.role == "part time sales") if a.name}
 
 
+def not_rep_won_set(db):
+    """Accounts the manager has marked as NOT a real rep win (no acquisition credit)."""
+    return {r.account for r in db.query(M.AcquisitionReview).filter(M.AcquisitionReview.rep_won == False)}
+
+
 def _dials(s):
     """Pull the bonus dials out of settings into compute_period_bonus kwargs."""
     return dict(
@@ -213,9 +218,8 @@ def _dials(s):
         growth_pcts={"large": float(s["growth_large_pct"]), "medium": float(s["growth_medium_pct"]),
                      "small": float(s["growth_small_pct"])},
         growth_payout_rate=float(s["growth_payout_rate"]), part_time_factor=float(s["part_time_factor"]),
-        acq_landing_pct=float(s["acq_landing_pct"]), acq_ramp_pct=float(s["acq_ramp_pct"]),
-        acq_ramp_periods=int(s["acq_ramp_periods"]), period_days=PERIOD_DAYS,
-        holiday_weight=float(s["holiday_weight"]))
+        acq_revenue_pct=float(s["acq_revenue_pct"]), acq_ramp_periods=int(s["acq_ramp_periods"]),
+        period_days=PERIOD_DAYS, holiday_weight=float(s["holiday_weight"]))
 
 
 def run_period_bonus(db, idx=None):
@@ -230,7 +234,8 @@ def run_period_bonus(db, idx=None):
     df = _lines_cached(db, _data_version(db))
     _, _, team = attribution_maps(db)
     res = compute_period_bonus(df, period.start_date, period.end_date, team, as_of=as_of,
-                               part_time_associates=part_time_associates(db), **_dials(s))
+                               part_time_associates=part_time_associates(db),
+                               not_rep_won=not_rep_won_set(db), **_dials(s))
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of
 

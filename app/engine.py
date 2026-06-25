@@ -235,33 +235,76 @@ def growth_tier_pct(annual_sales, thresholds, pcts):
     return pcts["small"]
 
 
+# Lunar New Year (Gregorian dates) — a moving holiday with a big demand spike. For periods that
+# overlap CNY we align the year-ago baseline to LAST year's CNY (not a fixed 364 days) so the spike
+# lines up on both sides of the growth comparison.
+CNY_DATES = [pd.Timestamp(d) for d in
+             ["2023-01-22", "2024-02-10", "2025-01-29", "2026-02-17", "2027-02-06", "2028-01-26"]]
+
+
+def cny_aligned_offset_days(period_start, period_end, default_days=364):
+    """If a CNY falls within the period, return days to the prior-year CNY (aligns the spike); else 364."""
+    for i in range(1, len(CNY_DATES)):
+        if period_start <= CNY_DATES[i] <= period_end:
+            return (CNY_DATES[i] - CNY_DATES[i - 1]).days
+    return default_days
+
+
+def item_cost_inflation(df, reference_date, offset_days, weeks=8, clip=(0.5, 2.0)):
+    """Per-item cost-inflation factor known BEFORE the period: recent unit cost (the `weeks` before
+    `reference_date`) vs the same window a year (offset_days) earlier. Returns (dict item->factor, overall)."""
+    recent = df[(df["document_date"] <= reference_date) & (df["document_date"] > reference_date - pd.Timedelta(weeks=weeks))]
+    base_end = reference_date - pd.Timedelta(days=offset_days)
+    base = df[(df["document_date"] <= base_end) & (df["document_date"] > base_end - pd.Timedelta(weeks=weeks))]
+
+    def unit_cost(frame):
+        g = frame.groupby("item_number").agg(cost=("extended_cost", "sum"), qty=("qty", "sum"))
+        return g["cost"] / g["qty"].replace(0, np.nan)
+
+    recent_cost, base_cost = unit_cost(recent), unit_cost(base)
+    factor = (recent_cost / base_cost).replace([np.inf, -np.inf], np.nan).clip(*clip).dropna()
+    # fallback for brand-new/unmatched items = the MEDIAN per-item inflation (robust; a cost-weighted
+    # overall is mix-sensitive and overstates inflation). Default 1.0 if no matched items.
+    overall = float(factor.median()) if len(factor) else 1.0
+    return factor.to_dict(), overall
+
+
 def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None,
-                         part_time_associates=frozenset(), period_days=28, holiday_weight=0.0,
-                         item_rate=0.20, growth_thresholds=(100000, 20000),
-                         growth_pcts=None, growth_payout_rate=0.10, part_time_factor=0.5,
-                         acq_landing_pct=0.10, acq_ramp_pct=0.05, acq_ramp_periods=3):
+                         part_time_associates=frozenset(), not_rep_won=frozenset(),
+                         period_days=28, holiday_weight=0.0,
+                         item_rate=0.10, growth_thresholds=(100000, 20000),
+                         growth_pcts=None, growth_payout_rate=0.02, part_time_factor=0.5,
+                         acq_revenue_pct=0.01, acq_ramp_periods=3):
     """Return dict(scorecards: per-rep DataFrame, accounts: per (rep, account) detail DataFrame).
 
-    Target/last-year use the FULL period; actuals use [period_start, as_of] (defaults period_end)
-    so the same function serves both a finished period and a live mid-period dashboard.
+    Bonus = Contribution (line items x item_rate) + Growth ($ above an inflation-adjusted, size-tiered
+    target x rate) + Acquisition (acq_revenue_pct x a new account's revenue, for ~1 quarter).
+    Target/last-year use the FULL period; actuals use [period_start, as_of] (defaults period_end).
     """
     growth_pcts = growth_pcts or {"large": 0.02, "medium": 0.05, "small": 0.10}
     period_start = pd.Timestamp(period_start).normalize()
     period_end = pd.Timestamp(period_end).normalize()
     as_of = period_end if as_of is None else min(pd.Timestamp(as_of).normalize(), period_end)
-    empty = dict(scorecards=pd.DataFrame(), accounts=pd.DataFrame())
+    not_rep_won = set(not_rep_won)
     if not len(df):
-        return empty
+        return dict(scorecards=pd.DataFrame(), accounts=pd.DataFrame())
     dow_weight = day_of_week_weights(df)
 
+    # CNY-aligned year-ago offset (else 364 days); used for the baseline AND the inflation base window
+    offset = pd.Timedelta(days=cny_aligned_offset_days(period_start, period_end))
+
     current = df[(df["document_date"] > period_start) & (df["document_date"] <= as_of)]
-    last_year = df[(df["document_date"] > period_start - ONE_YEAR) & (df["document_date"] <= period_end - ONE_YEAR)]
+    last_year = df[(df["document_date"] > period_start - offset) & (df["document_date"] <= period_end - offset)].copy()
     capacity_current = selling_day_capacity(dow_weight, period_start + pd.Timedelta(days=1), period_end, holiday_weight)
-    capacity_last_year = selling_day_capacity(dow_weight, period_start - ONE_YEAR + pd.Timedelta(days=1), period_end - ONE_YEAR, holiday_weight)
+    capacity_last_year = selling_day_capacity(dow_weight, period_start - offset + pd.Timedelta(days=1), period_end - offset, holiday_weight)
     scale = capacity_current / capacity_last_year if capacity_last_year else 1.0
 
+    # inflation FORWARD into the target: restate last year's basket at today's prices (per-item cost inflation)
+    item_factor, overall_factor = item_cost_inflation(df, period_start, offset.days)
+    last_year["inflated_price"] = last_year["extended_price"] * last_year["item_number"].map(item_factor).fillna(overall_factor)
+    account_last_year_sales = last_year.groupby("account")["inflated_price"].sum() * scale
+
     account_current_sales = current.groupby("account")["extended_price"].sum()
-    account_last_year_sales = last_year.groupby("account")["extended_price"].sum() * scale
     first_seen = df.groupby("account")["document_date"].min()
     trailing_year = df[(df["document_date"] > period_end - ONE_YEAR) & (df["document_date"] <= period_end)]
     account_annual_sales = trailing_year.groupby("account")["extended_price"].sum()
@@ -270,19 +313,20 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         seen = first_seen.get(account_id)
         if seen is None:
             return "normal"
-        if seen > period_start:                                   # first order during this period
-            return "landing"
-        if (period_end - seen).days <= acq_ramp_periods * period_days:
-            return "ramp"
-        return "normal"
+        is_new = (seen > period_start) or ((period_end - seen).days <= acq_ramp_periods * period_days)
+        if not is_new:
+            return "normal"
+        if account_id in not_rep_won:                 # manager flagged "not rep-won" -> house account
+            return "house"
+        return "landing" if seen > period_start else "ramp"
 
-    # per (rep, account) rows for the period
     team_current = current[current["associate"].isin(sales_team)]
     rep_account = team_current.groupby(["associate", "account"]).agg(
         rep_sales=("extended_price", "sum"), items=("extended_price", "size")).reset_index()
 
-    account_rows, rep_totals = [], {a: dict(items=0, growth_base=0.0, growth_stretch=0.0, growth_actual=0.0,
-                                            landing=0.0, ramp=0.0, new_accounts=0) for a in sales_team}
+    account_rows = []
+    rep_totals = {a: dict(items=0, growth_base=0.0, growth_stretch=0.0, growth_actual=0.0,
+                          acquisition=0.0, new_accounts=0) for a in sales_team}
     for _, r in rep_account.iterrows():
         rep, account_id = r["associate"], r["account"]
         rep_sales = float(r["rep_sales"])
@@ -298,11 +342,11 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         t = rep_totals[rep]
         t["items"] += items
         if status in ("landing", "ramp"):
+            t["acquisition"] += acq_revenue_pct * rep_sales       # single elevated revenue share
             if status == "landing":
-                t["landing"] += acq_landing_pct * rep_sales
                 t["new_accounts"] += 1
-            else:
-                t["ramp"] += acq_ramp_pct * rep_sales
+        elif status == "house":
+            pass                                                   # line items only (no growth, no acquisition)
         else:
             t["growth_base"] += last_year_for_rep
             t["growth_stretch"] += last_year_for_rep * tier_pct * pt
@@ -321,12 +365,11 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         growth_target = t["growth_base"] + t["growth_stretch"]
         growth_bonus = max(0.0, t["growth_actual"] - growth_target) * growth_payout_rate
         contribution_bonus = t["items"] * item_rate
-        acquisition_bonus = t["landing"] + t["ramp"]
         cards.append(dict(
             associate=rep, items_placed=t["items"], contribution_bonus=contribution_bonus,
             growth_base=t["growth_base"], growth_target=growth_target, growth_actual=t["growth_actual"],
-            growth_bonus=growth_bonus, acq_landing=t["landing"], acq_ramp=t["ramp"],
-            acquisition_bonus=acquisition_bonus, new_accounts=t["new_accounts"],
-            total_bonus=contribution_bonus + growth_bonus + acquisition_bonus))
+            growth_bonus=growth_bonus, acquisition_bonus=t["acquisition"], new_accounts=t["new_accounts"],
+            total_bonus=contribution_bonus + growth_bonus + t["acquisition"]))
     return dict(scorecards=pd.DataFrame(cards), accounts=pd.DataFrame(account_rows),
-                capacity_current=capacity_current, capacity_last_year=capacity_last_year)
+                capacity_current=capacity_current, capacity_last_year=capacity_last_year,
+                inflation_overall=overall_factor)

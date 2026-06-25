@@ -20,8 +20,8 @@ DEFAULTS = {
     "window_weeks": 13,            # trailing window used for closure cadence / context
     "holiday_weight": 0.0,         # selling capacity assigned to a federal holiday (0 = a dead day)
 
-    # --- Contribution (items placed) ---
-    "item_rate": 0.20,             # $ earned per invoice line-item written this period (manager-set dial)
+    # --- Contribution (line items placed) ---
+    "item_rate": 0.10,             # $ earned per invoice LINE ITEM written this period (manager-set dial)
 
     # --- Growth (grow your book to a size-tiered target) ---
     "growth_large_min": 100000,    # account's prior-year sales >= this -> "large" tier
@@ -29,13 +29,12 @@ DEFAULTS = {
     "growth_large_pct": 0.02,      # growth ask for large (mature) accounts
     "growth_medium_pct": 0.05,     # growth ask for medium accounts
     "growth_small_pct": 0.10,      # growth ask for small accounts (most headroom)
-    "growth_payout_rate": 0.10,    # $ earned per sales-dollar above the growth target
+    "growth_payout_rate": 0.085,   # $ earned per sales-dollar above the (inflation-adjusted) growth target
     "part_time_factor": 0.5,       # part-time reps' growth STRETCH scaled by this (full-time = 1.0)
 
-    # --- Acquisition (land new accounts; size-scaled; 1-quarter ramp) ---
-    "acq_landing_pct": 0.10,       # bonus = this % of a new account's sales in the period it first orders
-    "acq_ramp_pct": 0.05,          # bonus = this % of its sales for the remaining periods of the ramp
-    "acq_ramp_periods": 3,         # a new account earns for ~1 quarter (3 periods incl. landing), then graduates
+    # --- Acquisition (new accounts: an elevated revenue share for ~1 quarter) ---
+    "acq_revenue_pct": 0.01,       # bonus = this % of a NEW account's revenue, each period it is "new"
+    "acq_ramp_periods": 3,         # an account counts as "new" for ~1 quarter (3 periods), then graduates
 
     # --- closure decision-support ---
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)
