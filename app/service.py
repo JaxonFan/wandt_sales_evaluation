@@ -214,10 +214,10 @@ def _dials(s):
     """Pull the bonus dials out of settings into compute_period_bonus kwargs."""
     return dict(
         item_rate=float(s["item_rate"]),
-        growth_thresholds=(float(s["growth_large_min"]), float(s["growth_medium_min"])),
-        growth_pcts={"large": float(s["growth_large_pct"]), "medium": float(s["growth_medium_pct"]),
-                     "small": float(s["growth_small_pct"])},
-        growth_payout_rate=float(s["growth_payout_rate"]), part_time_factor=float(s["part_time_factor"]),
+        growth_window_weeks=int(s["growth_window_weeks"]), size_band_count=int(s["size_band_count"]),
+        growth_stretch_pct=float(s["growth_stretch_pct"]),
+        growth_payout_rate=float(s["growth_payout_rate"]), growth_cap_multiple=float(s["growth_cap_multiple"]),
+        growth_review_min=float(s["growth_review_min"]), part_time_factor=float(s["part_time_factor"]),
         acq_revenue_pct=float(s["acq_revenue_pct"]), acq_ramp_periods=int(s["acq_ramp_periods"]),
         period_days=PERIOD_DAYS, holiday_weight=float(s["holiday_weight"]))
 
@@ -244,26 +244,19 @@ def compute_rep_goal(db, associate, idx=None):
     """The rep-facing dashboard payload: one target, where they are vs a calendar-aware pace,
     run-rate to finish, the three bonus pieces, new accounts, and accounts-to-watch."""
     res, period, s, nav, as_of = run_period_bonus(db, idx)
-    cards = res["scorecards"]
-    card = next((c for c in cards.to_dict("records") if c["associate"] == associate), None)
+    card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == associate), None)
     df = _lines_cached(db, _data_version(db))
     names = customer_names(db)
-    period_start = pd.Timestamp(period.start_date); period_end = pd.Timestamp(period.end_date)
-    as_of = pd.Timestamp(as_of)
+    period_end = pd.Timestamp(period.end_date)
 
-    # calendar-aware pace (selling-day-equivalents so weekends/holidays don't jolt the line)
-    dow = day_of_week_weights(df) if len(df) else None
-    def cap(a, b):
-        return selling_day_capacity(dow, a, b, float(s["holiday_weight"])) if (dow is not None and b >= a) else 0.0
-    full = cap(period_start + pd.Timedelta(days=1), period_end)
-    elapsed = cap(period_start + pd.Timedelta(days=1), as_of)
-    remaining = cap(as_of + pd.Timedelta(days=1), period_end)
-    pace_fraction = (elapsed / full) if full else 0.0
-
-    target = float(card["growth_target"]) if card else 0.0
-    actual = float(card["growth_actual"]) if card else 0.0
-    expected_to_date = target * pace_fraction
-    run_rate_needed = max(0.0, target - actual) / remaining if remaining else 0.0
+    # growth is measured on the rolling quarter: your last-3-months sales vs a transparent target =
+    # last year + the lift accounts your size are getting + your stretch.
+    actual = float(card["growth_actual"]) if card else 0.0          # your trailing-quarter sales
+    target = float(card["growth_target"]) if card else 0.0          # the bar to beat
+    last_year = float(card["growth_base_raw"]) if card else 0.0     # same quarter last year (pre-lift)
+    lifted = float(card["growth_base"]) if card else 0.0            # after size/market lift (pre-stretch)
+    lift_pct = (lifted / last_year - 1) * 100 if last_year else 0.0
+    stretch_pct = (target / lifted - 1) * 100 if lifted else 0.0
 
     rep_accounts = res["accounts"]
     rep_accounts = rep_accounts[rep_accounts["associate"] == associate] if len(rep_accounts) else rep_accounts
@@ -271,7 +264,7 @@ def compute_rep_goal(db, associate, idx=None):
     if len(rep_accounts):
         for _, r in rep_accounts[rep_accounts["status"].isin(["landing", "ramp"])].iterrows():
             new_accounts.append({"customer": names.get(r["account"], r["account"]),
-                                 "status": r["status"], "sales": round(float(r["rep_sales"]))})
+                                 "status": r["status"], "sales": round(float(r["rep_quarter_sales"]))})
 
     # accounts to watch = silent accounts in this rep's book (touched in the trailing window)
     book_cut = period_end - pd.Timedelta(weeks=s["window_weeks"])
@@ -279,9 +272,8 @@ def compute_rep_goal(db, associate, idx=None):
     watch = [w for w in flag_silent_accounts(db) if w["account"] in rep_book][:6]
 
     return {"associate": associate, "card": card, "period": period, "nav": nav,
-            "target": target, "actual": actual, "pct": (actual / target * 100) if target else 0.0,
-            "expected_to_date": expected_to_date, "ahead_behind": actual - expected_to_date,
-            "run_rate_needed": run_rate_needed, "pace_pct": pace_fraction * 100,
+            "actual": actual, "target": target, "pct": (actual / target * 100) if target else 0.0,
+            "last_year": last_year, "lift_pct": lift_pct, "stretch_pct": stretch_pct,
             "new_accounts": new_accounts, "watch": watch}
 
 

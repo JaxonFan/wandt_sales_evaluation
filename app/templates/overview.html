@@ -20,14 +20,14 @@
 </div>
 <div class="card">
   <h2>Team — bonus this period</h2>
-  <p class="hint">Through {{ data_through }}. Bonus = three direct formulas on each rep's own numbers:
-    <b>Contribution</b> (line items × rate) + <b>Growth</b> ($ above their size-tiered, inflation-adjusted
-    target × rate) + <b>Acquisition</b> (1% revenue share on new accounts for ~1 quarter). Click a rep for detail.</p>
+  <p class="hint">Through {{ data_through }}. Bonus = <b>Contribution</b> (line items × rate)
+    + <b>Growth</b> (beating your target, measured over the trailing 3 months, vs how accounts your size are moving)
+    + <b>Acquisition</b> (1% revenue share on new accounts for ~1 quarter). Click a rep for detail.</p>
   <table>
     <thead><tr><th>Rep</th>
       <th class="num">Line items</th><th class="num">Contribution</th>
-      <th class="num">Growth target</th><th class="num">Growth actual</th><th class="num">Growth $</th>
-      <th class="num">New</th><th class="num">Acquisition</th>
+      <th class="num">Growth target (3mo)</th><th class="num">Growth actual</th><th class="num">Growth $</th>
+      <th class="num">New</th><th class="num">Acquisition</th><th class="num">Review</th>
       <th class="num">Suggested bonus</th><th class="num">Award</th></tr></thead>
     <tbody>
     {% for c in cards %}
@@ -40,13 +40,15 @@
         <td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td>
         <td class="num">{% if c.new_accounts %}<span class="badge b-new">{{ c.new_accounts }}</span>{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td>
+        <td class="num">{% if c.flagged %}<span class="badge b-floor">{{ c.flagged }}</span>{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num"><strong>${{ '{:,.0f}'.format(c.total_bonus) }}</strong></td>
         <td class="num">{% if c.associate in awards %}${{ '%.0f'|format(awards[c.associate].award_amount) }}{% else %}<span class="mut">—</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
-  <p class="hint" style="margin-top:10px">Suggested bonus is what the formulas produce; the manager confirms or
-    adjusts each rep's award on their page. Acquisition is bigger for bigger new accounts (it's a % of their sales).</p>
+  <p class="hint" style="margin-top:10px"><b>Review</b> = # of big account swings held back by the cap (open the rep to see them).
+    Growth is measured over the trailing 3 months and judged against how accounts of the same size are moving, so a market-wide
+    tide and one-off account spikes don't inflate it. Suggested bonus is a fair starting point; the manager sets the final award.</p>
 </div>
 {% endblock %}

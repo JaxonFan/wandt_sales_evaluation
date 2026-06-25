@@ -44,16 +44,17 @@
     <span class="badge b-new">new (landing)</span> <span class="badge b-ramp">ramp</span>
     <span class="badge b-ok">mature (vs last yr)</span> <span class="badge b-prov">provisional (vs own prior qtr)</span>
     <span class="mut">no-basis / inbound = line items only</span></p>
+  <p class="hint" style="margin:0 0 8px">Sales/target are the trailing <b>3 months</b>.
+    <span class="badge b-floor">capped</span> = a big swing held back & flagged for your review (was it real? a one-time order? a reassignment?).</p>
   <table>
-    <thead><tr><th>Customer</th><th>Tier</th><th class="num">Sales</th><th class="num">Last year</th>
+    <thead><tr><th>Customer</th><th class="num">Sales (3 mo)</th>
       <th class="num">Target</th><th class="num">vs target</th><th>Status</th><th>Manager</th></tr></thead>
     <tbody>
     {% for r in rows %}
       {% set a = actions.get(r.account) %}
       <tr>
-        <td>{{ r.name }}</td><td class="mut">{{ r.tier }}</td>
+        <td>{{ r.name }}{% if r.capped %} <span class="badge b-floor" title="held back ${{ '{:,}'.format(r.held_back) }}">capped −${{ '{:,}'.format(r.held_back) }}</span>{% endif %}</td>
         <td class="num">${{ '{:,}'.format(r.sales) }}</td>
-        <td class="num">${{ '{:,}'.format(r.last_year) }}</td>
         <td class="num">{% if r.target is not none %}${{ '{:,}'.format(r.target) }}{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num {{ 'pos' if (r.perf or 0)>=0 else 'neg' }}">{% if r.perf is not none %}{{ '%+.0f'|format(r.perf) }}%{% else %}—{% endif %}</td>
         <td>{% if r.status=='landing' %}<span class="badge b-new">new</span>

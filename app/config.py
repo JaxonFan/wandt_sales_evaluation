@@ -12,25 +12,26 @@ SALES_ROLES = {"full time sales", "part time sales"}
 
 # Metric dials (defaults from the 2-year analysis; the engine reads overrides from settings).
 # The bonus is THREE direct, self-computable pieces (per 4-week period), no pool:
-#   Contribution = items_placed x item_rate
-#   Growth       = max(0, sales - target) x growth_payout_rate ; target is size-tiered + part-time-scaled
-#   Acquisition  = landing (% of a new account's first-period sales) + ramp (% for the rest of ~1 quarter)
+#   Contribution = line_items x item_rate
+#   Growth       = max(0, trailing-quarter sales - target) x growth_payout_rate x (4/13)
+#                  target = own last-year quarter x (typical move for accounts your size) x (1 + stretch)
+#   Acquisition  = acq_revenue_pct x a NEW account's revenue, for ~1 quarter
 DEFAULTS = {
     "period_weeks": 4,             # review/pay cadence (4-week period); the bonus is assessed per period
-    "window_weeks": 13,            # trailing window used for closure cadence / context
+    "window_weeks": 13,            # trailing window for closure cadence / context
     "holiday_weight": 0.0,         # selling capacity assigned to a federal holiday (0 = a dead day)
 
     # --- Contribution (line items placed) ---
     "item_rate": 0.10,             # $ earned per invoice LINE ITEM written this period (manager-set dial)
 
-    # --- Growth (grow your book to a size-tiered target) ---
-    "growth_large_min": 100000,    # account's prior-year sales >= this -> "large" tier
-    "growth_medium_min": 20000,    # ... >= this (and < large) -> "medium"; below -> "small"
-    "growth_large_pct": 0.02,      # growth ask for large (mature) accounts
-    "growth_medium_pct": 0.05,     # growth ask for medium accounts
-    "growth_small_pct": 0.10,      # growth ask for small accounts (most headroom)
-    "growth_payout_rate": 0.18,    # $ earned per sales-dollar above the (inflation-adjusted) growth target
-    "part_time_factor": 0.5,       # part-time reps' growth STRETCH scaled by this (full-time = 1.0)
+    # --- Growth (beat what accounts your size are doing, measured over a trailing quarter) ---
+    "growth_window_weeks": 13,     # measure growth on the trailing 13 weeks (smooths single-period lumps)
+    "size_band_count": 5,          # group accounts into this many size bands for the "typical move" de-trend
+    "growth_stretch_pct": 0.03,    # the extra above your size band's typical move that you must beat
+    "growth_payout_rate": 0.045,   # $ earned per sales-dollar above target (calibrated to ~$3k/period total)
+    "growth_cap_multiple": 2.0,    # an account counts toward growth up to this x its target; excess is held back
+    "growth_review_min": 20000,    # held-back above this $ flags the account on the manager's review list
+    "part_time_factor": 0.5,       # part-time reps' STRETCH scaled by this (full-time = 1.0)
 
     # --- Acquisition (new accounts: an elevated revenue share for ~1 quarter) ---
     "acq_revenue_pct": 0.01,       # bonus = this % of a NEW account's revenue, each period it is "new"

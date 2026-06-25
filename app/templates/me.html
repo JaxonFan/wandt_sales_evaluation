@@ -12,36 +12,38 @@
 </div>
 
 <div class="card">
-  <h2>Where you are</h2>
+  <h2>Grow your book</h2>
   {% set pct = g.pct if g.pct < 100 else 100 %}
   <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
-    <span>Sales so far <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
+    <span>Your last 3 months <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
     <span>Target <b>${{ '{:,.0f}'.format(g.target) }}</b></span>
   </div>
   <div style="background:#eef2f6;border-radius:10px;height:22px;overflow:hidden;border:1px solid var(--line)">
-    <div style="width:{{ pct }}%;height:100%;background:{{ 'var(--green)' if g.ahead_behind>=0 else 'var(--amber)' }}"></div>
+    <div style="width:{{ pct }}%;height:100%;background:{{ 'var(--green)' if g.actual>=g.target else 'var(--amber)' }}"></div>
   </div>
   <div style="margin-top:8px;font-size:13.5px">
     {{ '%.0f'|format(g.pct) }}% of target ·
-    {% if g.ahead_behind >= 0 %}<span class="pos">on pace (ahead ${{ '{:,.0f}'.format(g.ahead_behind) }})</span>
-    {% else %}<span class="neg">behind pace by ${{ '{:,.0f}'.format(-g.ahead_behind) }}</span>{% endif %}
-    {% if g.nav.is_current %}· by today you'd usually be at ~${{ '{:,.0f}'.format(g.expected_to_date) }}
-    · to finish: ~<b>${{ '{:,.0f}'.format(g.run_rate_needed) }}/selling-day</b>{% endif %}
+    {% if g.actual>=g.target %}<span class="pos">above target — earning growth bonus on the excess</span>
+    {% else %}<span class="neg">below target — keep going</span>{% endif %}
   </div>
-  <p class="hint" style="margin-top:8px">Your target is what your accounts bought this same stretch last year, grown a bit
-    (more for small accounts, less for big ones). The pace line allows for slow weekends, so a quiet Sunday doesn't put you "behind."</p>
+  <p class="hint" style="margin-top:8px">Your <b>${{ '{:,.0f}'.format(g.target) }}</b> target =
+    your accounts the same 3 months last year (${{ '{:,.0f}'.format(g.last_year) }})
+    + the lift accounts your size are getting now (+{{ '%.0f'|format(g.lift_pct) }}%)
+    + your stretch (+{{ '%.0f'|format(g.stretch_pct) }}%).
+    <b>Hitting it = on pace</b> (already paid by your salary, per-line pay, and new-account pay);
+    the <b>growth bonus is the extra for beating it</b> — so you earn for beating what accounts like yours are doing, not for riding a good market.</p>
 </div>
 
 <div class="card">
   <h2>Your bonus this period</h2>
   <table>
     <tr><td>Sell line items <span class="mut">— {{ '{:,}'.format(c.items_placed) }} lines</span></td><td class="num">${{ '{:,.0f}'.format(c.contribution_bonus) }}</td></tr>
-    <tr><td>Grow your book <span class="mut">— ${{ '{:,.0f}'.format(c.growth_actual) }} of ${{ '{:,.0f}'.format(c.growth_target) }}</span></td><td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td></tr>
+    <tr><td>Grow your book <span class="mut">— beating your target</span></td><td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td></tr>
     <tr><td>New accounts <span class="mut">— {{ c.new_accounts }} new (1% share)</span></td><td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td></tr>
-    <tr><td><b>Total so far</b></td><td class="num"><b>${{ '{:,.0f}'.format(c.total_bonus) }}</b></td></tr>
+    <tr><td><b>Total</b></td><td class="num"><b>${{ '{:,.0f}'.format(c.total_bonus) }}</b></td></tr>
   </table>
-  <p class="hint" style="margin-top:8px">Every line is "you did this → you earned this." Grow pays on sales above your target;
-    each new account pays you for its first quarter (bigger account → bigger payout).</p>
+  <p class="hint" style="margin-top:8px">Every line is "you did this → you earned this." Growth is measured over your last 3 months
+    (so one big or slow week doesn't swing it); each new account pays you a share for its first quarter.</p>
 </div>
 
 {% if g.new_accounts %}

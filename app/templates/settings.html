@@ -8,14 +8,14 @@
     <table>
       <tr><th colspan="2">Contribution</th></tr>
       <tr><td>$ per line item placed</td><td class="num"><input name="item_rate" type="number" step="0.01" value="{{ settings.item_rate }}" style="width:90px"></td></tr>
-      <tr><th colspan="2">Growth — size tiers (by account's trailing-year sales)</th></tr>
-      <tr><td>Large account ≥ $</td><td class="num"><input name="growth_large_min" type="number" step="1000" value="{{ settings.growth_large_min }}" style="width:110px"></td></tr>
-      <tr><td>Medium account ≥ $</td><td class="num"><input name="growth_medium_min" type="number" step="1000" value="{{ settings.growth_medium_min }}" style="width:110px"></td></tr>
-      <tr><td>Growth ask — large</td><td class="num"><input name="growth_large_pct" type="number" step="0.01" value="{{ settings.growth_large_pct }}" style="width:90px"> (e.g. 0.02 = 2%)</td></tr>
-      <tr><td>Growth ask — medium</td><td class="num"><input name="growth_medium_pct" type="number" step="0.01" value="{{ settings.growth_medium_pct }}" style="width:90px"></td></tr>
-      <tr><td>Growth ask — small</td><td class="num"><input name="growth_small_pct" type="number" step="0.01" value="{{ settings.growth_small_pct }}" style="width:90px"></td></tr>
-      <tr><td>Payout per $ above target</td><td class="num"><input name="growth_payout_rate" type="number" step="0.01" value="{{ settings.growth_payout_rate }}" style="width:90px"> (e.g. 0.10 = 10¢/$)</td></tr>
-      <tr><td>Part-time growth factor</td><td class="num"><input name="part_time_factor" type="number" step="0.05" value="{{ settings.part_time_factor }}" style="width:90px"> (0.5 = half the growth ask)</td></tr>
+      <tr><th colspan="2">Growth — trailing-quarter, de-trended by account size</th></tr>
+      <tr><td>Measurement window (weeks)</td><td class="num"><input name="growth_window_weeks" type="number" step="1" value="{{ settings.growth_window_weeks }}" style="width:90px"> (13 = trailing quarter)</td></tr>
+      <tr><td>Size bands (for the "typical move" de-trend)</td><td class="num"><input name="size_band_count" type="number" step="1" value="{{ settings.size_band_count }}" style="width:90px"></td></tr>
+      <tr><td>Stretch above your size band</td><td class="num"><input name="growth_stretch_pct" type="number" step="0.01" value="{{ settings.growth_stretch_pct }}" style="width:90px"> (e.g. 0.03 = +3%)</td></tr>
+      <tr><td>Payout per $ above target</td><td class="num"><input name="growth_payout_rate" type="number" step="0.005" value="{{ settings.growth_payout_rate }}" style="width:90px"></td></tr>
+      <tr><td>Per-account cap (× target)</td><td class="num"><input name="growth_cap_multiple" type="number" step="0.5" value="{{ settings.growth_cap_multiple }}" style="width:90px"> (2 = count up to 2× target)</td></tr>
+      <tr><td>Flag for review when held-back > $</td><td class="num"><input name="growth_review_min" type="number" step="1000" value="{{ settings.growth_review_min }}" style="width:110px"></td></tr>
+      <tr><td>Part-time stretch factor</td><td class="num"><input name="part_time_factor" type="number" step="0.05" value="{{ settings.part_time_factor }}" style="width:90px"></td></tr>
       <tr><th colspan="2">Acquisition (new accounts)</th></tr>
       <tr><td>Acquisition revenue share (% of a new account's revenue)</td><td class="num"><input name="acq_revenue_pct" type="number" step="0.005" value="{{ settings.acq_revenue_pct }}" style="width:90px"> (e.g. 0.01 = 1%)</td></tr>
       <tr><td>"New" window (periods ≈ 1 quarter)</td><td class="num"><input name="acq_ramp_periods" type="number" step="1" value="{{ settings.acq_ramp_periods }}" style="width:90px"></td></tr>

@@ -12,31 +12,30 @@ We want four things at once: reward day-to-day **contribution**, push **growth**
 A small set amount for **every line-item the rep writes this period** (a dial the manager sets). This rewards the actual work — and because more items come from both *more orders* and *richer orders*, it quietly encourages **cross-selling** (getting an account to add items). Salary already covers the bulk of "servicing the book," so this piece is intentionally modest.
 *Example: 1,015 items × $0.20 = **$203**.*
 
-### 2. Growth — grow your book to a target sized to each account
-Each account gets a growth target based on its size, because big accounts can't climb like small ones:
+### 2. Growth — beat a fair target, measured over a trailing quarter
+A rep's target is set per account and shown as **one number** with a plain breakdown:
 
-| Account size (trailing-year sales) | Growth ask |
-|---|---|
-| Large (≥ $100k) — hard to grow | +2% |
-| Medium ($20k–$100k) | +5% |
-| Small (< $20k) — lots of room | +10% |
+> **target = your accounts' sales the same 3 months last year × the typical move for accounts that size × (1 + a small stretch)**
 
-A rep's target = each account's sales in **this same stretch last year**, grown by its tier. The rep sees **one number** ("grow your book to $441k"), and earns **a cut of every dollar above it**. Holding the base book is already paid by salary + contribution, so we're not paying twice.
+and the rep earns **a cut of every dollar above it**. Holding the base book is already paid by salary +
+contribution, so we don't pay twice. Key properties (each fixes a real failure mode we hit and measured):
 
-**Inflation is built into the target (forward, not retroactive).** Last year's basket is restated at
-today's prices using per-item **cost** inflation, so the target is a concrete number the rep knows up
-front — and beating it means *real* growth, not just price rises. (A flat-volume rep facing 5% cost
-inflation needs +5% sales just to reach target.)
-
-**Lunar New Year** is a moving holiday with a big demand spike, so any period within ~3 weeks of CNY
-is auto-aligned to *last year's* CNY (not a fixed 364 days back) so both sides contain the spike.
-
-**Accounts without a full year of history** aren't compared to a fake $0 baseline (which would double-pay
-a new account as acquisition *and* "growth"). Instead: a brand-new account earns **acquisition** for its
-first quarter; then, until it has a year of history, it's **provisional** — measured against its **own
-prior quarter, normalized by the company's seasonal swing** (so a rep isn't credited for a season-wide
-move); once it has a full year it graduates to year-over-year. Accounts too sparse for any baseline earn
-line-item contribution only. So a new account is never simultaneously in acquisition and growth.
+- **Trailing quarter, not a single 4-week window.** Sales are lumpy; one big/slow month would whipsaw a
+  single-period comparison. Measuring the rolling 3 months (vs the same 3 months last year) is steady.
+- **De-trended by account size (this replaces hand-set tiers AND the inflation/market adjustments).** We
+  group accounts into size bands and use each band's **actual typical year-over-year move** as the bar.
+  That number already contains the market tide *and* price inflation, so a rep earns only for **beating
+  what accounts like theirs are doing** — not for riding a company-wide +50% year. (Down markets lower the
+  bar too.) This killed the big period-to-period swings we were seeing.
+- **Per-account cap + review.** A single account that explodes (e.g. a 25× one-time jump) counts toward
+  growth only up to ~2× its target; the excess is **held back and flagged on the manager's review page**
+  (real? one-time order? reassignment?), so one lucky account can't make or break a rep's bonus.
+- **Lunar New Year:** any period within ~3 weeks of CNY is auto-aligned to *last year's* CNY (a moving
+  holiday) so the spike lines up on both sides.
+- **Accounts without a full year of history** are never compared to a fake $0 baseline (which used to
+  double-pay a new account as acquisition *and* "growth"). New accounts earn **acquisition** for their
+  first quarter; then **provisional** (their own prior quarter × the company's seasonal swing) until they
+  have a year; then year-over-year. Too-sparse accounts earn line-item contribution only.
 **Part-time reps:** their growth *stretch* is scaled to the hours they work (≈ half), so a part-timer with a small book gets a lighter, fair target — but the **same payout rate** per dollar grown.
 
 ### 3. Acquisition — an elevated 1% revenue share on new accounts
@@ -49,15 +48,18 @@ any new account **"not rep-won (inbound)"** on the *New accounts* page → it st
 
 ## What the associate sees
 ```
-An Cao — this period
-   Sales so far     $488,000      Target  $483,000  (inflation-adjusted; ~on pace)
+A rep — this period
+   Grow your book (last 3 months)   $620,000  vs target $590,000  (above — earning)
+     target $590k = last year $520k + size/market lift +10% + stretch +3%
    Your bonus:
-     Sell line items   1,015 lines × $0.10              = $102
-     Grow your book    $488k vs $483k target × 8.5%     = $467
-     New accounts      1% revenue share on new accounts = $7
-     ─────────────────────────────────────────────────────
-     Total so far                                       ≈ $576
+     Sell line items   ~800 lines × $0.10                     = $80
+     Grow your book    beating your $590k target              = $1,350
+     New accounts      1% revenue share on new accounts       = $120
+     ─────────────────────────────────────────────────────────
+     Total                                                    ≈ $1,550
 ```
+*(Illustrative. Team total lands ~$3,000/period; dials tunable in Settings. See `wandt_bonus_explainer.md`
+for the rep-facing plain-English version.)*
 *(Illustrative, latest 4-week period; team total lands ~$3,000. Dials are tunable in Settings.)*
 
 Each rep also gets a **"where am I vs my target"** dashboard: one target number, how far along they are, whether they're ahead or behind a **calendar-aware pace line** (it allows for slow weekends, so a quiet Sunday doesn't read as "behind"), a "to finish, ~$X/selling-day" guide, the three bonus lines as a running tally, the new accounts still earning for them, and a short **accounts-to-watch** list (customers that have gone quieter than usual — worth a call).
@@ -72,7 +74,7 @@ Each rep also gets a **"where am I vs my target"** dashboard: one target number,
 
 ## Dials the manager sets (all editable in the app)
 - Contribution: **$ per line item** (≈ $0.10)
-- Growth: size thresholds & tier %s (≈ +2 / +5 / +10), **payout per $ above target** (≈ 18%), **part-time factor** (≈ 0.5)
+- Growth: measurement window (13 wks), # size bands (5), **stretch above your band** (≈ +3%), **payout per $ above target** (≈ 4.5%), **per-account cap** (≈ 2× target), **review threshold** (≈ $20k), **part-time factor** (≈ 0.5)
 - Acquisition: **revenue share** (≈ 1%), "new" window (**1 quarter**)
 *(Calibrated so total bonus lands ~$3,000/period across the team; tune to your budget.)*
 

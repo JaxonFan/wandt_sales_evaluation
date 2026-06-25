@@ -271,131 +271,154 @@ def item_cost_inflation(df, reference_date, offset_days, weeks=8, clip=(0.5, 2.0
     return factor.to_dict(), overall
 
 
+def _size_band_factors(baseline_q, recent_q, n_bands):
+    """Median (recent/baseline) per size band of baseline_q — the 'typical move for accounts your size'.
+    Captures the market tide + inflation, so it subsumes both. Returns dict account -> band factor."""
+    pairs = pd.DataFrame({"base": baseline_q, "recent": recent_q.reindex(baseline_q.index).fillna(0.0)})
+    pairs = pairs[pairs["base"] > 300]
+    if len(pairs) < n_bands * 2:
+        overall = float((pairs["recent"] / pairs["base"]).median()) if len(pairs) else 1.0
+        return {a: overall for a in pairs.index}, overall
+    pairs["ratio"] = pairs["recent"] / pairs["base"]
+    band = pd.qcut(pairs["base"], n_bands, labels=False, duplicates="drop")
+    band_median = pairs.groupby(band)["ratio"].transform("median")
+    overall = float(pairs["ratio"].median())
+    return band_median.to_dict(), overall
+
+
 def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None,
                          part_time_associates=frozenset(), not_rep_won=frozenset(),
-                         period_days=28, holiday_weight=0.0,
-                         item_rate=0.10, growth_thresholds=(100000, 20000),
-                         growth_pcts=None, growth_payout_rate=0.02, part_time_factor=0.5,
-                         acq_revenue_pct=0.01, acq_ramp_periods=3):
+                         period_days=28, holiday_weight=0.0, item_rate=0.10,
+                         growth_window_weeks=13, size_band_count=5, growth_stretch_pct=0.03,
+                         growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
+                         part_time_factor=0.5, acq_revenue_pct=0.01, acq_ramp_periods=3):
     """Return dict(scorecards: per-rep DataFrame, accounts: per (rep, account) detail DataFrame).
 
-    Bonus = Contribution (line items x item_rate) + Growth ($ above an inflation-adjusted, size-tiered
-    target x rate) + Acquisition (acq_revenue_pct x a new account's revenue, for ~1 quarter).
-    Target/last-year use the FULL period; actuals use [period_start, as_of] (defaults period_end).
+    Bonus = Contribution (line items x item_rate) + Growth + Acquisition (acq_revenue_pct x a new
+    account's revenue, for ~1 quarter). GROWTH is measured on the TRAILING QUARTER and de-trended by
+    the typical move of accounts the same size:
+      target_q = baseline_q x size_band_factor x (1 + growth_stretch_pct x part_time)
+      growth_bonus = max(0, recent_q - target_q) x growth_payout_rate x (period_weeks / window_weeks)
+    Contribution & acquisition use the current period; growth uses trailing windows (smooths lumps).
     """
-    growth_pcts = growth_pcts or {"large": 0.02, "medium": 0.05, "small": 0.10}
     period_start = pd.Timestamp(period_start).normalize()
     period_end = pd.Timestamp(period_end).normalize()
     as_of = period_end if as_of is None else min(pd.Timestamp(as_of).normalize(), period_end)
     not_rep_won = set(not_rep_won)
     if not len(df):
         return dict(scorecards=pd.DataFrame(), accounts=pd.DataFrame())
-    dow_weight = day_of_week_weights(df)
 
-    # CNY-aligned year-ago offset (else 364 days); used for the baseline AND the inflation base window
-    offset = pd.Timedelta(days=cny_aligned_offset_days(period_start, period_end))
-
+    # --- current period (Contribution items + Acquisition) ---
     current = df[(df["document_date"] > period_start) & (df["document_date"] <= as_of)]
-    last_year = df[(df["document_date"] > period_start - offset) & (df["document_date"] <= period_end - offset)].copy()
-    capacity_current = selling_day_capacity(dow_weight, period_start + pd.Timedelta(days=1), period_end, holiday_weight)
-    capacity_last_year = selling_day_capacity(dow_weight, period_start - offset + pd.Timedelta(days=1), period_end - offset, holiday_weight)
-    scale = capacity_current / capacity_last_year if capacity_last_year else 1.0
-
-    # inflation FORWARD into the target: restate last year's basket at today's prices (per-item cost inflation)
-    item_factor, overall_factor = item_cost_inflation(df, period_start, offset.days)
-    last_year["inflated_price"] = last_year["extended_price"] * last_year["item_number"].map(item_factor).fillna(overall_factor)
-    account_last_year_sales = last_year.groupby("account")["inflated_price"].sum() * scale
-
-    account_current_sales = current.groupby("account")["extended_price"].sum()
     first_seen = df.groupby("account")["document_date"].min()
-    trailing_year = df[(df["document_date"] > period_end - ONE_YEAR) & (df["document_date"] <= period_end)]
-    account_annual_sales = trailing_year.groupby("account")["extended_price"].sum()
-
-    # --- provisional baseline (for accounts past the ramp but < 1yr old, no year-ago baseline) ---
-    # the account's OWN prior quarter, normalized by the COMPANY's quarter-over-quarter seasonal swing
-    # measured LAST year (so a rep isn't credited/penalized for a season-wide move).
-    QUARTER = pd.Timedelta(weeks=13)
-    prior_quarter = df[(df["document_date"] > period_start - QUARTER) & (df["document_date"] <= period_end - QUARTER)]
-    account_prior_quarter_sales = prior_quarter.groupby("account")["extended_price"].sum()
-    ya_current = df[(df["document_date"] > period_start - ONE_YEAR) & (df["document_date"] <= period_end - ONE_YEAR)]
-    ya_prior = df[(df["document_date"] > period_start - ONE_YEAR - QUARTER) & (df["document_date"] <= period_end - ONE_YEAR - QUARTER)]
-    company_seasonal_factor = 1.0
-    if ya_current["extended_price"].sum() and ya_prior["extended_price"].sum():
-        company_seasonal_factor = min(max(ya_current["extended_price"].sum() / ya_prior["extended_price"].sum(), 0.5), 2.0)
-
-    BASELINE_MIN = 100.0  # an account needs a real baseline above this to count in growth (else line-items only)
 
     def account_status(account_id):
         seen = first_seen.get(account_id)
-        if seen is None:
-            return "scored"
-        is_new = (seen > period_start) or ((period_end - seen).days <= acq_ramp_periods * period_days)
-        if not is_new:
-            return "scored"
-        if account_id in not_rep_won:                 # manager flagged "not rep-won" -> house account
-            return "house"
-        return "landing" if seen > period_start else "ramp"
+        if seen is not None:
+            is_new = (seen > period_start) or ((period_end - seen).days <= acq_ramp_periods * period_days)
+            if is_new:
+                return "house" if account_id in not_rep_won else ("landing" if seen > period_start else "ramp")
+        return "scored"
 
-    team_current = current[current["associate"].isin(sales_team)]
-    rep_account = team_current.groupby(["associate", "account"]).agg(
-        rep_sales=("extended_price", "sum"), items=("extended_price", "size")).reset_index()
+    # --- trailing-quarter windows for GROWTH (smooth single-period lumpiness) ---
+    win = pd.Timedelta(weeks=growth_window_weeks)
+    qend = period_end                                            # measure to period end (or as_of for live)
+    qstart = qend - win
+    offset = pd.Timedelta(days=cny_aligned_offset_days(qstart, qend))   # CNY-aligned year-ago shift
+    recent_q_df = df[(df["document_date"] > qstart) & (df["document_date"] <= qend)]
+    baseline_q_df = df[(df["document_date"] > qstart - offset) & (df["document_date"] <= qend - offset)]
+    prior_q_df = df[(df["document_date"] > qstart - win) & (df["document_date"] <= qend - win)]   # for provisional
+    account_recent_q = recent_q_df.groupby("account")["extended_price"].sum()
+    account_baseline_q = baseline_q_df.groupby("account")["extended_price"].sum()
+    account_prior_q = prior_q_df.groupby("account")["extended_price"].sum()
+    # company quarter-over-quarter seasonal swing (for provisional accounts with no year-ago baseline)
+    company_seasonal_factor = 1.0
+    if account_prior_q.sum() and account_recent_q.sum():
+        company_seasonal_factor = min(max(account_recent_q.sum() / account_prior_q.sum(), 0.5), 2.0)
+    # size-band de-trend factor per account (typical move for accounts its size) — subsumes market + inflation
+    band_factor, overall_band_factor = _size_band_factors(account_baseline_q, account_recent_q, size_band_count)
+
+    BASELINE_MIN = 300.0          # quarter baseline needed to score growth (else line-items only)
+    period_fraction = period_days / (growth_window_weeks * 7.0)   # prorate quarter outperformance to the period
+
+    # rep x account trailing-quarter sales (for growth attribution / work-share) + current items
+    team_recent_q = recent_q_df[recent_q_df["associate"].isin(sales_team)]
+    rep_account_q = team_recent_q.groupby(["associate", "account"])["extended_price"].sum().reset_index(name="rep_q")
+    items_by_rep_account = (current[current["associate"].isin(sales_team)]
+                            .groupby(["associate", "account"])["extended_price"].size())
+    new_rev_by_rep = {}           # current-period new-account revenue per rep (for acquisition)
+    new_count_by_rep = {}
+    for (rep, acc), grp in current[current["associate"].isin(sales_team)].groupby(["associate", "account"]):
+        st = account_status(acc)
+        if st in ("landing", "ramp"):
+            new_rev_by_rep[rep] = new_rev_by_rep.get(rep, 0.0) + grp["extended_price"].sum()
+            if st == "landing":
+                new_count_by_rep[rep] = new_count_by_rep.get(rep, 0) + 1
 
     account_rows = []
-    rep_totals = {a: dict(items=0, growth_base=0.0, growth_stretch=0.0, growth_actual=0.0,
-                          acquisition=0.0, new_accounts=0) for a in sales_team}
-    for _, r in rep_account.iterrows():
+    rep_totals = {a: dict(items=0, growth_base_raw=0.0, growth_base=0.0, growth_target=0.0,
+                          growth_actual=0.0, held_back=0.0, flagged=0) for a in sales_team}
+    for _, r in rep_account_q.iterrows():
         rep, account_id = r["associate"], r["account"]
-        rep_sales = float(r["rep_sales"])
-        items = int(r["items"])
-        acct_total = float(account_current_sales.get(account_id, 0.0))
-        work_share = rep_sales / acct_total if acct_total else 0.0
-        last_year_for_rep = float(account_last_year_sales.get(account_id, 0.0)) * work_share
-        prior_quarter_for_rep = float(account_prior_quarter_sales.get(account_id, 0.0)) * work_share * company_seasonal_factor
-        annual = float(account_annual_sales.get(account_id, 0.0))
-        tier_pct = growth_tier_pct(annual, growth_thresholds, growth_pcts)
+        rep_q = float(r["rep_q"])
+        account_q = float(account_recent_q.get(account_id, 0.0))
+        work_share = rep_q / account_q if account_q else 0.0
         status = account_status(account_id)
         pt = part_time_factor if rep in part_time_associates else 1.0
+        baseline_q = float(account_baseline_q.get(account_id, 0.0))
+        prior_q = float(account_prior_q.get(account_id, 0.0))
+
+        raw_for_rep = lift = None
+        if status in ("landing", "ramp", "house"):
+            pass                                                  # new/house: no growth (acquisition or items only)
+        elif baseline_q > BASELINE_MIN:                           # mature: own last-year quarter x size-band move
+            raw_for_rep, lift, status = baseline_q * work_share, band_factor.get(account_id, overall_band_factor), "mature"
+        elif prior_q > BASELINE_MIN:                              # provisional: own prior quarter x seasonal swing
+            raw_for_rep, lift, status = prior_q * work_share, company_seasonal_factor, "provisional"
+        else:
+            status = "no_basis"
 
         t = rep_totals[rep]
-        t["items"] += items
-        baseline_for_rep = None
-        if status in ("landing", "ramp"):
-            t["acquisition"] += acq_revenue_pct * rep_sales       # single elevated revenue share
-            if status == "landing":
-                t["new_accounts"] += 1
-        elif status == "house":
-            pass                                                   # line items only (no growth, no acquisition)
-        else:
-            # baseline ladder: year-ago (mature) -> own prior quarter, season-normalized (provisional) -> none
-            if last_year_for_rep > BASELINE_MIN:
-                baseline_for_rep, status = last_year_for_rep, "mature"
-            elif prior_quarter_for_rep > BASELINE_MIN:
-                baseline_for_rep, status = prior_quarter_for_rep, "provisional"
-            else:
-                status = "no_basis"                                # no real baseline -> line items only
-            if baseline_for_rep is not None:
-                t["growth_base"] += baseline_for_rep
-                t["growth_stretch"] += baseline_for_rep * tier_pct * pt
-                t["growth_actual"] += rep_sales
+        target_for_rep = None
+        capped = False
+        held = 0.0
+        if raw_for_rep is not None:
+            base_for_rep = raw_for_rep * lift                     # last-year (or prior) x size/market lift
+            target_for_rep = base_for_rep * (1 + growth_stretch_pct * pt)
+            # cap: an account counts toward growth up to growth_cap_multiple x its target; excess is held back & flagged
+            cap_amount = target_for_rep * growth_cap_multiple
+            effective_recent = min(rep_q, cap_amount)
+            held = max(0.0, rep_q - cap_amount)
+            capped = held > growth_review_min                    # only big held-backs are flagged for review
+            t["growth_base_raw"] += raw_for_rep
+            t["growth_base"] += base_for_rep
+            t["growth_target"] += target_for_rep
+            t["growth_actual"] += effective_recent
+            t["held_back"] += held
+            t["flagged"] += int(capped)
+        account_rows.append(dict(associate=rep, account=account_id, status=status,
+                                 rep_quarter_sales=rep_q, baseline_quarter=raw_for_rep,
+                                 account_target=target_for_rep, capped=capped, held_back=round(held)))
 
-        account_rows.append(dict(
-            associate=rep, account=account_id, status=status, tier=(
-                "large" if annual >= growth_thresholds[0] else "medium" if annual >= growth_thresholds[1] else "small"),
-            rep_sales=rep_sales, last_year_for_rep=last_year_for_rep,
-            account_target=(baseline_for_rep * (1 + tier_pct * pt)) if baseline_for_rep is not None else None,
-            annual_sales=annual))
+    # contribution (line items, current period) per rep
+    items_per_rep = items_by_rep_account.groupby(level=0).sum().to_dict() if len(items_by_rep_account) else {}
 
     cards = []
     for rep in sales_team:
         t = rep_totals[rep]
-        growth_target = t["growth_base"] + t["growth_stretch"]
-        growth_bonus = max(0.0, t["growth_actual"] - growth_target) * growth_payout_rate
-        contribution_bonus = t["items"] * item_rate
+        items = int(items_per_rep.get(rep, 0))
+        contribution_bonus = items * item_rate
+        # quarter outperformance, prorated to this period
+        growth_bonus = max(0.0, t["growth_actual"] - t["growth_target"]) * growth_payout_rate * period_fraction
+        acquisition_bonus = new_rev_by_rep.get(rep, 0.0) * acq_revenue_pct
         cards.append(dict(
-            associate=rep, items_placed=t["items"], contribution_bonus=contribution_bonus,
-            growth_base=t["growth_base"], growth_target=growth_target, growth_actual=t["growth_actual"],
-            growth_bonus=growth_bonus, acquisition_bonus=t["acquisition"], new_accounts=t["new_accounts"],
-            total_bonus=contribution_bonus + growth_bonus + t["acquisition"]))
+            associate=rep, items_placed=items, contribution_bonus=contribution_bonus,
+            growth_base_raw=t["growth_base_raw"], growth_base=t["growth_base"],
+            growth_target=t["growth_target"], growth_actual=t["growth_actual"],
+            growth_bonus=growth_bonus, acquisition_bonus=acquisition_bonus,
+            new_accounts=int(new_count_by_rep.get(rep, 0)),
+            held_back=t["held_back"], flagged=t["flagged"],
+            total_bonus=contribution_bonus + growth_bonus + acquisition_bonus))
     return dict(scorecards=pd.DataFrame(cards), accounts=pd.DataFrame(account_rows),
-                capacity_current=capacity_current, capacity_last_year=capacity_last_year,
-                inflation_overall=overall_factor, company_seasonal_factor=company_seasonal_factor)
+                company_seasonal_factor=company_seasonal_factor, overall_band_factor=overall_band_factor,
+                period_fraction=period_fraction)

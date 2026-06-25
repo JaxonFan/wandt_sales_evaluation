@@ -20,8 +20,8 @@ app = FastAPI(title="W&T Sales Scorecard")
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=8 * 3600)
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
-EDITABLE_DIALS = ["item_rate", "growth_large_min", "growth_medium_min", "growth_large_pct",
-                  "growth_medium_pct", "growth_small_pct", "growth_payout_rate", "part_time_factor",
+EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count", "growth_stretch_pct",
+                  "growth_payout_rate", "growth_cap_multiple", "growth_review_min", "part_time_factor",
                   "acq_revenue_pct", "acq_ramp_periods", "fine_amount"]
 
 
@@ -120,14 +120,14 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
     if len(sub):
         for _, r in sub.iterrows():
             target = r["account_target"]
-            sales = float(r["rep_sales"])
+            sales = float(r["rep_quarter_sales"])               # trailing-quarter sales
             perf = ((sales / target - 1) * 100) if (target and pd.notna(target)) else None
             rows.append(dict(account=r["account"], name=names.get(r["account"], r["account"]),
-                             sales=round(sales), last_year=round(float(r["last_year_for_rep"])),
+                             sales=round(sales),
                              target=(round(float(target)) if (target and pd.notna(target)) else None),
                              perf=(round(perf, 0) if perf is not None else None),
-                             status=r["status"], tier=r["tier"]))
-        rows.sort(key=lambda x: (x["status"] == "normal", -(x["sales"] or 0)))
+                             status=r["status"], capped=bool(r["capped"]), held_back=int(r["held_back"])))
+        rows.sort(key=lambda x: (not x["capped"], x["status"] != "mature", -(x["sales"] or 0)))
     card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == name), None)
     actions = {a.account: a for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id)}
     award = db.query(M.Award).filter(M.Award.period_id == period.period_id, M.Award.associate == name).first()
@@ -268,9 +268,9 @@ def acquisitions_page(request: Request, db: Session = Depends(get_db), p: int = 
     rows = []
     if len(accounts):
         new = accounts[accounts["status"].isin(["landing", "ramp", "house"])]
-        for _, r in new.sort_values("rep_sales", ascending=False).iterrows():
+        for _, r in new.sort_values("rep_quarter_sales", ascending=False).iterrows():
             rows.append(dict(account=r["account"], customer=names.get(r["account"], r["account"]),
-                             associate=r["associate"], status=r["status"], sales=round(float(r["rep_sales"])),
+                             associate=r["associate"], status=r["status"], sales=round(float(r["rep_quarter_sales"])),
                              rep_won=flags.get(r["account"], True)))
     return templates.TemplateResponse("acquisitions.html", {
         "request": request, "user": user, "period": period, "nav": nav, "rows": rows})
