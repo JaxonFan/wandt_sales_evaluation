@@ -40,13 +40,18 @@ contribution, so we don't pay twice. Key properties (each fixes a real failure m
 their hours/day ÷ a full day, from the roster), so a 6.5-hour rep is ~0.81 and a full-timer is 1.0 — a
 lighter, fair target — but the **same payout rate** per dollar grown.
 
-### 3. Acquisition — an elevated 1% revenue share on new accounts
+### 3. Acquisition — an elevated 1% revenue share on **self-acquired** new accounts
 A new account (first order within the last ~quarter) pays the rep an **elevated 1% of its revenue**
 each period it's "new," then it graduates into the normal book. Simple, and bigger accounts pay
 more (it's a % of their revenue). No quota — a quiet period costs nothing.
-**Manager review:** new accounts sometimes "fly in" or get randomly assigned. The manager can mark
-any new account **"not rep-won (inbound)"** on the *New accounts* page → it stops paying acquisition
-(it just counts toward line items until it has history).
+**Manager review (default = Assigned):** new accounts default to **Assigned** — they earn line items now
+and provisional growth once they have a quarter of history, but **no 1% share**. On the *New accounts*
+page the manager confirms the ones the rep actually **won** as **Self-acquired**, which releases the
+1% revenue share for the account's first ~quarter. (Assigned ≠ self-acquired: no acquisition credit.)
+
+**Exempt:** the manager can mark any account **Exempt** for a period (e.g. it closed or collapsed). Exempt
+removes it from **Growth only** — its drop no longer drags the rep's growth down — while line items and any
+acquisition credit are untouched.
 
 ## What the associate sees
 ```

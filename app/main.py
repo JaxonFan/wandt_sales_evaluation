@@ -64,6 +64,23 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
+# ---------- bonus guide (managers + reps; EN / 中文) ----------
+GUIDES_DIR = os.path.join(os.path.dirname(__file__), "guides")
+
+
+@app.get("/guide", response_class=HTMLResponse)
+def guide(request: Request, db: Session = Depends(get_db), lang: str = "en"):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    import markdown as _md
+    lang = "zh" if lang == "zh" else "en"
+    path = os.path.join(GUIDES_DIR, f"explainer_{lang}.md")
+    with open(path, encoding="utf-8") as f:
+        html = _md.markdown(f.read(), extensions=["extra", "sane_lists"])
+    return templates.TemplateResponse("guide.html", {"request": request, "user": user, "body": html, "lang": lang})
+
+
 # ---------- rep goal dashboard ----------
 @app.get("/me", response_class=HTMLResponse)
 def my_goal(request: Request, db: Session = Depends(get_db), p: int = None):
@@ -123,7 +140,7 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
             sales = float(r["rep_quarter_sales"])               # trailing-quarter sales
             perf = ((sales / target - 1) * 100) if (target and pd.notna(target)) else None
             rows.append(dict(account=r["account"], name=names.get(r["account"], r["account"]),
-                             sales=round(sales),
+                             sales=round(sales), counted=round(sales - float(r["held_back"])),
                              target=(round(float(target)) if (target and pd.notna(target)) else None),
                              perf=(round(perf, 0) if perf is not None else None),
                              status=r["status"], capped=bool(r["capped"]), held_back=int(r["held_back"])))
@@ -255,7 +272,7 @@ def closures_exempt(request: Request, account: str = Form(...), note: str = Form
     return RedirectResponse(f"/closures?p={idx}", status_code=303)
 
 
-# ---------- new-account review (mark "not rep-won") ----------
+# ---------- new-account review (confirm self-acquired vs assigned) ----------
 @app.get("/acquisitions", response_class=HTMLResponse)
 def acquisitions_page(request: Request, db: Session = Depends(get_db), p: int = None):
     user = current_user(request, db)
@@ -264,14 +281,14 @@ def acquisitions_page(request: Request, db: Session = Depends(get_db), p: int = 
     res, period, _s, nav, _as_of = service.run_period_bonus(db, p)
     names = service.customer_names(db)
     accounts = res["accounts"]
-    flags = {r.account: r.rep_won for r in db.query(M.AcquisitionReview)}
+    flags = {r.account: r.rep_won for r in db.query(M.AcquisitionReview)}   # rep_won True = confirmed self-acquired
     rows = []
     if len(accounts):
-        new = accounts[accounts["status"].isin(["landing", "ramp", "house"])]
+        new = accounts[accounts["status"].isin(["landing", "ramp", "assigned"])]
         for _, r in new.sort_values("rep_quarter_sales", ascending=False).iterrows():
             rows.append(dict(account=r["account"], customer=names.get(r["account"], r["account"]),
                              associate=r["associate"], status=r["status"], sales=round(float(r["rep_quarter_sales"])),
-                             rep_won=flags.get(r["account"], True)))
+                             self_acquired=bool(flags.get(r["account"], False)))) # default = assigned (not yet confirmed)
     return templates.TemplateResponse("acquisitions.html", {
         "request": request, "user": user, "period": period, "nav": nav, "rows": rows})
 

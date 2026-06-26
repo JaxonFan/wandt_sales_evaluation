@@ -14,5 +14,6 @@ __pycache__/
 .git/
 .claude/
 *.md
+!app/guides/*.md
 requirements-notebook.txt
 .DS_Store

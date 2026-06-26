@@ -219,9 +219,16 @@ def fte_by_rep(db, full_time_hours, part_time_factor):
     return out
 
 
-def not_rep_won_set(db):
-    """Accounts the manager has marked as NOT a real rep win (no acquisition credit)."""
-    return {r.account for r in db.query(M.AcquisitionReview).filter(M.AcquisitionReview.rep_won == False)}
+def self_acquired_set(db):
+    """Accounts the manager confirmed the rep self-acquired -> eligible for the 1% share.
+    Default (no review record) = assigned, so a new account earns the 1% only once confirmed."""
+    return {r.account for r in db.query(M.AcquisitionReview).filter(M.AcquisitionReview.rep_won == True)}
+
+
+def exempt_set(db, period_id):
+    """Accounts the manager exempted this period -> removed from GROWTH only (closed/collapsed)."""
+    return {a.account for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period_id,
+                                                                M.ManagerAction.status == "exempt")}
 
 
 def _dials(s):
@@ -249,7 +256,8 @@ def run_period_bonus(db, idx=None):
     _, _, team = attribution_maps(db)
     fte = fte_by_rep(db, float(s["full_time_hours"]), float(s["part_time_factor"]))
     res = compute_period_bonus(df, period.start_date, period.end_date, team, as_of=as_of,
-                               fte_by_rep=fte, not_rep_won=not_rep_won_set(db), **_dials(s))
+                               fte_by_rep=fte, self_acquired=self_acquired_set(db),
+                               exempt_accounts=exempt_set(db, period.period_id), **_dials(s))
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of
 

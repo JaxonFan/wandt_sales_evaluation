@@ -287,7 +287,7 @@ def _size_band_factors(baseline_q, recent_q, n_bands):
 
 
 def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None,
-                         fte_by_rep=None, not_rep_won=frozenset(),
+                         fte_by_rep=None, self_acquired=frozenset(), exempt_accounts=frozenset(),
                          period_days=28, holiday_weight=0.0, item_rate=0.10,
                          growth_window_weeks=13, size_band_count=5, growth_stretch_pct=0.03,
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
@@ -304,7 +304,8 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     period_start = pd.Timestamp(period_start).normalize()
     period_end = pd.Timestamp(period_end).normalize()
     as_of = period_end if as_of is None else min(pd.Timestamp(as_of).normalize(), period_end)
-    not_rep_won = set(not_rep_won)
+    self_acquired = set(self_acquired)                            # manager-confirmed self-won -> earns the 1%
+    exempt_accounts = set(exempt_accounts)                        # manager-exempted -> removed from GROWTH only
     fte_by_rep = fte_by_rep or {}                                 # rep -> FTE (hours-based); default 1.0
     if not len(df):
         return dict(scorecards=pd.DataFrame(), accounts=pd.DataFrame())
@@ -318,7 +319,10 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         if seen is not None:
             is_new = (seen > period_start) or ((period_end - seen).days <= acq_ramp_periods * period_days)
             if is_new:
-                return "house" if account_id in not_rep_won else ("landing" if seen > period_start else "ramp")
+                # a new account earns the 1% only if the manager confirmed it self-acquired; else "assigned"
+                if account_id in self_acquired:
+                    return "landing" if seen > period_start else "ramp"
+                return "assigned"
         return "scored"
 
     # --- trailing-quarter windows for GROWTH (smooth single-period lumpiness) ---
@@ -370,8 +374,10 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         prior_q = float(account_prior_q.get(account_id, 0.0))
 
         raw_for_rep = lift = None
-        if status in ("landing", "ramp", "house"):
-            pass                                                  # new/house: no growth (acquisition or items only)
+        if status in ("landing", "ramp", "assigned"):
+            pass                                                  # new (self-acquired -> 1%) or assigned: items/acq only, no growth
+        elif account_id in exempt_accounts:
+            status = "exempt"                                     # manager removed from GROWTH (e.g. closed); items/acq untouched
         elif baseline_q > BASELINE_MIN:                           # mature: own last-year quarter x size-band move
             raw_for_rep, lift, status = baseline_q * work_share, band_factor.get(account_id, overall_band_factor), "mature"
         elif prior_q > BASELINE_MIN:                              # provisional: own prior quarter x seasonal swing
