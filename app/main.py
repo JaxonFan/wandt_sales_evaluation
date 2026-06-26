@@ -21,7 +21,8 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=8 * 3600)
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count", "growth_stretch_pct",
-                  "growth_payout_rate", "growth_cap_multiple", "growth_review_min", "full_time_hours",
+                  "growth_payout_rate", "glide_alpha", "min_baseline_ratio", "jump_multiple",
+                  "growth_review_min", "full_time_hours",
                   "part_time_factor", "acq_revenue_pct", "acq_ramp_periods", "fine_amount"]
 
 
@@ -306,6 +307,50 @@ def acquisitions_flag(request: Request, account: str = Form(...), rep_won: str =
     service._ENGINE_CACHE.clear()
     audit(db, user, "acq_review", f"account:{account}", {"rep_won": rev.rep_won})
     return RedirectResponse(f"/acquisitions?p={idx}", status_code=303)
+
+
+# ---------- big-jump review (investigate doublings: customer-driven vs rep-won) ----------
+@app.get("/jumps", response_class=HTMLResponse)
+def jumps_page(request: Request, db: Session = Depends(get_db), p: int = None):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    res, period, _s, nav, _as_of = service.run_period_bonus(db, p)
+    names = service.customer_names(db)
+    accounts = res["accounts"]
+    rows = []
+    if len(accounts):
+        flagged = accounts[accounts["capped"] == True]
+        for _, r in flagged.sort_values("windfall", ascending=False).iterrows():
+            recent = float(r["rep_quarter_sales"])
+            est = float(r["established"]) or float(r["account_target"] or 0)
+            rows.append(dict(account=r["account"], customer=names.get(r["account"], r["account"]),
+                             associate=r["associate"], recent=round(recent),
+                             established=round(est), windfall=int(r["windfall"]),
+                             ratio=(round(recent / est, 1) if est else None),
+                             released=bool(r["released"])))
+    return templates.TemplateResponse("jumps.html", {
+        "request": request, "user": user, "period": period, "nav": nav, "rows": rows})
+
+
+@app.post("/jumps/flag")
+def jumps_flag(request: Request, account: str = Form(...), associate: str = Form(...),
+               decision: str = Form(...), p: int = Form(None), db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    period, idx, is_current = resolve_p(db, p)
+    if is_current:
+        a = db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id,
+                                             M.ManagerAction.account == account).first()
+        if not a:
+            a = M.ManagerAction(period_id=period.period_id, account=account); db.add(a)
+        # rep-won -> release the windfall; customer-driven (default) -> withhold (status normal)
+        a.associate = associate; a.status = "jump_rep" if decision == "rep" else "normal"
+        a.user_id = user.user_id; a.created_at = dt.datetime.utcnow()
+        db.commit()
+        audit(db, user, "jump_review", f"account:{account}", {"period": period.period_id, "decision": decision})
+    return RedirectResponse(f"/jumps?p={idx}", status_code=303)
 
 
 # ---------- item-level upload (idempotent by sop_number) ----------

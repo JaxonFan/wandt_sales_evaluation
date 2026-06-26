@@ -286,11 +286,36 @@ def _size_band_factors(baseline_q, recent_q, n_bands):
     return band_median.to_dict(), overall
 
 
+def _glide_levels(df, window_end, alpha, step_weeks=4):
+    """Per-account 'established level' = EWMA (recursive, factor `alpha`) of the account's prior
+    `step_weeks`-week run-rate windows, EXCLUDING the current window. Dormant gaps count as $0 and
+    pull the level down; the series is seeded at the account's first window. This is the moving bar
+    the glide compares against for accounts whose year-ago window is too small to use."""
+    step = pd.Timedelta(weeks=step_weeks)
+    hist = df[df["document_date"] <= window_end]
+    if not len(hist):
+        return {}
+    bucket = np.floor((window_end - hist["document_date"]) / step).astype(int)   # 0 = current window
+    sums = hist.assign(_b=bucket).groupby(["account", "_b"])["extended_price"].sum()
+    levels = {}
+    for acct, s in sums.groupby(level=0):
+        prior = s.droplevel(0)
+        prior = prior[prior.index >= 1]                                          # drop the current window
+        if not len(prior):
+            continue
+        oldest = int(prior.index.max())
+        series = prior.reindex(range(oldest, 0, -1), fill_value=0.0)             # oldest -> newest (bucket 1)
+        levels[acct] = float(series.ewm(alpha=alpha, adjust=False).mean().iloc[-1])
+    return levels
+
+
 def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None,
                          fte_by_rep=None, self_acquired=frozenset(), exempt_accounts=frozenset(),
+                         jump_released=frozenset(),
                          period_days=28, holiday_weight=0.0, item_rate=0.10,
                          growth_window_weeks=13, size_band_count=5, growth_stretch_pct=0.03,
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
+                         glide_alpha=0.35, jump_multiple=2.0, min_baseline_ratio=0.30,
                          acq_revenue_pct=0.01, acq_ramp_periods=3):
     """Return dict(scorecards: per-rep DataFrame, accounts: per (rep, account) detail DataFrame).
 
@@ -306,6 +331,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     as_of = period_end if as_of is None else min(pd.Timestamp(as_of).normalize(), period_end)
     self_acquired = set(self_acquired)                            # manager-confirmed self-won -> earns the 1%
     exempt_accounts = set(exempt_accounts)                        # manager-exempted -> removed from GROWTH only
+    jump_released = set(jump_released)                             # manager-confirmed rep-won big jump -> pay windfall
     fte_by_rep = fte_by_rep or {}                                 # rep -> FTE (hours-based); default 1.0
     if not len(df):
         return dict(scorecards=pd.DataFrame(), accounts=pd.DataFrame())
@@ -342,9 +368,11 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         company_seasonal_factor = min(max(account_recent_q.sum() / account_prior_q.sum(), 0.5), 2.0)
     # size-band de-trend factor per account (typical move for accounts its size) — subsumes market + inflation
     band_factor, overall_band_factor = _size_band_factors(account_baseline_q, account_recent_q, size_band_count)
+    # glide: each account's own adaptive run-rate level (for activations with no usable year-ago window)
+    glide_levels = _glide_levels(df, qend, glide_alpha, step_weeks=growth_window_weeks)
 
-    BASELINE_MIN = 300.0          # quarter baseline needed to score growth (else line-items only)
-    period_fraction = period_days / (growth_window_weeks * 7.0)   # prorate quarter outperformance to the period
+    BASELINE_MIN = 300.0          # window baseline needed to score growth (else line-items only)
+    period_fraction = period_days / (growth_window_weeks * 7.0)   # prorate window outperformance to the period
 
     # rep x account trailing-quarter sales (for growth attribution / work-share) + current items
     team_recent_q = recent_q_df[recent_q_df["associate"].isin(sales_team)]
@@ -373,39 +401,54 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         baseline_q = float(account_baseline_q.get(account_id, 0.0))
         prior_q = float(account_prior_q.get(account_id, 0.0))
 
+        established = float(glide_levels.get(account_id, 0.0))
         raw_for_rep = lift = None
         if status in ("landing", "ramp", "assigned"):
             pass                                                  # new (self-acquired -> 1%) or assigned: items/acq only, no growth
         elif account_id in exempt_accounts:
             status = "exempt"                                     # manager removed from GROWTH (e.g. closed); items/acq untouched
-        elif baseline_q > BASELINE_MIN:                           # mature: own last-year quarter x size-band move
+        elif baseline_q > BASELINE_MIN and baseline_q >= min_baseline_ratio * account_q:
+            # mature: a representative same-weeks-last-year window -> YoY x size-band move
             raw_for_rep, lift, status = baseline_q * work_share, band_factor.get(account_id, overall_band_factor), "mature"
-        elif prior_q > BASELINE_MIN:                              # provisional: own prior quarter x seasonal swing
+        elif established > BASELINE_MIN:
+            # activation / level-shifted: year-ago window too small to compare to; use the account's own
+            # glide level (already at current-market scale, so no extra market lift)
+            raw_for_rep, lift, status = established * work_share, 1.0, "glide"
+        elif prior_q > BASELINE_MIN:                              # provisional: own prior window x seasonal swing
             raw_for_rep, lift, status = prior_q * work_share, company_seasonal_factor, "provisional"
         else:
             status = "no_basis"
 
+        released = account_id in jump_released
         t = rep_totals[rep]
         target_for_rep = None
-        capped = False
-        held = 0.0
+        jump = False
+        held = windfall = 0.0
         if raw_for_rep is not None:
-            base_for_rep = raw_for_rep * lift                     # last-year (or prior) x size/market lift
+            base_for_rep = raw_for_rep * lift                     # baseline x size/market lift
             target_for_rep = base_for_rep * (1 + growth_stretch_pct * pt)
-            # cap: an account counts toward growth up to growth_cap_multiple x its target; excess is held back & flagged
-            cap_amount = target_for_rep * growth_cap_multiple
-            effective_recent = min(rep_q, cap_amount)
-            held = max(0.0, rep_q - cap_amount)
-            capped = held > growth_review_min                    # only big held-backs are flagged for review
+            # jump review: a BIG single-period windfall (recent above jump_multiple x target, by more than
+            # growth_review_min $) is withheld for the manager to investigate — a 10x is usually the customer
+            # growing, not the rep. Small/normal overage pays through; the manager can release a real win.
+            line = target_for_rep * jump_multiple
+            windfall = max(0.0, rep_q - line)
+            jump = windfall > growth_review_min
+            if jump and not released:
+                effective_recent, held = line, windfall          # withhold the windfall pending review
+            else:
+                effective_recent, held = rep_q, 0.0              # pay in full (normal overage, or released)
             t["growth_base_raw"] += raw_for_rep
             t["growth_base"] += base_for_rep
             t["growth_target"] += target_for_rep
             t["growth_actual"] += effective_recent
             t["held_back"] += held
-            t["flagged"] += int(capped)
+            t["flagged"] += int(jump and not released)
         account_rows.append(dict(associate=rep, account=account_id, status=status,
                                  rep_quarter_sales=rep_q, baseline_quarter=raw_for_rep,
-                                 account_target=target_for_rep, capped=capped, held_back=round(held)))
+                                 account_target=target_for_rep, capped=jump, held_back=round(held),
+                                 windfall=round(windfall if raw_for_rep is not None else 0.0),
+                                 released=released, account_recent=round(account_q),
+                                 established=round(established)))
 
     # contribution (line items, current period) per rep
     items_per_rep = items_by_rep_account.groupby(level=0).sum().to_dict() if len(items_by_rep_account) else {}

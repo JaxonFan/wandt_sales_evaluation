@@ -86,7 +86,7 @@ class ManagerAction(Base):
     period_id = Column(Integer, ForeignKey("periods.period_id"), index=True)
     account = Column(String)                            # customer_number
     associate = Column(String)
-    status = Column(String, default="normal")          # normal | exempt | rebaseline
+    status = Column(String, default="normal")          # normal | exempt | rebaseline | jump_rep (release big-jump windfall)
     rebaseline_value = Column(Float)
     called = Column(Boolean, default=False)
     note = Column(String)

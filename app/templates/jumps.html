@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block body %}
+<div class="card">
+  <h2>Big jumps · review (Period {{ nav.n }} · {{ nav.start }} ~ {{ nav.end }})</h2>
+  <p class="hint">An account whose last 4 weeks jumped to <b>2×+ its established level</b> has its windfall
+    <b>withheld by default</b> — a 10× is usually the customer growing their own business, not the rep's win.
+    Confirm <b>Rep won it</b> to release the windfall into growth, or leave it <b>Customer-driven</b> to keep it withheld.
+    Smaller, ordinary overage isn't listed here — it pays automatically.</p>
+  <table>
+    <thead><tr><th>Customer</th><th>Rep</th><th class="num">Last 4 wks</th><th class="num">Established</th>
+      <th class="num">Jump</th><th class="num">Windfall held</th><th>Who drove it?</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.customer }}</td><td>{{ r.associate }}</td>
+        <td class="num">${{ '{:,}'.format(r.recent) }}</td>
+        <td class="num">${{ '{:,}'.format(r.established) }}</td>
+        <td class="num">{% if r.ratio %}{{ r.ratio }}×{% else %}—{% endif %}</td>
+        <td class="num">{% if r.released %}<span class="pos">released</span>{% else %}${{ '{:,}'.format(r.windfall) }}{% endif %}</td>
+        <td>
+          {% if nav.is_current %}
+          <form method="post" action="/jumps/flag" class="ov-form" style="margin:0">
+            <input type="hidden" name="account" value="{{ r.account }}">
+            <input type="hidden" name="associate" value="{{ r.associate }}">
+            <input type="hidden" name="p" value="{{ nav.idx }}">
+            <select name="decision" onchange="this.form.submit()">
+              <option value="customer" {{ 'selected' if not r.released }}>Customer-driven — withhold</option>
+              <option value="rep" {{ 'selected' if r.released }}>Rep won it — pay windfall</option>
+            </select>
+          </form>
+          {% else %}<span class="mut">{{ 'rep-won' if r.released else 'customer-driven' }}</span>{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="mut">No big jumps to review this period.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

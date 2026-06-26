@@ -15,7 +15,7 @@
   <h2>Grow your book</h2>
   {% set pct = g.pct if g.pct < 100 else 100 %}
   <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
-    <span>Your last 3 months <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
+    <span>Your last 4 weeks <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
     <span>Target <b>${{ '{:,.0f}'.format(g.target) }}</b></span>
   </div>
   <div style="background:#eef2f6;border-radius:10px;height:22px;overflow:hidden;border:1px solid var(--line)">
@@ -27,11 +27,17 @@
     {% else %}<span class="neg">below target — keep going</span>{% endif %}
   </div>
   <p class="hint" style="margin-top:8px">Your <b>${{ '{:,.0f}'.format(g.target) }}</b> target =
-    your accounts the same 3 months last year (${{ '{:,.0f}'.format(g.last_year) }})
+    what your accounts were running before (${{ '{:,.0f}'.format(g.last_year) }} — the same 4 weeks last year, or
+    a newer account's own recent pace)
     + the lift accounts your size are getting now (+{{ '%.0f'|format(g.lift_pct) }}%)
     + your stretch (+{{ '%.0f'|format(g.stretch_pct) }}%).
     <b>Hitting it = on pace</b> (already paid by your salary, per-line pay, and new-account pay);
     the <b>growth bonus is the extra for beating it</b> — so you earn for beating what accounts like yours are doing, not for riding a good market.</p>
+  {% if c and c.held_back and c.held_back > 0 %}
+  <p class="lock-note" style="margin-top:10px">${{ '{:,.0f}'.format(c.held_back) }} of a <b>big-jump windfall</b> is
+    <b>withheld pending your manager's review</b> — when one account jumps to 2×+ its usual level, the extra is checked
+    first (a big jump is often the customer growing, not selling). It's released into your growth if it's confirmed your win.</p>
+  {% endif %}
 </div>
 
 <div class="card">
@@ -42,8 +48,8 @@
     <tr><td>New accounts <span class="mut">— {{ c.new_accounts }} new (1% share)</span></td><td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td></tr>
     <tr><td><b>Total</b></td><td class="num"><b>${{ '{:,.0f}'.format(c.total_bonus) }}</b></td></tr>
   </table>
-  <p class="hint" style="margin-top:8px">Every line is "you did this → you earned this." Growth is measured over your last 3 months
-    (so one big or slow week doesn't swing it); each new account pays you a share for its first quarter.</p>
+  <p class="hint" style="margin-top:8px">Every line is "you did this → you earned this." Growth is measured over your last 4 weeks
+    vs your bar; a sudden 2×+ jump on one account is checked by your manager first; each new account pays you a share for its first quarter.</p>
 </div>
 
 {% if g.new_accounts %}

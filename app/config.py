@@ -24,13 +24,16 @@ DEFAULTS = {
     # --- Contribution (line items placed) ---
     "item_rate": 0.10,             # $ earned per invoice LINE ITEM written this period (manager-set dial)
 
-    # --- Growth (beat what accounts your size are doing, measured over a trailing quarter) ---
-    "growth_window_weeks": 13,     # measure growth on the trailing 13 weeks (smooths single-period lumps)
+    # --- Growth (beat what accounts your size are doing, measured over the trailing 4 weeks) ---
+    "growth_window_weeks": 4,      # measure growth on the trailing 4 weeks (= the pay period; jumps surface to review)
     "size_band_count": 5,          # group accounts into this many size bands for the "typical move" de-trend
     "growth_stretch_pct": 0.03,    # the extra above your size band's typical move that you must beat
     "growth_payout_rate": 0.045,   # $ earned per sales-dollar above target (calibrated to ~$3k/period total)
-    "growth_cap_multiple": 2.0,    # an account counts toward growth up to this x its target; excess is held back
-    "growth_review_min": 20000,    # held-back above this $ flags the account on the manager's review list
+    "glide_alpha": 0.35,           # how fast a level-shifted account's bar catches up to its new run-rate (0..1)
+    "min_baseline_ratio": 0.30,    # year-ago window must be >= this x recent to use it (else glide, not YoY)
+    "jump_multiple": 2.0,          # an account counts toward growth up to this x its target; the windfall above is withheld for review
+    "growth_cap_multiple": 2.0,    # (legacy alias; superseded by jump_multiple)
+    "growth_review_min": 10000,    # a single-period windfall above this $ is withheld + put on the manager's jump-review list (smaller overage pays through)
     "full_time_hours": 8.0,        # a full work day; each rep's FTE = min(1, their hours/day ÷ this) scales their stretch
     "part_time_factor": 0.5,       # fallback STRETCH factor for a part-time rep with no hours on file
 

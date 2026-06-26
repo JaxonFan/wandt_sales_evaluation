@@ -8,26 +8,29 @@ items per order, and this goes up. It's small on purpose — your salary already
 servicing your accounts; this is a little extra for the work.
 
 ## 2. Growing your book (the big one)
-We give you a **target**, and you earn a bonus for **beating it**. Here's exactly how your target is set,
+We give you a **target** each 4 weeks, and you earn a bonus for **beating it**. Here's how your target is set,
 in plain words:
 
-> **Your target = what your accounts bought in the same 3 months last year, bumped up by how much
-> accounts your size are actually growing right now, plus a small stretch.**
+> **Your target = what your accounts were already running, bumped up by how much accounts your size are
+> actually growing right now, plus a small stretch.**
 
-Worked example:
+Worked example (one 4-week period):
 
-- Your accounts bought **$520,000** in these 3 months last year.
-- Accounts your size are running about **+10%** this year (the market's up). So we bump the bar to ~$572k.
-- Plus a small **+3% stretch** → your target is about **$590,000**.
-- If your last 3 months come in at **$620,000**, you beat the bar by $30,000 → that's your growth bonus.
+- Your accounts ran about **$40,000** the same 4 weeks last year.
+- Accounts your size are running about **+10%** this year (the market's up). So we bump the bar to ~$44k.
+- Plus a small **+3% stretch** → your target is about **$45,000**.
+- If your last 4 weeks come in at **$48,000**, you beat the bar by $3,000 → that's your growth bonus.
+
+**Where does "what your accounts were already running" come from?** For an established account, it's the
+**same 4 weeks last year** — Christmas vs Christmas, Lunar New Year vs Lunar New Year, so the seasons line up
+fairly. For a **newer or just-woken-up account** (one that didn't really exist a year ago), there's no fair
+last-year number, so the bar instead **follows the account's own recent pace and slides up as it grows** — you
+get well-paid for the climb, and once it settles, that new size becomes its normal bar.
 
 **Why "how accounts your size are growing"?** If the whole market is up and you just ride the wave, that's
 not *you* outperforming — so your target already moved up with the market. You earn the growth bonus for
 **beating what accounts like yours are doing**, not for the rising tide. (And if the market's *down*, your
 target comes down too, so you're not punished for a slump everyone's in.)
-
-**Why 3 months and not one?** Sales are lumpy week to week — one big order or one slow week shouldn't swing
-your bonus. We look at a rolling 3 months so it's steady.
 
 **Part-time?** Your stretch is scaled to the hours you actually work, so you're not held to a full-timer's bar.
 
@@ -35,12 +38,15 @@ your bonus. We look at a rolling 3 months so it's steady.
 already paid — by your salary, your per-line pay, and any new-account pay. The growth bonus is the **extra
 for going above** the target. Think of it like a quota: meeting it is the job; beating it earns the bonus.
 
-**"I sold more than last quarter but my bonus is smaller — why?"** Probably the bar moved up (the market
-was stronger), so beating it took more. You're measured against the bar, not against a flat last-year number.
+**"Some weeks I beat it, some I don't — why does my growth bonus come and go?"** It's measured every 4 weeks
+against your whole book, so an off month can land at zero. A strong month pays; a flat one doesn't. Over time
+it tracks whether you're really growing.
 
-**One big account that exploded:** if a single account jumps way up (say a one-time bulk order, or it got
-reassigned to you), we count it up to a sensible limit and **flag the rest for your manager to review** —
-so one lucky account doesn't make or break your number, and a genuine win still gets recognized after a look.
+**One big account that jumped way up:** if a single account suddenly does **2× or more** its usual level (say a
+one-time bulk order, or the customer expanded their own business), the extra is **held back and shown to your
+manager to investigate** — because a 10× is almost always the customer growing, not selling on your part. If
+your manager confirms **you** won it, it's released into your growth. Ordinary growth isn't touched — it pays
+right through.
 
 ## 3. New accounts
 - **You won it (self-acquired):** you earn a **share of everything it buys for its first ~3 months** —
@@ -52,9 +58,12 @@ so one lucky account doesn't make or break your number, and a genuine win still 
 ## What the words mean
 - **Self-acquired** (new) — you won it; earns the new-account share for ~1 quarter.
 - **Assigned** (new) — handed to you; line items now, then growth once it has history (no new-account share).
-- **Provisional** — under a year of history; growth measured against its **own prior quarter**.
-- **Mature** — a year or more; growth measured against the **same quarter last year**, vs accounts your size.
-- **Capped** — grew more than 2× its target; counted up to 2×, the rest held back for the manager to review.
+- **Glide** — newer or just-woken-up; its bar **follows its own recent pace and slides up as it grows** (no fair
+  last-year number to use yet).
+- **Mature** — a year or more of real history; growth measured against the **same 4 weeks last year**, vs accounts your size.
+- **Provisional** — has some history but not a usable last-year window; measured against its own prior weeks.
+- **Big jump** — did 2×+ its usual level in 4 weeks; the windfall is **held back for the manager to investigate**
+  (released if it's confirmed your win).
 - **Exempt** — the manager set an account aside (e.g. it closed) so it doesn't drag your growth down.
 
 ## The bottom line
@@ -62,5 +71,5 @@ so one lucky account doesn't make or break your number, and a genuine win still 
 - **Grow** → beat a fair target that already accounts for the market and your account sizes.
 - **Land new** → a share of new business you win, for its first quarter.
 
-Everything is "you did this, so you earned this" — measured against a fair bar, on a steady 3-month basis,
+Everything is "you did this, so you earned this" — measured against a fair bar every 4 weeks,
 so your bonus reflects *your* performance, not luck or the market.

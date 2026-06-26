@@ -231,14 +231,22 @@ def exempt_set(db, period_id):
                                                                 M.ManagerAction.status == "exempt")}
 
 
+def jump_released_set(db, period_id):
+    """Accounts the manager confirmed the rep genuinely won this period -> release the withheld big-jump
+    windfall (default for a flagged jump is customer-driven = withheld)."""
+    return {a.account for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period_id,
+                                                                M.ManagerAction.status == "jump_rep")}
+
+
 def _dials(s):
     """Pull the bonus dials out of settings into compute_period_bonus kwargs."""
     return dict(
         item_rate=float(s["item_rate"]),
         growth_window_weeks=int(s["growth_window_weeks"]), size_band_count=int(s["size_band_count"]),
         growth_stretch_pct=float(s["growth_stretch_pct"]),
-        growth_payout_rate=float(s["growth_payout_rate"]), growth_cap_multiple=float(s["growth_cap_multiple"]),
-        growth_review_min=float(s["growth_review_min"]),
+        growth_payout_rate=float(s["growth_payout_rate"]),
+        glide_alpha=float(s["glide_alpha"]), jump_multiple=float(s["jump_multiple"]),
+        min_baseline_ratio=float(s["min_baseline_ratio"]), growth_review_min=float(s["growth_review_min"]),
         acq_revenue_pct=float(s["acq_revenue_pct"]), acq_ramp_periods=int(s["acq_ramp_periods"]),
         period_days=PERIOD_DAYS, holiday_weight=float(s["holiday_weight"]))
 
@@ -257,7 +265,8 @@ def run_period_bonus(db, idx=None):
     fte = fte_by_rep(db, float(s["full_time_hours"]), float(s["part_time_factor"]))
     res = compute_period_bonus(df, period.start_date, period.end_date, team, as_of=as_of,
                                fte_by_rep=fte, self_acquired=self_acquired_set(db),
-                               exempt_accounts=exempt_set(db, period.period_id), **_dials(s))
+                               exempt_accounts=exempt_set(db, period.period_id),
+                               jump_released=jump_released_set(db, period.period_id), **_dials(s))
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of
 

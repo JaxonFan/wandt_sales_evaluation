@@ -20,16 +20,25 @@ A rep's target is set per account and shown as **one number** with a plain break
 and the rep earns **a cut of every dollar above it**. Holding the base book is already paid by salary +
 contribution, so we don't pay twice. Key properties (each fixes a real failure mode we hit and measured):
 
-- **Trailing quarter, not a single 4-week window.** Sales are lumpy; one big/slow month would whipsaw a
-  single-period comparison. Measuring the rolling 3 months (vs the same 3 months last year) is steady.
+- **4-week window (= the pay period), vs the same 4 weeks last year.** Measuring per period (rather than a
+  rolling quarter) keeps it intuitive for reps ("you beat your bar this month") and, crucially, **surfaces
+  one-time jumps to the manager**: a $60k month on a $30k bar reads as 2× and trips review, whereas a quarter
+  window would dilute that same order below the review line and auto-pay it. The cost — bumpier period-to-period
+  checks — is contained by the glide bar and the jump review below.
 - **De-trended by account size (this replaces hand-set tiers AND the inflation/market adjustments).** We
   group accounts into size bands and use each band's **actual typical year-over-year move** as the bar.
   That number already contains the market tide *and* price inflation, so a rep earns only for **beating
   what accounts like theirs are doing** — not for riding a company-wide +50% year. (Down markets lower the
   bar too.) This killed the big period-to-period swings we were seeing.
-- **Per-account cap + review.** A single account that explodes (e.g. a 25× one-time jump) counts toward
-  growth only up to ~2× its target; the excess is **held back and flagged on the manager's review page**
-  (real? one-time order? reassignment?), so one lucky account can't make or break a rep's bonus.
+- **Glide bar for activations + jump review.** A once-dormant account that "wakes up" used to read as
+  +3000% growth for a year (a stable recent quarter ÷ a near-$0 year-ago baseline). Now, when the year-ago
+  window is too small to be representative, the bar **follows the account's own recent run-rate and slides
+  up as it grows** (a recursive moving average, speed `glide_alpha`) — the rep is paid well for the climb,
+  the number stays believable, and the bar catches up in ~6 periods instead of 12 months.
+  On top of that, a **big single-period jump** (≥ `jump_multiple`× the bar, windfall over `growth_review_min`)
+  is **withheld by default and put on the manager's `/jumps` page to investigate** — a 10× is almost always
+  the *customer* growing their own business, not the rep's win — and released into growth only if the manager
+  confirms the rep won it. Ordinary overage pays through untouched.
 - **Lunar New Year:** any period within ~3 weeks of CNY is auto-aligned to *last year's* CNY (a moving
   holiday) so the spike lines up on both sides.
 - **Accounts without a full year of history** are never compared to a fake $0 baseline (which used to

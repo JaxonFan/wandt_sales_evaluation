@@ -40,12 +40,14 @@
 
 <div class="card">
   <h2>Per-account this period</h2>
-  <p class="hint" style="margin:0 0 8px">Sales/target are the trailing <b>3 months</b>. See the
+  <p class="hint" style="margin:0 0 8px">Sales/target are the trailing <b>4 weeks</b>. See the
     <a href="/guide" style="color:var(--blue)">guide</a> for what each status means.
     <span class="badge b-new">self-acquired</span> <span class="badge b-ramp">ramp</span>
     <span class="badge" style="background:#eee;color:#555">assigned</span>
     <span class="badge b-ok">mature</span> <span class="badge b-prov">provisional</span>
-    <span class="badge b-floor">capped</span> = grew &gt;2× target; counted up to 2×, rest held for review.</p>
+    <span class="badge" style="background:#efe9fb;color:#6b46c1">glide</span> = new/level-shifted; bar adapts to its own run-rate.
+    <span class="badge" style="background:var(--amber-bg);color:var(--amber)">big jump</span> = ≥2× its level; windfall withheld for
+    <a href="/jumps" style="color:var(--blue)">review</a>.</p>
   <table>
     <thead><tr><th>Customer</th><th class="num">Sales (3 mo)</th>
       <th class="num">Target</th><th class="num">vs target</th><th>Status</th><th>Manager</th></tr></thead>
@@ -53,7 +55,7 @@
     {% for r in rows %}
       {% set a = actions.get(r.account) %}
       <tr>
-        <td>{{ r.name }}{% if r.capped %} <span class="badge b-floor" title="counted ${{ '{:,}'.format(r.counted) }}, held back ${{ '{:,}'.format(r.held_back) }} for review">capped: counted ${{ '{:,}'.format(r.counted) }} · held ${{ '{:,}'.format(r.held_back) }}</span>{% endif %}</td>
+        <td>{{ r.name }}{% if r.capped %} <span class="badge" style="background:var(--amber-bg);color:var(--amber)" title="counted ${{ '{:,}'.format(r.counted) }}, ${{ '{:,}'.format(r.held_back) }} windfall withheld pending review">big jump: counted ${{ '{:,}'.format(r.counted) }} · ${{ '{:,}'.format(r.held_back) }} withheld</span>{% endif %}</td>
         <td class="num">${{ '{:,}'.format(r.sales) }}</td>
         <td class="num">{% if r.target is not none %}${{ '{:,}'.format(r.target) }}{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num {{ 'pos' if (r.perf or 0)>=0 else 'neg' }}">{% if r.perf is not none %}{{ '%+.0f'|format(r.perf) }}%{% else %}—{% endif %}</td>
@@ -61,6 +63,7 @@
             {% elif r.status=='ramp' %}<span class="badge b-ramp">ramp</span>
             {% elif r.status=='assigned' %}<span class="badge" style="background:#eee;color:#555">assigned</span>
             {% elif r.status=='provisional' %}<span class="badge b-prov">provisional</span>
+            {% elif r.status=='glide' %}<span class="badge" style="background:#efe9fb;color:#6b46c1">glide</span>
             {% elif r.status=='mature' %}<span class="badge b-ok">growth</span>
             {% elif r.status=='exempt' %}<span class="badge b-ramp">exempt</span>
             {% else %}<span class="mut">line items</span>{% endif %}</td>
