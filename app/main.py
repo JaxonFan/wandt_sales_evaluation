@@ -22,8 +22,7 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count", "growth_stretch_pct",
                   "growth_payout_rate", "glide_alpha", "min_baseline_ratio", "jump_multiple",
-                  "full_time_hours",
-                  "part_time_factor", "acq_revenue_pct", "acq_ramp_periods", "fine_amount"]
+                  "acq_revenue_pct", "acq_ramp_periods", "fine_amount"]
 
 
 def current_user(request: Request, db: Session):
@@ -351,6 +350,52 @@ def jumps_flag(request: Request, account: str = Form(...), associate: str = Form
         db.commit()
         audit(db, user, "jump_review", f"account:{account}", {"period": period.period_id, "decision": decision})
     return RedirectResponse(f"/jumps?p={idx}", status_code=303)
+
+
+# ---------- rep roster (managed data + change history) ----------
+REP_EDITABLE = ["role", "status", "hours_per_day", "salary_raw"]   # name/batch_initial are identity keys
+
+
+@app.get("/reps", response_class=HTMLResponse)
+def reps_page(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    assoc = [a for a in db.query(M.Associate).filter(M.Associate.name != None).order_by(M.Associate.role, M.Associate.name)]
+    usernames = {u.user_id: u.username for u in db.query(M.User)}
+    hist = {}
+    for log in (db.query(M.AuditLog).filter(M.AuditLog.action == "rep_edit")
+                .order_by(M.AuditLog.created_at.desc()).limit(200)):
+        rep = log.entity
+        hist.setdefault(rep, []).append({
+            "when": log.created_at, "who": usernames.get(log.user_id, "?"),
+            "changes": log.details or {}})
+    return templates.TemplateResponse("reps.html", {
+        "request": request, "user": user, "reps": assoc, "hist": hist})
+
+
+@app.post("/reps/edit")
+def reps_edit(request: Request, name: str = Form(...), role: str = Form(""), status: str = Form(""),
+              hours_per_day: str = Form(""), salary_raw: str = Form(""), db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role != "manager" and user.role != "admin":
+        return RedirectResponse("/login", status_code=303)
+    a = db.query(M.Associate).filter(M.Associate.name == name).first()
+    if not a:
+        return RedirectResponse("/reps", status_code=303)
+    new_vals = {"role": role.strip(), "status": status.strip(),
+                "hours_per_day": (float(hours_per_day) if str(hours_per_day).strip() else None),
+                "salary_raw": salary_raw.strip() or None}
+    changes = {}
+    for f, nv in new_vals.items():
+        ov = getattr(a, f)
+        if (ov or None) != (nv or None):
+            changes[f] = [ov, nv]
+            setattr(a, f, nv)
+    if changes:
+        db.commit()
+        audit(db, user, "rep_edit", name, changes)
+    return RedirectResponse("/reps", status_code=303)
 
 
 # ---------- item-level upload (idempotent by sop_number) ----------

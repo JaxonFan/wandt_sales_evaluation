@@ -34,8 +34,6 @@ DEFAULTS = {
     "jump_multiple": 2.0,          # flag a DOUBLING: recent >= this x its bar (100%+ over) -> whole over-bar amount withheld for manager review
     "growth_cap_multiple": 2.0,    # (legacy alias; superseded by jump_multiple)
     "growth_review_min": 10000,    # (deprecated — jumps now flag on the doubling alone, no dollar floor)
-    "full_time_hours": 8.0,        # a full work day; each rep's FTE = min(1, their hours/day ÷ this) scales their stretch
-    "part_time_factor": 0.5,       # fallback STRETCH factor for a part-time rep with no hours on file
 
     # --- Acquisition (new accounts: an elevated revenue share for ~1 quarter) ---
     "acq_revenue_pct": 0.01,       # bonus = this % of a NEW account's revenue, each period it is "new"

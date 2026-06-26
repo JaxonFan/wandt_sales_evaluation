@@ -32,8 +32,6 @@ not *you* outperforming — so your target already moved up with the market. You
 **beating what accounts like yours are doing**, not for the rising tide. (And if the market's *down*, your
 target comes down too, so you're not punished for a slump everyone's in.)
 
-**Part-time?** Your stretch is scaled to the hours you actually work, so you're not held to a full-timer's bar.
-
 **"I hit my target — why no growth bonus?"** Hitting your target means you're **on pace**, and that's
 already paid — by your salary, your per-line pay, and any new-account pay. The growth bonus is the **extra
 for going above** the target. Think of it like a quota: meeting it is the job; beating it earns the bonus.

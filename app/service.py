@@ -205,18 +205,6 @@ def part_time_associates(db):
     return {a.name for a in db.query(M.Associate).filter(M.Associate.role == "part time sales") if a.name}
 
 
-def fte_by_rep(db, full_time_hours, part_time_factor):
-    """Each sales rep's FTE = min(1, their hours/day ÷ a full day). Falls back to the role-based
-    part_time_factor if no hours are on file. Scales the growth stretch (more hours -> bigger stretch)."""
-    out = {}
-    for a in db.query(M.Associate).all():
-        if not a.name or (a.role or "").strip().lower() not in SALES_ROLES:
-            continue
-        if a.hours_per_day and full_time_hours:
-            out[a.name] = min(1.0, float(a.hours_per_day) / float(full_time_hours))
-        else:
-            out[a.name] = part_time_factor if (a.role or "").strip().lower() == "part time sales" else 1.0
-    return out
 
 
 def self_acquired_set(db):
@@ -262,9 +250,8 @@ def run_period_bonus(db, idx=None):
     period, as_of, idx, idx_min, idx_cur, is_current = resolve_period(db, idx, ww)
     df = _lines_cached(db, _data_version(db))
     _, _, team = attribution_maps(db)
-    fte = fte_by_rep(db, float(s["full_time_hours"]), float(s["part_time_factor"]))
     res = compute_period_bonus(df, period.start_date, period.end_date, team, as_of=as_of,
-                               fte_by_rep=fte, self_acquired=self_acquired_set(db),
+                               self_acquired=self_acquired_set(db),
                                exempt_accounts=exempt_set(db, period.period_id),
                                jump_released=jump_released_set(db, period.period_id), **_dials(s))
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)

@@ -1,0 +1,57 @@
+{% extends "base.html" %}{% block body %}
+<div class="card">
+  <h2>Sales reps · roster</h2>
+  <p class="hint">Each rep's reference data. Edits are saved with a <b>change history</b> below (who · when · old → new).
+    This is a managed record only — it does <b>not</b> affect the bonus. Name &amp; batch initial are identity keys (read-only).</p>
+  <table>
+    <thead><tr><th style="width:130px">Name</th><th>Batch</th><th colspan="5">Role · Status · Hours/day · Salary</th></tr></thead>
+    <tbody>
+    {% for a in reps %}
+      <tr>
+        <td><b>{{ a.name }}</b></td>
+        <td class="mut">{{ a.batch_initial or '—' }}{% if a.other_names %} <span class="hint">({{ a.other_names }})</span>{% endif %}</td>
+        <td colspan="5">
+          <form method="post" action="/reps/edit" class="ov-form" style="margin:0">
+            <input type="hidden" name="name" value="{{ a.name }}">
+            <select name="role">
+              {% for r in ['full time sales','part time sales','manager'] %}
+                <option value="{{ r }}" {{ 'selected' if (a.role or '')==r }}>{{ r }}</option>{% endfor %}
+            </select>
+            <select name="status">
+              {% for st in ['Active','Inactive'] %}<option value="{{ st }}" {{ 'selected' if (a.status or '')==st }}>{{ st }}</option>{% endfor %}
+            </select>
+            hrs <input name="hours_per_day" type="number" step="0.5" value="{{ a.hours_per_day if a.hours_per_day is not none else '' }}" style="width:64px">
+            $ <input name="salary_raw" value="{{ a.salary_raw or '' }}" style="width:120px" placeholder="e.g. $18/hour">
+            <button type="submit" class="ghost">Save</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Change history</h2>
+  {% set rows_with_hist = reps|selectattr('name', 'in', hist)|list %}
+  {% if rows_with_hist %}
+    {% for a in rows_with_hist %}
+      <p style="margin:12px 0 4px"><b>{{ a.name }}</b></p>
+      <table style="margin-bottom:6px">
+        <thead><tr><th style="width:150px">When</th><th style="width:110px">By</th><th>Change</th></tr></thead>
+        <tbody>
+        {% for h in hist[a.name] %}
+          <tr>
+            <td class="mut">{{ h.when.strftime('%Y-%m-%d %H:%M') if h.when else '—' }}</td>
+            <td>{{ h.who }}</td>
+            <td>{% for f, pair in h.changes.items() %}<span class="mut">{{ f }}:</span> {{ pair[0] if pair[0] is not none else '—' }} → <b>{{ pair[1] if pair[1] is not none else '—' }}</b>{% if not loop.last %} · {% endif %}{% endfor %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endfor %}
+  {% else %}
+    <p class="mut">No changes recorded yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
