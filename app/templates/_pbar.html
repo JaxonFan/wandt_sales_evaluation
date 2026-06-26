@@ -1,0 +1,12 @@
+<div class="card">
+  <div class="pbar">
+    {% if nav.prev_idx is not none %}<a class="pnav" href="{{ page }}?p={{ nav.prev_idx }}">◀ prev</a>
+    {% else %}<span class="pnav dis">◀ prev</span>{% endif %}
+    <div class="mid">
+      <div class="ttl">Period {{ nav.n }} · {{ nav.start }} ~ {{ nav.end }}</div>
+      <div class="hint" style="margin:3px 0">{% if nav.is_current %}<span class="badge b-ok">current</span>{% else %}<span class="badge b-ramp">locked · read-only</span>{% endif %}</div>
+    </div>
+    {% if nav.next_idx is not none %}<a class="pnav" href="{{ page }}?p={{ nav.next_idx }}">next ▶</a>
+    {% else %}<span class="pnav dis">next ▶</span>{% endif %}
+  </div>
+</div>

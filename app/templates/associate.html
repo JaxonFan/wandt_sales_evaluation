@@ -64,6 +64,7 @@
             {% elif r.status=='assigned' %}<span class="badge" style="background:#eee;color:#555">assigned</span>
             {% elif r.status=='provisional' %}<span class="badge b-prov">provisional</span>
             {% elif r.status=='glide' %}<span class="badge" style="background:#efe9fb;color:#6b46c1">glide</span>
+            {% elif r.status=='annual' %}<span class="badge" style="background:var(--blue-bg);color:var(--blue)" title="orders too infrequently for a 4-week measure; scored on a trailing year">annual</span>
             {% elif r.status=='mature' %}<span class="badge b-ok">growth</span>
             {% elif r.status=='exempt' %}<span class="badge b-ramp">exempt</span>
             {% else %}<span class="mut">line items</span>{% endif %}</td>

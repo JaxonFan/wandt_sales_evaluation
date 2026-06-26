@@ -118,6 +118,18 @@ class AcquisitionReview(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
+class NewProductReview(Base):
+    """Manager review of newly-introduced SKUs. featured=True = a genuine new product to incentivize
+    (its revenue counts at new_product_attribution toward growth). Default-absent = not featured (catalog
+    churn / size-brand variants pay nothing). Keyed by item_number (a launch is a permanent fact)."""
+    __tablename__ = "new_product_reviews"
+    item_number = Column(String, primary_key=True)
+    featured = Column(Boolean, default=False)
+    note = Column(String)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class Award(Base):
     __tablename__ = "awards"
     id = Column(Integer, primary_key=True, autoincrement=True)

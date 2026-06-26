@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% block body %}
+<div class="card">
+  <h2>New products · review</h2>
+  <p class="hint">SKUs first sold in the last <b>{{ weeks }} weeks</b> (auto-detected). Most are size/brand
+    re-codes of the same product (catalog churn) — those should stay <b>Not featured</b>. Mark the genuinely
+    <b>new</b> products as <b>Featured</b>: a featured product's revenue then counts at
+    <b>{{ '%.0f'|format(attribution*100) }}%</b> toward the rep's growth (rewarded, but discounted since the
+    company created the product). Default = Not featured (pays nothing).</p>
+  <table>
+    <thead><tr><th>Item</th><th>Description</th><th class="num">First sold</th><th class="num">$/unit</th>
+      <th class="num">Rev (13wk)</th><th>Featured?</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="mut">{{ r.item }}</td>
+        <td>{{ r.desc }}</td>
+        <td class="num">{{ r.first_seen }}</td>
+        <td class="num">${{ r.unit_price }}</td>
+        <td class="num">${{ '{:,}'.format(r.rev13) }}</td>
+        <td>
+          <form method="post" action="/products/flag" class="ov-form" style="margin:0">
+            <input type="hidden" name="item" value="{{ r.item }}">
+            <select name="featured" onchange="this.form.submit()">
+              <option value="no" {{ 'selected' if not r.featured }}>Not featured — pays nothing</option>
+              <option value="yes" {{ 'selected' if r.featured }}>Featured — counts {{ '%.0f'|format(attribution*100) }}% to growth</option>
+            </select>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="mut">No new SKUs in the last {{ weeks }} weeks.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

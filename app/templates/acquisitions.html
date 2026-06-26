@@ -1,4 +1,5 @@
 {% extends "base.html" %}{% block body %}
+{% set page = '/acquisitions' %}{% include '_pbar.html' %}
 <div class="card">
   <h2>New accounts · review (Period {{ nav.n }} · {{ nav.start }} ~ {{ nav.end }})</h2>
   <p class="hint">New accounts default to <b>Assigned</b> — they earn line items now and provisional growth once they

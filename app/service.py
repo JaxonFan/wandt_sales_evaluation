@@ -219,6 +219,36 @@ def exempt_set(db, period_id):
                                                                 M.ManagerAction.status == "exempt")}
 
 
+def featured_new_product_set(db):
+    """SKUs the manager confirmed are genuinely new -> their revenue counts at new_product_attribution
+    toward growth. Default-absent = not featured (catalog churn pays nothing)."""
+    return {r.item_number for r in db.query(M.NewProductReview).filter(M.NewProductReview.featured == True)}
+
+
+def new_product_candidates(db, new_product_weeks=26):
+    """Auto-detected new-SKU candidates (company-wide first-seen within new_product_weeks) for the manager to
+    confirm/reject: item_number, description, first-seen, recent revenue, median $/unit, featured flag."""
+    rows = db.query(M.SalesLine.item_number, M.SalesLine.item_description, M.SalesLine.document_date,
+                    M.SalesLine.qty, M.SalesLine.extended_price).all()
+    df = pd.DataFrame(rows, columns=["item", "desc", "date", "qty", "rev"])
+    if not len(df):
+        return []
+    df["date"] = pd.to_datetime(df["date"]); end = df["date"].max().normalize()
+    first = df.groupby("item")["date"].min()
+    new_items = first[first > end - pd.Timedelta(weeks=new_product_weeks)]
+    featured = {r.item_number: r.featured for r in db.query(M.NewProductReview)}
+    rec = df[df["date"] > end - pd.Timedelta(weeks=13)]
+    out = []
+    for it in new_items.index:
+        s = df[df["item"] == it]
+        out.append(dict(item=it, desc=(s["desc"].dropna().iloc[0] if s["desc"].notna().any() else ""),
+                        first_seen=new_items[it].date(),
+                        unit_price=round(float((s["rev"] / s["qty"].replace(0, 1)).median()), 1),
+                        rev13=round(float(rec[rec["item"] == it]["rev"].sum())),
+                        featured=bool(featured.get(it, False))))
+    return sorted(out, key=lambda r: -r["rev13"])
+
+
 def jump_released_set(db, period_id):
     """Accounts the manager confirmed the rep genuinely won this period -> release the withheld big-jump
     windfall (default for a flagged jump is customer-driven = withheld)."""
@@ -235,6 +265,8 @@ def _dials(s):
         growth_payout_rate=float(s["growth_payout_rate"]),
         glide_alpha=float(s["glide_alpha"]), jump_multiple=float(s["jump_multiple"]),
         min_baseline_ratio=float(s["min_baseline_ratio"]), growth_review_min=float(s["growth_review_min"]),
+        mature_smooth_weeks=int(s["mature_smooth_weeks"]), sporadic_gap_weeks=int(s["sporadic_gap_weeks"]),
+        new_product_weeks=int(s["new_product_weeks"]), new_product_attribution=float(s["new_product_attribution"]),
         acq_revenue_pct=float(s["acq_revenue_pct"]), acq_ramp_periods=int(s["acq_ramp_periods"]),
         period_days=PERIOD_DAYS, holiday_weight=float(s["holiday_weight"]))
 
@@ -253,7 +285,8 @@ def run_period_bonus(db, idx=None):
     res = compute_period_bonus(df, period.start_date, period.end_date, team, as_of=as_of,
                                self_acquired=self_acquired_set(db),
                                exempt_accounts=exempt_set(db, period.period_id),
-                               jump_released=jump_released_set(db, period.period_id), **_dials(s))
+                               jump_released=jump_released_set(db, period.period_id),
+                               featured_new_products=featured_new_product_set(db), **_dials(s))
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of
 

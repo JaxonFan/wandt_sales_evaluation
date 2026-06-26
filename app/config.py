@@ -32,6 +32,10 @@ DEFAULTS = {
     "glide_alpha": 0.20,           # how fast a level-shifted account's bar catches up to its new run-rate (0..1); ~0.2 = a quarter of memory
     "min_baseline_ratio": 0.80,    # year-ago window must be >= this x recent to use it (else glide, not YoY) — high = lean on the smoother glide bar
     "jump_multiple": 2.0,          # flag a DOUBLING: recent >= this x its bar (100%+ over) -> whole over-bar amount withheld for manager review
+    "mature_smooth_weeks": 4,      # smooth the same-weeks-last-year bar over +/- this many weeks (washes out order-timing shifts)
+    "sporadic_gap_weeks": 4,       # accounts whose median order gap exceeds this (order less often than the window) are scored ANNUALLY
+    "new_product_weeks": 26,       # a SKU is "new" for this many weeks after its company-wide first sale
+    "new_product_attribution": 0.20,  # a featured-new product's revenue counts at this fraction toward GROWTH (rep credited but discounted)
     "growth_cap_multiple": 2.0,    # (legacy alias; superseded by jump_multiple)
     "growth_review_min": 10000,    # (deprecated — jumps now flag on the doubling alone, no dollar floor)
 

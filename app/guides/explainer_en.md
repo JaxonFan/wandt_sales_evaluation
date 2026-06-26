@@ -58,11 +58,19 @@ right through.
 - **Assigned** (new) — handed to you; line items now, then growth once it has history (no new-account share).
 - **Glide** — newer or just-woken-up; its bar **follows its own recent pace and slides up as it grows** (no fair
   last-year number to use yet).
-- **Mature** — a year or more of real history; growth measured against the **same 4 weeks last year**, vs accounts your size.
+- **Mature** — a year or more of real history; growth measured against the **same 4 weeks last year** (smoothed
+  so a shift in *when* an account orders doesn't fake growth), vs accounts your size.
+- **Annual** — orders only a few times a year; measured over a **full trailing year** instead of 4 weeks, so a big
+  once-a-quarter order isn't mistaken for a sudden jump.
 - **Provisional** — has some history but not a usable last-year window; measured against its own prior weeks.
 - **Big jump** — did 2×+ its usual level in 4 weeks; the windfall is **held back for the manager to investigate**
   (released if it's confirmed your win).
 - **Exempt** — the manager set an account aside (e.g. it closed) so it doesn't drag your growth down.
+
+## New products
+When the company launches a **brand-new product** and you sell it, you're credited for it — but at a **reduced
+weight** toward growth (the company created the product, so it's not fully your win). Your manager confirms which
+launches count, so a product that's just a re-coded size/brand of something you already sell doesn't get credit.
 
 ## The bottom line
 - **Sell** → a little per line.

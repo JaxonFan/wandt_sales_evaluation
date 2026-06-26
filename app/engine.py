@@ -286,7 +286,7 @@ def _size_band_factors(baseline_q, recent_q, n_bands):
     return band_median.to_dict(), overall
 
 
-def _glide_levels(df, window_end, alpha, step_weeks=4):
+def _glide_levels(df, window_end, alpha, step_weeks=4, value_col="extended_price"):
     """Per-account 'established level' = EWMA (recursive, factor `alpha`) of the account's prior
     `step_weeks`-week run-rate windows, EXCLUDING the current window. Dormant gaps count as $0 and
     pull the level down; the series is seeded at the account's first window. This is the moving bar
@@ -296,7 +296,7 @@ def _glide_levels(df, window_end, alpha, step_weeks=4):
     if not len(hist):
         return {}
     bucket = np.floor((window_end - hist["document_date"]) / step).astype(int)   # 0 = current window
-    sums = hist.assign(_b=bucket).groupby(["account", "_b"])["extended_price"].sum()
+    sums = hist.assign(_b=bucket).groupby(["account", "_b"])[value_col].sum()
     levels = {}
     for acct, s in sums.groupby(level=0):
         prior = s.droplevel(0)
@@ -316,6 +316,8 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                          growth_window_weeks=13, size_band_count=5, growth_stretch_pct=0.03,
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
                          glide_alpha=0.35, jump_multiple=2.0, min_baseline_ratio=0.30,
+                         mature_smooth_weeks=4, sporadic_gap_weeks=4,
+                         featured_new_products=frozenset(), new_product_weeks=26, new_product_attribution=0.20,
                          acq_revenue_pct=0.01, acq_ramp_periods=3):
     """Return dict(scorecards: per-rep DataFrame, accounts: per (rep, account) detail DataFrame).
 
@@ -350,17 +352,46 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                 return "assigned"
         return "scored"
 
-    # --- trailing-quarter windows for GROWTH (smooth single-period lumpiness) ---
+    # --- GROWTH value: a confirmed-NEW product's revenue counts at new_product_attribution (e.g. 20%) toward
+    # growth for its first new_product_weeks (the company made the product; the rep is credited but discounted).
+    # Line-item contribution & acquisition still use full extended_price.
+    featured_new_products = set(featured_new_products)
+    GV = "extended_price"
+    if featured_new_products:
+        item_first = df.groupby("item_number")["document_date"].min()
+        is_new = (df["item_number"].isin(featured_new_products) &
+                  ((period_end - df["item_number"].map(item_first)) <= pd.Timedelta(weeks=new_product_weeks)))
+        df = df.assign(growth_value=np.where(is_new, df["extended_price"] * new_product_attribution,
+                                             df["extended_price"]))
+        GV = "growth_value"
+
+    # --- trailing windows for GROWTH ---
     win = pd.Timedelta(weeks=growth_window_weeks)
     qend = period_end                                            # measure to period end (or as_of for live)
     qstart = qend - win
     offset = pd.Timedelta(days=cny_aligned_offset_days(qstart, qend))   # CNY-aligned year-ago shift
     recent_q_df = df[(df["document_date"] > qstart) & (df["document_date"] <= qend)]
-    baseline_q_df = df[(df["document_date"] > qstart - offset) & (df["document_date"] <= qend - offset)]
+    # mature baseline = SMOOTHED centered average over the year-ago window +/- mature_smooth_weeks, so a one-month
+    # order-timing shift between years washes out (no phantom growth/decline on the short YoY window)
+    smooth = pd.Timedelta(weeks=mature_smooth_weeks)
+    base_lo, base_hi = qstart - offset - smooth, qend - offset + smooth
+    baseline_scale = win / (base_hi - base_lo)                  # scale the wider band back to a 4-week equivalent
+    baseline_q_df = df[(df["document_date"] > base_lo) & (df["document_date"] <= base_hi)]
     prior_q_df = df[(df["document_date"] > qstart - win) & (df["document_date"] <= qend - win)]   # for provisional
-    account_recent_q = recent_q_df.groupby("account")["extended_price"].sum()
-    account_baseline_q = baseline_q_df.groupby("account")["extended_price"].sum()
-    account_prior_q = prior_q_df.groupby("account")["extended_price"].sum()
+    account_recent_q = recent_q_df.groupby("account")[GV].sum()
+    account_baseline_q = baseline_q_df.groupby("account")[GV].sum() * baseline_scale
+    account_prior_q = prior_q_df.groupby("account")[GV].sum()
+
+    # --- ANNUAL windows for SPORADIC accounts (order less often than the 4-week window can see) ---
+    year = pd.Timedelta(weeks=52)
+    annual_recent = df[(df["document_date"] > qend - year) & (df["document_date"] <= qend)].groupby("account")[GV].sum()
+    annual_baseline = df[(df["document_date"] > qend - 2 * year) & (df["document_date"] <= qend - year)].groupby("account")[GV].sum()
+    annual_fraction = period_days / 364.0
+    # sporadic = median order-gap longer than the measurement window -> empty 4-week windows -> use annual
+    _dd = df.assign(_d=df["document_date"].dt.normalize()).drop_duplicates(["account", "_d"]).sort_values(["account", "_d"])
+    _dd["_gap"] = _dd.groupby("account")["_d"].diff().dt.days
+    _median_gap = _dd.groupby("account")["_gap"].median()
+    sporadic_accounts = set(_median_gap[_median_gap > sporadic_gap_weeks * 7].index)
     # company quarter-over-quarter seasonal swing (for provisional accounts with no year-ago baseline)
     company_seasonal_factor = 1.0
     if account_prior_q.sum() and account_recent_q.sum():
@@ -368,7 +399,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     # size-band de-trend factor per account (typical move for accounts its size) — subsumes market + inflation
     band_factor, overall_band_factor = _size_band_factors(account_baseline_q, account_recent_q, size_band_count)
     # glide: each account's own adaptive run-rate level (for activations with no usable year-ago window)
-    glide_levels = _glide_levels(df, qend, glide_alpha, step_weeks=growth_window_weeks)
+    glide_levels = _glide_levels(df, qend, glide_alpha, step_weeks=growth_window_weeks, value_col=GV)
     # cross-account seasonal lift for glide accounts: how accounts THIS size are moving this period vs their
     # own recent run-rate (median recent/glide per size band) — adds seasonality (holidays/CNY) without
     # leaning on a lumpy per-account same-weeks-last-year window. Restrict to accounts WITH current sales so
@@ -380,9 +411,16 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     BASELINE_MIN = 300.0          # window baseline needed to score growth (else line-items only)
     period_fraction = period_days / (growth_window_weeks * 7.0)   # prorate window outperformance to the period
 
-    # rep x account trailing-quarter sales (for growth attribution / work-share) + current items
+    # rep x account trailing growth-value (for growth attribution / work-share) + current items
     team_recent_q = recent_q_df[recent_q_df["associate"].isin(sales_team)]
-    rep_account_q = team_recent_q.groupby(["associate", "account"])["extended_price"].sum().reset_index(name="rep_q")
+    rep_account_q = team_recent_q.groupby(["associate", "account"])[GV].sum().reset_index(name="rep_q")
+    # rep x account ANNUAL growth-value (for sporadic accounts, scored every period on a trailing-year basis)
+    team_annual = df[(df["document_date"] > qend - year) & (df["document_date"] <= qend) & df["associate"].isin(sales_team)]
+    rep_account_annual = team_annual.groupby(["associate", "account"])[GV].sum().reset_index(name="rep_q")
+    # iterate regular (4-week) non-sporadic accounts + sporadic accounts on their annual measure (no overlap)
+    reg_rows = rep_account_q[~rep_account_q["account"].isin(sporadic_accounts)].assign(_annual=False)
+    spo_rows = rep_account_annual[rep_account_annual["account"].isin(sporadic_accounts)].assign(_annual=True)
+    iter_rows = pd.concat([reg_rows, spo_rows], ignore_index=True)
     items_by_rep_account = (current[current["associate"].isin(sales_team)]
                             .groupby(["associate", "account"])["extended_price"].size())
     new_rev_by_rep = {}           # current-period new-account revenue per rep (for acquisition)
@@ -397,13 +435,20 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     account_rows = []
     rep_totals = {a: dict(items=0, growth_base_raw=0.0, growth_base=0.0, growth_target=0.0,
                           growth_actual=0.0, held_back=0.0, flagged=0) for a in sales_team}
-    for _, r in rep_account_q.iterrows():
+    for _, r in iter_rows.iterrows():
         rep, account_id = r["associate"], r["account"]
+        annual = bool(r["_annual"])
         rep_q = float(r["rep_q"])
-        account_q = float(account_recent_q.get(account_id, 0.0))
+        if annual:                                                # sporadic: trailing-year vs prior-year, prorated 1/13
+            account_q = float(annual_recent.get(account_id, 0.0))
+            acct_baseline = float(annual_baseline.get(account_id, 0.0))
+            acct_fraction = annual_fraction
+        else:                                                     # regular: 4-week window
+            account_q = float(account_recent_q.get(account_id, 0.0))
+            acct_baseline = float(account_baseline_q.get(account_id, 0.0))
+            acct_fraction = period_fraction
         work_share = rep_q / account_q if account_q else 0.0
         status = account_status(account_id)
-        baseline_q = float(account_baseline_q.get(account_id, 0.0))
         prior_q = float(account_prior_q.get(account_id, 0.0))
 
         established = float(glide_levels.get(account_id, 0.0))
@@ -412,9 +457,14 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
             pass                                                  # new (self-acquired -> 1%) or assigned: items/acq only, no growth
         elif account_id in exempt_accounts:
             status = "exempt"                                     # manager removed from GROWTH (e.g. closed); items/acq untouched
-        elif baseline_q > BASELINE_MIN and baseline_q >= min_baseline_ratio * account_q:
-            # mature: a representative same-weeks-last-year window -> YoY x size-band move
-            raw_for_rep, lift, status = baseline_q * work_share, band_factor.get(account_id, overall_band_factor), "mature"
+        elif annual:                                              # sporadic -> trailing-year vs prior-year (smooths lumpy orders)
+            if acct_baseline > BASELINE_MIN:
+                raw_for_rep, lift, status = acct_baseline * work_share, overall_band_factor, "annual"
+            else:
+                status = "no_basis"
+        elif acct_baseline > BASELINE_MIN and acct_baseline >= min_baseline_ratio * account_q:
+            # mature: a representative (smoothed) same-weeks-last-year window -> YoY x size-band move
+            raw_for_rep, lift, status = acct_baseline * work_share, band_factor.get(account_id, overall_band_factor), "mature"
         elif established > BASELINE_MIN:
             # activation / level-shifted: year-ago window too small to compare to; use the account's own
             # glide level, lifted by how accounts its size are moving this period (cross-account seasonality)
@@ -443,11 +493,12 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
             else:
                 effective_recent, held = rep_q, 0.0             # pay in full (normal overage, or released)
                 windfall = max(0.0, rep_q - target_for_rep) if jump else 0.0
-            t["growth_base_raw"] += raw_for_rep
-            t["growth_base"] += base_for_rep
-            t["growth_target"] += target_for_rep
-            t["growth_actual"] += effective_recent
-            t["held_back"] += held
+            # accumulate as PERIOD-equivalents (x acct_fraction): regular x1, annual x period_days/364
+            t["growth_base_raw"] += raw_for_rep * acct_fraction
+            t["growth_base"] += base_for_rep * acct_fraction
+            t["growth_target"] += target_for_rep * acct_fraction
+            t["growth_actual"] += effective_recent * acct_fraction
+            t["held_back"] += held * acct_fraction
             t["flagged"] += int(jump and not released)
         account_rows.append(dict(associate=rep, account=account_id, status=status,
                                  rep_quarter_sales=rep_q, baseline_quarter=raw_for_rep,
@@ -464,8 +515,8 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         t = rep_totals[rep]
         items = int(items_per_rep.get(rep, 0))
         contribution_bonus = items * item_rate
-        # quarter outperformance, prorated to this period
-        growth_bonus = max(0.0, t["growth_actual"] - t["growth_target"]) * growth_payout_rate * period_fraction
+        # growth_actual/target are already period-prorated per account (regular 4-week + sporadic annual/13)
+        growth_bonus = max(0.0, t["growth_actual"] - t["growth_target"]) * growth_payout_rate
         acquisition_bonus = new_rev_by_rep.get(rep, 0.0) * acq_revenue_pct
         cards.append(dict(
             associate=rep, items_placed=items, contribution_bonus=contribution_bonus,

@@ -22,6 +22,7 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count", "growth_stretch_pct",
                   "growth_payout_rate", "glide_alpha", "min_baseline_ratio", "jump_multiple",
+                  "mature_smooth_weeks", "sporadic_gap_weeks", "new_product_weeks", "new_product_attribution",
                   "acq_revenue_pct", "acq_ramp_periods", "fine_amount"]
 
 
@@ -350,6 +351,32 @@ def jumps_flag(request: Request, account: str = Form(...), associate: str = Form
         db.commit()
         audit(db, user, "jump_review", f"account:{account}", {"period": period.period_id, "decision": decision})
     return RedirectResponse(f"/jumps?p={idx}", status_code=303)
+
+
+# ---------- new-product review (confirm genuine launches vs catalog churn) ----------
+@app.get("/products", response_class=HTMLResponse)
+def products_page(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    weeks = int(service.get_settings(db)["new_product_weeks"])
+    attribution = float(service.get_settings(db)["new_product_attribution"])
+    rows = service.new_product_candidates(db, weeks)
+    return templates.TemplateResponse("products.html", {
+        "request": request, "user": user, "rows": rows, "weeks": weeks, "attribution": attribution})
+
+
+@app.post("/products/flag")
+def products_flag(request: Request, item: str = Form(...), featured: str = Form(...),
+                  db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    rev = db.get(M.NewProductReview, item) or M.NewProductReview(item_number=item)
+    rev.featured = (featured == "yes"); rev.user_id = user.user_id; rev.created_at = dt.datetime.utcnow()
+    db.merge(rev); db.commit()
+    audit(db, user, "product_review", f"item:{item}", {"featured": rev.featured})
+    return RedirectResponse("/products", status_code=303)
 
 
 # ---------- rep roster (managed data + change history) ----------
