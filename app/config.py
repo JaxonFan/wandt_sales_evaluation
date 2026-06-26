@@ -29,11 +29,11 @@ DEFAULTS = {
     "size_band_count": 5,          # group accounts into this many size bands for the "typical move" de-trend
     "growth_stretch_pct": 0.03,    # the extra above your size band's typical move that you must beat
     "growth_payout_rate": 0.045,   # $ earned per sales-dollar above target (calibrated to ~$3k/period total)
-    "glide_alpha": 0.35,           # how fast a level-shifted account's bar catches up to its new run-rate (0..1)
-    "min_baseline_ratio": 0.30,    # year-ago window must be >= this x recent to use it (else glide, not YoY)
-    "jump_multiple": 2.0,          # an account counts toward growth up to this x its target; the windfall above is withheld for review
+    "glide_alpha": 0.20,           # how fast a level-shifted account's bar catches up to its new run-rate (0..1); ~0.2 = a quarter of memory
+    "min_baseline_ratio": 0.80,    # year-ago window must be >= this x recent to use it (else glide, not YoY) — high = lean on the smoother glide bar
+    "jump_multiple": 2.0,          # flag a DOUBLING: recent >= this x its bar (100%+ over) -> whole over-bar amount withheld for manager review
     "growth_cap_multiple": 2.0,    # (legacy alias; superseded by jump_multiple)
-    "growth_review_min": 10000,    # a single-period windfall above this $ is withheld + put on the manager's jump-review list (smaller overage pays through)
+    "growth_review_min": 10000,    # (deprecated — jumps now flag on the doubling alone, no dollar floor)
     "full_time_hours": 8.0,        # a full work day; each rep's FTE = min(1, their hours/day ÷ this) scales their stretch
     "part_time_factor": 0.5,       # fallback STRETCH factor for a part-time rep with no hours on file
 

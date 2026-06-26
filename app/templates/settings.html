@@ -8,13 +8,14 @@
     <table>
       <tr><th colspan="2">Contribution</th></tr>
       <tr><td>$ per line item placed</td><td class="num"><input name="item_rate" type="number" step="0.01" value="{{ settings.item_rate }}" style="width:90px"></td></tr>
-      <tr><th colspan="2">Growth — trailing-quarter, de-trended by account size</th></tr>
-      <tr><td>Measurement window (weeks)</td><td class="num"><input name="growth_window_weeks" type="number" step="1" value="{{ settings.growth_window_weeks }}" style="width:90px"> (13 = trailing quarter)</td></tr>
-      <tr><td>Size bands (for the "typical move" de-trend)</td><td class="num"><input name="size_band_count" type="number" step="1" value="{{ settings.size_band_count }}" style="width:90px"></td></tr>
-      <tr><td>Stretch above your size band</td><td class="num"><input name="growth_stretch_pct" type="number" step="0.01" value="{{ settings.growth_stretch_pct }}" style="width:90px"> (e.g. 0.03 = +3%)</td></tr>
-      <tr><td>Payout per $ above target</td><td class="num"><input name="growth_payout_rate" type="number" step="0.005" value="{{ settings.growth_payout_rate }}" style="width:90px"></td></tr>
-      <tr><td>Per-account cap (× target)</td><td class="num"><input name="growth_cap_multiple" type="number" step="0.5" value="{{ settings.growth_cap_multiple }}" style="width:90px"> (2 = count up to 2× target)</td></tr>
-      <tr><td>Flag for review when held-back > $</td><td class="num"><input name="growth_review_min" type="number" step="1000" value="{{ settings.growth_review_min }}" style="width:110px"></td></tr>
+      <tr><th colspan="2">Growth — adaptive (glide) bar, de-trended across accounts</th></tr>
+      <tr><td>Measurement window (weeks)</td><td class="num"><input name="growth_window_weeks" type="number" step="1" value="{{ settings.growth_window_weeks }}" style="width:90px"> (4 = one pay period)</td></tr>
+      <tr><td>Size bands (for the de-trend)</td><td class="num"><input name="size_band_count" type="number" step="1" value="{{ settings.size_band_count }}" style="width:90px"></td></tr>
+      <tr><td>Stretch above the bar</td><td class="num"><input name="growth_stretch_pct" type="number" step="0.01" value="{{ settings.growth_stretch_pct }}" style="width:90px"> (e.g. 0.03 = +3%)</td></tr>
+      <tr><td>Payout per $ above the bar</td><td class="num"><input name="growth_payout_rate" type="number" step="0.005" value="{{ settings.growth_payout_rate }}" style="width:90px"></td></tr>
+      <tr><td>Glide catch-up speed (0–1)</td><td class="num"><input name="glide_alpha" type="number" step="0.05" value="{{ settings.glide_alpha }}" style="width:90px"> (~0.2 = about a quarter of memory; lower = rewards growth longer)</td></tr>
+      <tr><td>Use last-year only if ≥ this × recent</td><td class="num"><input name="min_baseline_ratio" type="number" step="0.05" value="{{ settings.min_baseline_ratio }}" style="width:90px"> (else the glide bar; 0.8 = lean on glide)</td></tr>
+      <tr><td>Flag a "big jump" at (× the bar)</td><td class="num"><input name="jump_multiple" type="number" step="0.5" value="{{ settings.jump_multiple }}" style="width:90px"> (2 = a doubling; the whole windfall is withheld for /jumps review)</td></tr>
       <tr><td>Full work day (hours) — for FTE</td><td class="num"><input name="full_time_hours" type="number" step="0.5" value="{{ settings.full_time_hours }}" style="width:90px"> (each rep's FTE = their hours/day ÷ this, capped at 1)</td></tr>
       <tr><td>Part-time stretch (fallback if no hours on file)</td><td class="num"><input name="part_time_factor" type="number" step="0.05" value="{{ settings.part_time_factor }}" style="width:90px"></td></tr>
       <tr><th colspan="2">Acquisition (new accounts)</th></tr>

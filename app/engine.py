@@ -370,6 +370,13 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     band_factor, overall_band_factor = _size_band_factors(account_baseline_q, account_recent_q, size_band_count)
     # glide: each account's own adaptive run-rate level (for activations with no usable year-ago window)
     glide_levels = _glide_levels(df, qend, glide_alpha, step_weeks=growth_window_weeks)
+    # cross-account seasonal lift for glide accounts: how accounts THIS size are moving this period vs their
+    # own recent run-rate (median recent/glide per size band) — adds seasonality (holidays/CNY) without
+    # leaning on a lumpy per-account same-weeks-last-year window. Restrict to accounts WITH current sales so
+    # dormant accounts (recent=0) don't drag a band's median ratio to 0.
+    glide_level_series = pd.Series({acc: lv for acc, lv in glide_levels.items()
+                                    if account_recent_q.get(acc, 0.0) > 0}, dtype="float64")
+    glide_band_factor, glide_overall_factor = _size_band_factors(glide_level_series, account_recent_q, size_band_count)
 
     BASELINE_MIN = 300.0          # window baseline needed to score growth (else line-items only)
     period_fraction = period_days / (growth_window_weeks * 7.0)   # prorate window outperformance to the period
@@ -412,8 +419,8 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
             raw_for_rep, lift, status = baseline_q * work_share, band_factor.get(account_id, overall_band_factor), "mature"
         elif established > BASELINE_MIN:
             # activation / level-shifted: year-ago window too small to compare to; use the account's own
-            # glide level (already at current-market scale, so no extra market lift)
-            raw_for_rep, lift, status = established * work_share, 1.0, "glide"
+            # glide level, lifted by how accounts its size are moving this period (cross-account seasonality)
+            raw_for_rep, lift, status = established * work_share, glide_band_factor.get(account_id, glide_overall_factor), "glide"
         elif prior_q > BASELINE_MIN:                              # provisional: own prior window x seasonal swing
             raw_for_rep, lift, status = prior_q * work_share, company_seasonal_factor, "provisional"
         else:
@@ -427,16 +434,17 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         if raw_for_rep is not None:
             base_for_rep = raw_for_rep * lift                     # baseline x size/market lift
             target_for_rep = base_for_rep * (1 + growth_stretch_pct * pt)
-            # jump review: a BIG single-period windfall (recent above jump_multiple x target, by more than
-            # growth_review_min $) is withheld for the manager to investigate — a 10x is usually the customer
-            # growing, not the rep. Small/normal overage pays through; the manager can release a real win.
-            line = target_for_rep * jump_multiple
-            windfall = max(0.0, rep_q - line)
-            jump = windfall > growth_review_min
+            # jump review: an account that DOUBLED (recent >= jump_multiple x its bar, i.e. 100%+ over) is the
+            # anomaly itself — a 10x is usually the customer growing, not the rep. The whole over-bar amount is
+            # withheld for the manager to investigate (no dollar floor); ordinary growth pays through; the
+            # manager releases the full windfall if the rep genuinely won it.
+            jump = target_for_rep > BASELINE_MIN and rep_q >= target_for_rep * jump_multiple
             if jump and not released:
-                effective_recent, held = line, windfall          # withhold the windfall pending review
+                effective_recent = target_for_rep               # withhold ALL over-bar growth pending review
+                windfall = held = rep_q - target_for_rep
             else:
-                effective_recent, held = rep_q, 0.0              # pay in full (normal overage, or released)
+                effective_recent, held = rep_q, 0.0             # pay in full (normal overage, or released)
+                windfall = max(0.0, rep_q - target_for_rep) if jump else 0.0
             t["growth_base_raw"] += raw_for_rep
             t["growth_base"] += base_for_rep
             t["growth_target"] += target_for_rep

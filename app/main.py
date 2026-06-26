@@ -22,7 +22,7 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 
 EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count", "growth_stretch_pct",
                   "growth_payout_rate", "glide_alpha", "min_baseline_ratio", "jump_multiple",
-                  "growth_review_min", "full_time_hours",
+                  "full_time_hours",
                   "part_time_factor", "acq_revenue_pct", "acq_ramp_periods", "fine_amount"]
 
 

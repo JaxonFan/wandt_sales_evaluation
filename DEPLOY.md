@@ -62,8 +62,12 @@ Blue/green rollout takes a few minutes; the URL stays up throughout.
 
 ## Operational notes
 - **Cost:** ~$30–40/month (1 always-on Fargate task + ALB + RDS t4g.micro + small data transfer).
-- **Metric:** profit dollars (revenue − cost); headline = market-adjusted profit; scope = the 5 sales reps
-  (managers/inactive excluded). See `wandt_app_spec.md` and `wandt_metric_design.ipynb`.
+- **Metric:** **revenue**-based, paid per 4-week period as three direct pieces — Contribution (line items),
+  Growth (revenue above a per-account bar: the same 4 weeks last year × size-band de-trend for established
+  accounts, or the account's own adaptive **glide** run-rate for newer/level-shifted ones), and Acquisition
+  (1% of a self-acquired new account's revenue, ~1 quarter). A single-period **doubling** (≥2× its bar) is
+  withheld for the manager's `/jumps` review. Scope = the 5 sales reps (managers/inactive excluded).
+  See `wandt_incentive_design.md`.
 - **Performance:** each page recomputes the engine over ~102k item-level lines (cached per period until import/override).
 - **Security TODO:** rotate the demo logins; RDS is SG-gated but `publicly-accessible` — to drop its public IP:
   `aws rds modify-db-instance --db-instance-identifier wandt-db --no-publicly-accessible --apply-immediately`.

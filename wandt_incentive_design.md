@@ -30,15 +30,20 @@ contribution, so we don't pay twice. Key properties (each fixes a real failure m
   That number already contains the market tide *and* price inflation, so a rep earns only for **beating
   what accounts like theirs are doing** — not for riding a company-wide +50% year. (Down markets lower the
   bar too.) This killed the big period-to-period swings we were seeing.
-- **Glide bar for activations + jump review.** A once-dormant account that "wakes up" used to read as
-  +3000% growth for a year (a stable recent quarter ÷ a near-$0 year-ago baseline). Now, when the year-ago
-  window is too small to be representative, the bar **follows the account's own recent run-rate and slides
-  up as it grows** (a recursive moving average, speed `glide_alpha`) — the rep is paid well for the climb,
-  the number stays believable, and the bar catches up in ~6 periods instead of 12 months.
-  On top of that, a **big single-period jump** (≥ `jump_multiple`× the bar, windfall over `growth_review_min`)
-  is **withheld by default and put on the manager's `/jumps` page to investigate** — a 10× is almost always
-  the *customer* growing their own business, not the rep's win — and released into growth only if the manager
-  confirms the rep won it. Ordinary overage pays through untouched.
+- **Glide bar (the primary bar) — rewards *continuing* to grow, never overpays an elevated account.** An
+  account's bar **follows its own recent run-rate and slides up as it grows** (a recursive moving average,
+  speed `glide_alpha` ≈ 0.20 / ~a quarter of memory), lifted by a **cross-account, size-banded seasonal
+  factor** (how accounts its size are moving this period vs their own normal — handles holidays/CNY without a
+  lumpy per-account last-year window). A rep earns by pushing an account *above* its recent self, so a one-time
+  jump pays for a quarter then the bar catches up — you have to **keep growing** to keep earning. `min_baseline_ratio`
+  (≈ 0.80) governs the handful of accounts with a genuinely representative same-4-weeks-last-year window, which
+  still use **last-year × size-band** instead. This fixed both the +3000% near-zero-baseline artifact *and* the
+  "overpay an elevated account for a year" problem of pure year-over-year.
+- **Jump review (no dollar floor).** A single-period **doubling** — `recent ≥ jump_multiple`(2)`× its bar`, i.e.
+  100%+ over — is itself the anomaly (a 10× is almost always the *customer* expanding, not the rep), so the
+  **entire over-bar amount is withheld** and the account is put on the manager's `/jumps` page. **Any** doubling
+  qualifies regardless of size (no minimum), and nothing is silently withheld — only flagged accounts are held.
+  The manager releases the windfall in full if the rep genuinely won it; ordinary (sub-double) growth pays through.
 - **Lunar New Year:** any period within ~3 weeks of CNY is auto-aligned to *last year's* CNY (a moving
   holiday) so the spike lines up on both sides.
 - **Accounts without a full year of history** are never compared to a fake $0 baseline (which used to
