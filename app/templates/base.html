@@ -58,4 +58,31 @@
 {% endif %}
 <div class="wrap">{% block body %}{% endblock %}</div>
 <footer>W&T Sales Scorecard · PoC · decision support — the manager sets the final award</footer>
+<script>
+// Make every data table sortable: click a header to sort by that column (numbers & text), click again to reverse.
+document.querySelectorAll('table').forEach(function(t){
+  var thead = t.tHead, tb = t.tBodies[0];
+  if(!thead || !tb || tb.rows.length < 2) return;
+  var ncol = thead.rows[0].cells.length;
+  Array.from(thead.rows[0].cells).forEach(function(th, col){
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', function(){
+      var asc = th.getAttribute('data-asc') !== 'true';
+      Array.from(thead.rows[0].cells).forEach(function(h){ h.removeAttribute('data-asc'); h.querySelectorAll('.sort-arrow').forEach(function(a){a.remove();}); });
+      th.setAttribute('data-asc', asc);
+      var arrow = document.createElement('span'); arrow.className='sort-arrow'; arrow.textContent = asc ? ' ▲' : ' ▼';
+      arrow.style.fontSize='9px'; arrow.style.color='var(--muted)'; th.appendChild(arrow);
+      var rows = Array.from(tb.rows).filter(function(r){ return r.cells.length === ncol; });
+      var clean = function(s){ return s.replace(/[$,%\s,×]/g,''); };
+      var numeric = rows.every(function(r){ var v = clean(r.cells[col].innerText); return v==='' || v==='—' || !isNaN(v); });
+      rows.sort(function(a,b){
+        var x = a.cells[col].innerText.trim(), y = b.cells[col].innerText.trim();
+        if(numeric){ x = parseFloat(clean(x)); y = parseFloat(clean(y)); if(isNaN(x))x=-Infinity; if(isNaN(y))y=-Infinity; return asc ? x-y : y-x; }
+        return asc ? x.localeCompare(y) : y.localeCompare(x);
+      });
+      rows.forEach(function(r){ tb.appendChild(r); });
+    });
+  });
+});
+</script>
 </body></html>

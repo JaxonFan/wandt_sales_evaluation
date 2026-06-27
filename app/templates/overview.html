@@ -21,12 +21,12 @@
 <div class="card">
   <h2>Team — bonus this period</h2>
   <p class="hint">Through {{ data_through }}. Bonus = <b>Contribution</b> (line items × rate)
-    + <b>Growth</b> (beating your target, measured over the trailing 3 months, vs how accounts your size are moving)
+    + <b>Growth</b> (beating your target, measured over the trailing 4 weeks, vs how accounts your size are moving)
     + <b>Acquisition</b> (1% revenue share on new accounts for ~1 quarter). Click a rep for detail.</p>
   <table>
     <thead><tr><th>Rep</th>
       <th class="num">Line items</th><th class="num">Contribution</th>
-      <th class="num">Growth target (3mo)</th><th class="num">Growth actual</th><th class="num">Growth $</th>
+      <th class="num">Growth target (4wk)</th><th class="num">Growth actual</th><th class="num">Growth $</th>
       <th class="num">New</th><th class="num">Acquisition</th><th class="num">Review</th>
       <th class="num">Suggested bonus</th><th class="num">Award</th></tr></thead>
     <tbody>
@@ -48,7 +48,7 @@
     </tbody>
   </table>
   <p class="hint" style="margin-top:10px"><b>Review</b> = # of big account swings held back by the cap (open the rep to see them).
-    Growth is measured over the trailing 3 months and judged against how accounts of the same size are moving, so a market-wide
+    Growth is measured over the trailing 4 weeks and judged against how accounts of the same size are moving, so a market-wide
     tide and one-off account spikes don't inflate it. Suggested bonus is a fair starting point; the manager sets the final award.</p>
 </div>
 {% endblock %}
