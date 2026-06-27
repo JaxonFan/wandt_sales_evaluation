@@ -371,16 +371,18 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     qstart = qend - win
     offset = pd.Timedelta(days=cny_aligned_offset_days(qstart, qend))   # CNY-aligned year-ago shift
     recent_q_df = df[(df["document_date"] > qstart) & (df["document_date"] <= qend)]
-    # mature baseline = SMOOTHED centered average over the year-ago window +/- mature_smooth_weeks, so a one-month
-    # order-timing shift between years washes out (no phantom growth/decline on the short YoY window)
-    smooth = pd.Timedelta(weeks=mature_smooth_weeks)
-    base_lo, base_hi = qstart - offset - smooth, qend - offset + smooth
-    baseline_scale = win / (base_hi - base_lo)                  # scale the wider band back to a 4-week equivalent
-    baseline_q_df = df[(df["document_date"] > base_lo) & (df["document_date"] <= base_hi)]
     prior_q_df = df[(df["document_date"] > qstart - win) & (df["document_date"] <= qend - win)]   # for provisional
     account_recent_q = recent_q_df.groupby("account")[GV].sum()
-    account_baseline_q = baseline_q_df.groupby("account")[GV].sum() * baseline_scale
     account_prior_q = prior_q_df.groupby("account")[GV].sum()
+    # mature baseline = the same 4 weeks last year (CNY-aligned). Optionally smoothed over +/- mature_smooth_weeks
+    # (default 0 = OFF, strict). NOTE: smoothing was found to be counterproductive — because the size-band
+    # de-trend reacts to the baseline distribution, RAISING baselines lowers the "typical move" factor and
+    # ends up INFLATING growth. So we compare to the exact same-weeks-last-year window (timing shifts on lumpy
+    # accounts are already handled by the glide/annual paths, which never look at last year).
+    smooth = pd.Timedelta(weeks=mature_smooth_weeks)
+    base_lo, base_hi = qstart - offset - smooth, qend - offset + smooth
+    baseline_scale = win / (base_hi - base_lo)
+    account_baseline_q = df[(df["document_date"] > base_lo) & (df["document_date"] <= base_hi)].groupby("account")[GV].sum() * baseline_scale
 
     # --- ANNUAL windows for SPORADIC accounts (order less often than the 4-week window can see) ---
     year = pd.Timedelta(weeks=52)
