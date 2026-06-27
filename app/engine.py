@@ -239,7 +239,8 @@ def growth_tier_pct(annual_sales, thresholds, pcts):
 # overlap CNY we align the year-ago baseline to LAST year's CNY (not a fixed 364 days) so the spike
 # lines up on both sides of the growth comparison.
 CNY_DATES = [pd.Timestamp(d) for d in
-             ["2023-01-22", "2024-02-10", "2025-01-29", "2026-02-17", "2027-02-06", "2028-01-26"]]
+             ["2023-01-22", "2024-02-10", "2025-01-29", "2026-02-17", "2027-02-06", "2028-01-26",
+              "2029-02-13", "2030-02-03", "2031-01-23", "2032-02-11", "2033-01-31", "2034-02-19", "2035-02-08"]]
 
 
 def cny_aligned_offset_days(period_start, period_end, default_days=364, window_days=21):
