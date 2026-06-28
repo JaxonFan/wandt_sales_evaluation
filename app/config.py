@@ -13,9 +13,9 @@ SALES_ROLES = {"full time sales", "part time sales"}
 # Metric dials (defaults from the 2-year analysis; the engine reads overrides from settings).
 # The bonus is THREE direct, self-computable pieces (per 4-week period), no pool:
 #   Contribution = line_items x item_rate
-#   Growth       = max(0, trailing-quarter sales - target) x growth_payout_rate x (4/13)
-#                  target = own last-year quarter x (typical move for accounts your size) x (1 + stretch)
-#   Acquisition  = acq_revenue_pct x a NEW account's revenue, for ~1 quarter
+#   Growth       = max(0, recent revenue - target) x growth_payout_rate
+#                  target = (last-year cost x cost-inflation factor + last-year profit) x typical move for accounts your size
+#   Acquisition  = a size-tiered flat bonus, paid once when a self-acquired account lands
 DEFAULTS = {
     "period_weeks": 4,             # review/pay cadence (4-week period); the bonus is assessed per period
     "window_weeks": 13,            # trailing window for closure cadence / context
@@ -27,8 +27,7 @@ DEFAULTS = {
     # --- Growth (beat what accounts your size are doing, measured over the trailing 4 weeks) ---
     "growth_window_weeks": 4,      # measure growth on the trailing 4 weeks (= the pay period; jumps surface to review)
     "size_band_count": 5,          # group accounts into this many size bands for the "typical move" de-trend
-    "growth_stretch_pct": 0.03,    # the extra above your size band's typical move that you must beat
-    "growth_payout_rate": 0.03,    # $ earned per sales-dollar above target
+    "growth_payout_rate": 0.03,    # $ earned per sales-dollar above target (bar = cost-adjusted last-year x real-market move; no stretch)
     "cost_inflation_weeks": 13,    # window for the company cost-inflation factor (same basket repriced at today's cost); the bar = last-year cost x this factor + last-year profit, so passing cost through isn't "growth"
     "glide_alpha": 0.20,           # how fast a level-shifted account's bar catches up to its new run-rate (0..1); ~0.2 = a quarter of memory
     "min_baseline_ratio": 0.80,    # year-ago window must be >= this x recent to use it (else glide, not YoY) — high = lean on the smoother glide bar

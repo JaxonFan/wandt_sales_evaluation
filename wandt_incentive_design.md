@@ -15,7 +15,7 @@ A small set amount for **every line-item the rep writes this period** (a dial th
 ### 2. Growth — beat a fair target, measured over a trailing quarter
 A rep's target is set per account and shown as **one number** with a plain breakdown:
 
-> **target = your accounts' sales the same 3 months last year × the typical move for accounts that size × (1 + a small stretch)**
+> **target = your accounts' cost-adjusted last-year baseline (today's cost + last-year profit) × the typical move for accounts that size**
 
 and the rep earns **a cut of every dollar above it**. Holding the base book is already paid by salary +
 contribution, so we don't pay twice. Key properties (each fixes a real failure mode we hit and measured):
@@ -50,8 +50,9 @@ contribution, so we don't pay twice. Key properties (each fixes a real failure m
   double-pay a new account as acquisition *and* "growth"). New accounts earn **acquisition** for their
   first quarter; then **provisional** (their own prior quarter × the company's seasonal swing) until they
   have a year; then year-over-year. Too-sparse accounts earn line-item contribution only.
-The stretch is a flat **+3%** for every rep (no FTE/hours scaling). Each rep's roster data (hours, salary,
-role) is a managed reference record on the **`/reps`** page, with a change history — it does not feed the bonus.
+There is **no stretch hurdle** — once a rep covers today's cost and last year's profit, every dollar above earns.
+Each rep's roster data (hours, salary, role) is a managed reference record on the **`/reps`** page, with a change
+history — it does not feed the bonus.
 
 ### Cost-protected growth bar (2026 update)
 Growth stays **revenue-based**, but the year-ago bar = **(last-year cost × a company cost-inflation factor)
@@ -78,7 +79,7 @@ acquisition credit are untouched.
 ```
 A rep — this period
    Grow your book (last 3 months)   $620,000  vs target $590,000  (above — earning)
-     target $590k = last year $520k + size/market lift +10% + stretch +3%
+     target $590k = cost-adjusted last year (today's cost + last-year profit) × your size tier's real move
    Your bonus:
      Sell line items   ~800 lines × $0.10                     = $80
      Grow your book    beating your $590k target              = $1,350
@@ -102,8 +103,8 @@ Each rep also gets a **"where am I vs my target"** dashboard: one target number,
 
 ## Dials the manager sets (all editable in the app)
 - Contribution: **$ per line item** (≈ $0.10)
-- Growth: measurement window (13 wks), # size bands (5), **stretch above your band** (≈ +3%), **payout per $ above target** (≈ 4.5%), **per-account cap** (≈ 2× target), **review threshold** (≈ $20k), **part-time factor** (≈ 0.5)
-- Acquisition: **revenue share** (≈ 1%), "new" window (**1 quarter**)
+- Growth: measurement window (4 wks), # size bands (5), **cost-inflation window** (13 wks), **payout per $ above target** (3%), glide/jump dials
+- Acquisition: **size-tiered flat bonus** ($100/$200/$300 by size), "new" window (**1 quarter**)
 *(Calibrated so total bonus lands ~$3,000/period across the team; tune to your budget.)*
 
 *(Numbers are illustrative starting points — set them to land at your intended bonus budget, with acquisition weighted as you like.)*

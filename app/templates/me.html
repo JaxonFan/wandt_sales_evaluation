@@ -27,12 +27,10 @@
     {% else %}<span class="neg">below target — keep going</span>{% endif %}
   </div>
   <p class="hint" style="margin-top:8px">Your <b>${{ '{:,.0f}'.format(g.target) }}</b> target =
-    what your accounts were running before (${{ '{:,.0f}'.format(g.last_year) }} — the same 4 weeks last year, or
-    a newer account's own recent pace)
-    + the lift accounts your size are getting now (+{{ '%.0f'|format(g.lift_pct) }}%)
-    + your stretch (+{{ '%.0f'|format(g.stretch_pct) }}%).
+    today's cost of last year's order + the same profit you made last year (${{ '{:,.0f}'.format(g.last_year) }}),
+    then moved by how much accounts your size really grew ({{ '%+.0f'|format(g.lift_pct) }}%).
     <b>Hitting it = on pace</b> (already paid by your salary, per-line pay, and new-account pay);
-    the <b>growth bonus is the extra for beating it</b> — so you earn for beating what accounts like yours are doing, not for riding a good market.</p>
+    the <b>growth bonus is the extra for beating it</b> — every dollar above earns, so you grow only by beating cost + last year's profit, not by riding a good market.</p>
   {% if c and c.held_back and c.held_back > 0 %}
   <p class="lock-note" style="margin-top:10px">${{ '{:,.0f}'.format(c.held_back) }} of a <b>big-jump windfall</b> is
     <b>withheld pending your manager's review</b> — when one account jumps to 2×+ its usual level, the extra is checked

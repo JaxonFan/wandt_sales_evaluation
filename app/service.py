@@ -261,7 +261,6 @@ def _dials(s):
     return dict(
         item_rate=float(s["item_rate"]),
         growth_window_weeks=int(s["growth_window_weeks"]), size_band_count=int(s["size_band_count"]),
-        growth_stretch_pct=float(s["growth_stretch_pct"]),
         growth_payout_rate=float(s["growth_payout_rate"]),
         glide_alpha=float(s["glide_alpha"]), jump_multiple=float(s["jump_multiple"]),
         min_baseline_ratio=float(s["min_baseline_ratio"]), growth_review_min=float(s["growth_review_min"]),
@@ -303,14 +302,12 @@ def compute_rep_goal(db, associate, idx=None):
     names = customer_names(db)
     period_end = pd.Timestamp(period.end_date)
 
-    # growth is measured on the rolling quarter: your last-3-months sales vs a transparent target =
-    # last year + the lift accounts your size are getting + your stretch.
-    actual = float(card["growth_actual"]) if card else 0.0          # your trailing-quarter sales
+    # growth = recent revenue vs the bar: cost-adjusted last-year (today's cost + last-year profit) x your size tier's real move.
+    actual = float(card["growth_actual"]) if card else 0.0          # your recent revenue (period-equivalent)
     target = float(card["growth_target"]) if card else 0.0          # the bar to beat
-    last_year = float(card["growth_base_raw"]) if card else 0.0     # same quarter last year (pre-lift)
-    lifted = float(card["growth_base"]) if card else 0.0            # after size/market lift (pre-stretch)
+    last_year = float(card["growth_base_raw"]) if card else 0.0     # cost-adjusted last-year (today's cost + last-year profit)
+    lifted = float(card["growth_base"]) if card else 0.0            # after the size-tier real-market move
     lift_pct = (lifted / last_year - 1) * 100 if last_year else 0.0
-    stretch_pct = (target / lifted - 1) * 100 if lifted else 0.0
 
     rep_accounts = res["accounts"]
     rep_accounts = rep_accounts[rep_accounts["associate"] == associate] if len(rep_accounts) else rep_accounts
@@ -327,7 +324,7 @@ def compute_rep_goal(db, associate, idx=None):
 
     return {"associate": associate, "card": card, "period": period, "nav": nav,
             "actual": actual, "target": target, "pct": (actual / target * 100) if target else 0.0,
-            "last_year": last_year, "lift_pct": lift_pct, "stretch_pct": stretch_pct,
+            "last_year": last_year, "lift_pct": lift_pct,
             "new_accounts": new_accounts, "watch": watch}
 
 

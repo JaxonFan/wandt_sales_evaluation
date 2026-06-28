@@ -331,7 +331,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                          self_acquired=frozenset(), exempt_accounts=frozenset(),
                          jump_released=frozenset(),
                          period_days=28, holiday_weight=0.0, item_rate=0.10,
-                         growth_window_weeks=13, size_band_count=5, growth_stretch_pct=0.03,
+                         growth_window_weeks=13, size_band_count=5,
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
                          glide_alpha=0.35, jump_multiple=2.0, min_baseline_ratio=0.30,
                          mature_smooth_weeks=4, sporadic_gap_weeks=4, cost_inflation_weeks=13,
@@ -344,7 +344,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     Bonus = Contribution (line items x item_rate) + Growth + Acquisition (acq_revenue_pct x a new
     account's revenue, for ~1 quarter). GROWTH is measured on the TRAILING QUARTER and de-trended by
     the typical move of accounts the same size:
-      target_q = baseline_q x size_band_factor x (1 + growth_stretch_pct)
+      target_q = baseline_q x size_band_factor
       growth_bonus = max(0, recent_q - target_q) x growth_payout_rate x (period_weeks / window_weeks)
     Contribution & acquisition use the current period; growth uses trailing windows (smooths lumps).
     """
@@ -518,7 +518,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         held = windfall = 0.0
         if raw_for_rep is not None:
             base_for_rep = raw_for_rep * lift                     # baseline x size/market lift
-            target_for_rep = base_for_rep * (1 + growth_stretch_pct)
+            target_for_rep = base_for_rep                       # bar = cost-adjusted last-year (cost+profit) x real-market move; no stretch hurdle
             # jump review: an account that DOUBLED (recent >= jump_multiple x its bar, i.e. 100%+ over) is the
             # anomaly itself — a 10x is usually the customer growing, not the rep. The whole over-bar amount is
             # withheld for the manager to investigate (no dollar floor); ordinary growth pays through; the

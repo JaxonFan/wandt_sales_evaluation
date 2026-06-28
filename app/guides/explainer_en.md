@@ -12,7 +12,7 @@ We give you a **target** each 4 weeks, and you earn a bonus for **beating it**. 
 in plain words:
 
 > **Your target = what it would cost today to sell last year's order, plus the same profit you made last year,
-> then adjusted by how much accounts your size are *really* growing now, plus a small stretch.**
+> then adjusted by how much accounts your size are *really* growing now.**
 
 So the bar moves up with your costs: if a product costs more this year, just charging more to cover it isn't
 "growth" — you only grow by beating *today's cost + last year's profit*. (And the size-size adjustment uses the
@@ -21,10 +21,9 @@ count either way.)
 
 Worked example (one 4-week period):
 
-- Your accounts ran about **$40,000** the same 4 weeks last year.
-- Accounts your size are running about **+10%** this year (the market's up). So we bump the bar to ~$44k.
-- Plus a small **+3% stretch** → your target is about **$45,000**.
-- If your last 4 weeks come in at **$48,000**, you beat the bar by $3,000 → that's your growth bonus.
+- Last year these accounts ran **$40,000** — and at *today's* cost plus the same profit, that's about **$42,000**.
+- Accounts your size are really growing about **+5%** this year. So your bar is about **$44,000**.
+- If your last 4 weeks come in at **$48,000**, you beat the bar by $4,000 → that's your growth bonus (every dollar above counts).
 
 **Where does "what your accounts were already running" come from?** For an established account, it's the
 **same 4 weeks last year** — Christmas vs Christmas, Lunar New Year vs Lunar New Year, so the seasons line up
