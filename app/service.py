@@ -266,8 +266,11 @@ def _dials(s):
         glide_alpha=float(s["glide_alpha"]), jump_multiple=float(s["jump_multiple"]),
         min_baseline_ratio=float(s["min_baseline_ratio"]), growth_review_min=float(s["growth_review_min"]),
         mature_smooth_weeks=int(s["mature_smooth_weeks"]), sporadic_gap_weeks=int(s["sporadic_gap_weeks"]),
+        cost_inflation_weeks=int(s["cost_inflation_weeks"]),
         new_product_weeks=int(s["new_product_weeks"]), new_product_attribution=float(s["new_product_attribution"]),
-        acq_revenue_pct=float(s["acq_revenue_pct"]), acq_ramp_periods=int(s["acq_ramp_periods"]),
+        acq_tier_small_max=float(s["acq_tier_small_max"]), acq_tier_medium_max=float(s["acq_tier_medium_max"]),
+        acq_flat_small=float(s["acq_flat_small"]), acq_flat_medium=float(s["acq_flat_medium"]),
+        acq_flat_large=float(s["acq_flat_large"]), acq_ramp_periods=int(s["acq_ramp_periods"]),
         period_days=PERIOD_DAYS, holiday_weight=float(s["holiday_weight"]))
 
 

@@ -11,8 +11,13 @@ servicing your accounts; this is a little extra for the work.
 We give you a **target** each 4 weeks, and you earn a bonus for **beating it**. Here's how your target is set,
 in plain words:
 
-> **Your target = what your accounts were already running, bumped up by how much accounts your size are
-> actually growing right now, plus a small stretch.**
+> **Your target = what it would cost today to sell last year's order, plus the same profit you made last year,
+> then adjusted by how much accounts your size are *really* growing now, plus a small stretch.**
+
+So the bar moves up with your costs: if a product costs more this year, just charging more to cover it isn't
+"growth" — you only grow by beating *today's cost + last year's profit*. (And the size-size adjustment uses the
+*real* growth of accounts your size, with cost increases already taken out, so a market-wide price rise doesn't
+count either way.)
 
 Worked example (one 4-week period):
 
@@ -51,15 +56,16 @@ your manager confirms **you** won it, it's released into your growth. Ordinary g
 right through.
 
 ## 3. New accounts
-- **You won it (self-acquired):** you earn a **share of everything it buys for its first ~3 months** —
-  bigger account, bigger payout. After that it joins your normal book.
-- **It was assigned to you:** you didn't win it, so there's no new-account share — but you still earn line
-  items for working it now, and once it has a few months of history it starts earning **growth** (measured
-  against its own recent run, since there's no last-year number yet).
+- **You won it (self-acquired):** when a new account lands, you earn a **flat bonus based on its size** —
+  small / medium / large. It's flat (not a % of sales) on purpose: landing a small shop and a big one take
+  similar effort, so the reward is for *winning* the account, not for how big it happens to be. After it lands,
+  it joins your normal book.
+- **It was assigned to you:** you didn't win it, so no landing bonus — but you still earn line items for working
+  it now, and once it has history it starts earning **growth**.
 
 ## What the words mean
-- **Self-acquired** (new) — you won it; earns the new-account share for ~1 quarter.
-- **Assigned** (new) — handed to you; line items now, then growth once it has history (no new-account share).
+- **Self-acquired** (new) — you won it; earns a flat landing bonus by size (small/medium/large).
+- **Assigned** (new) — handed to you; line items now, then growth once it has history (no landing bonus).
 - **Glide** — newer or just-woken-up; its bar **follows its own recent pace and slides up as it grows** (no fair
   last-year number to use yet).
 - **Mature** — a year or more of real history; growth measured against the **same 4 weeks last year** (smoothed
@@ -79,7 +85,7 @@ launches count, so a product that's just a re-coded size/brand of something you 
 ## The bottom line
 - **Sell** → a little per line.
 - **Grow** → beat a fair target that already accounts for the market and your account sizes.
-- **Land new** → a share of new business you win, for its first quarter.
+- **Land new** → a flat bonus by size for each new account you win.
 
 Everything is "you did this, so you earned this" — measured against a fair bar every 4 weeks,
 so your bonus reflects *your* performance, not luck or the market.

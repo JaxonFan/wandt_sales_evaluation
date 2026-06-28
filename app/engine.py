@@ -310,6 +310,23 @@ def _glide_levels(df, window_end, alpha, step_weeks=4, value_col="extended_price
     return levels
 
 
+def _cost_inflation_factor(df, recent_lo, recent_hi, base_lo, base_hi, lo_clamp=0.7, hi_clamp=1.5):
+    """Company cost-inflation index = LAST YEAR's basket repriced at TODAY's cost (matched-item Laspeyres):
+    sum(base_qty x recent_unit_cost) / sum(base_qty x base_unit_cost), over items sold in BOTH windows.
+    Used to lift the year-ago bar so passing higher costs through isn't counted as growth. 1.0 if too few matches."""
+    def unit_cost(lo, hi):
+        w = df[(df["document_date"] > lo) & (df["document_date"] <= hi)]
+        g = w.groupby("item_number").agg(c=("extended_cost", "sum"), q=("qty", "sum"))
+        g = g[g["q"] > 0]
+        return g.assign(u=g["c"] / g["q"])
+    rec, base = unit_cost(recent_lo, recent_hi), unit_cost(base_lo, base_hi)
+    m = base.join(rec["u"].rename("ru"), how="inner")            # items in both; base qty + both unit costs
+    if len(m) < 10:
+        return 1.0
+    den = (m["q"] * m["u"]).sum()
+    return float(min(max((m["q"] * m["ru"]).sum() / den, lo_clamp), hi_clamp)) if den > 0 else 1.0
+
+
 def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None,
                          self_acquired=frozenset(), exempt_accounts=frozenset(),
                          jump_released=frozenset(),
@@ -317,8 +334,10 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                          growth_window_weeks=13, size_band_count=5, growth_stretch_pct=0.03,
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
                          glide_alpha=0.35, jump_multiple=2.0, min_baseline_ratio=0.30,
-                         mature_smooth_weeks=4, sporadic_gap_weeks=4,
+                         mature_smooth_weeks=4, sporadic_gap_weeks=4, cost_inflation_weeks=13,
                          featured_new_products=frozenset(), new_product_weeks=26, new_product_attribution=0.20,
+                         acq_tier_small_max=15000, acq_tier_medium_max=65000,
+                         acq_flat_small=100, acq_flat_medium=200, acq_flat_large=300,
                          acq_revenue_pct=0.01, acq_ramp_periods=3):
     """Return dict(scorecards: per-rep DataFrame, accounts: per (rep, account) detail DataFrame).
 
@@ -375,20 +394,27 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     prior_q_df = df[(df["document_date"] > qstart - win) & (df["document_date"] <= qend - win)]   # for provisional
     account_recent_q = recent_q_df.groupby("account")[GV].sum()
     account_prior_q = prior_q_df.groupby("account")[GV].sum()
-    # mature baseline = the same 4 weeks last year (CNY-aligned). Optionally smoothed over +/- mature_smooth_weeks
-    # (default 0 = OFF, strict). NOTE: smoothing was found to be counterproductive — because the size-band
-    # de-trend reacts to the baseline distribution, RAISING baselines lowers the "typical move" factor and
-    # ends up INFLATING growth. So we compare to the exact same-weeks-last-year window (timing shifts on lumpy
-    # accounts are already handled by the glide/annual paths, which never look at last year).
+    # company cost-inflation factor (last year's basket repriced at today's cost) — lifts the year-ago bar so a
+    # rep isn't credited for merely passing higher costs through. One scalar over the trailing cost_inflation_weeks.
+    ci = pd.Timedelta(weeks=cost_inflation_weeks)
+    cost_factor = _cost_inflation_factor(df, qend - ci, qend, qend - ci - ONE_YEAR, qend - ONE_YEAR)
+
+    def cost_adjusted_baseline(lo, hi, scale=1.0):
+        # bar = "cover TODAY's cost of last year's basket and still clear last year's profit"
+        w = df[(df["document_date"] > lo) & (df["document_date"] <= hi)]
+        cost = w.groupby("account")["extended_cost"].sum() * scale
+        profit = w.groupby("account")["line_profit"].sum() * scale
+        return (cost * cost_factor).add(profit, fill_value=0.0)
+
+    # mature baseline = same weeks last year (CNY-aligned), cost-adjusted. mature_smooth_weeks=0 = exact window.
     smooth = pd.Timedelta(weeks=mature_smooth_weeks)
     base_lo, base_hi = qstart - offset - smooth, qend - offset + smooth
-    baseline_scale = win / (base_hi - base_lo)
-    account_baseline_q = df[(df["document_date"] > base_lo) & (df["document_date"] <= base_hi)].groupby("account")[GV].sum() * baseline_scale
+    account_baseline_q = cost_adjusted_baseline(base_lo, base_hi, win / (base_hi - base_lo))
 
     # --- ANNUAL windows for SPORADIC accounts (order less often than the 4-week window can see) ---
     year = pd.Timedelta(weeks=52)
     annual_recent = df[(df["document_date"] > qend - year) & (df["document_date"] <= qend)].groupby("account")[GV].sum()
-    annual_baseline = df[(df["document_date"] > qend - 2 * year) & (df["document_date"] <= qend - year)].groupby("account")[GV].sum()
+    annual_baseline = cost_adjusted_baseline(qend - 2 * year, qend - year)   # cost-adjusted prior-year
     annual_fraction = period_days / 364.0
     # sporadic = median order-gap longer than the measurement window -> empty 4-week windows -> use annual
     _dd = df.assign(_d=df["document_date"].dt.normalize()).drop_duplicates(["account", "_d"]).sort_values(["account", "_d"])
@@ -426,14 +452,22 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     iter_rows = pd.concat([reg_rows, spo_rows], ignore_index=True)
     items_by_rep_account = (current[current["associate"].isin(sales_team)]
                             .groupby(["associate", "account"])["extended_price"].size())
-    new_rev_by_rep = {}           # current-period new-account revenue per rep (for acquisition)
+    # acquisition: a FLAT bonus by the new account's size, paid ONCE when it lands, to its primary rep
+    # (rewards the effort of landing, not raw account size). Annualized size from the account's recent run-rate.
+    def _acq_flat(annual_rev):
+        return acq_flat_small if annual_rev < acq_tier_small_max else (
+            acq_flat_medium if annual_rev < acq_tier_medium_max else acq_flat_large)
+    annualize = 52.0 / growth_window_weeks
+    acq_by_rep = {a: 0.0 for a in sales_team}      # one-time flat per landing account
     new_count_by_rep = {}
-    for (rep, acc), grp in current[current["associate"].isin(sales_team)].groupby(["associate", "account"]):
-        st = account_status(acc)
-        if st in ("landing", "ramp"):
-            new_rev_by_rep[rep] = new_rev_by_rep.get(rep, 0.0) + grp["extended_price"].sum()
-            if st == "landing":
-                new_count_by_rep[rep] = new_count_by_rep.get(rep, 0) + 1
+    cur_team = current[current["associate"].isin(sales_team)]
+    for acc, grp in cur_team.groupby("account"):
+        if account_status(acc) != "landing":       # only the period it first lands (self-acquired)
+            continue
+        primary = grp.groupby("associate")["extended_price"].sum().idxmax()   # rep with the most of it
+        flat = _acq_flat(float(account_recent_q.get(acc, 0.0)) * annualize)
+        acq_by_rep[primary] = acq_by_rep.get(primary, 0.0) + flat
+        new_count_by_rep[primary] = new_count_by_rep.get(primary, 0) + 1
 
     account_rows = []
     rep_totals = {a: dict(items=0, growth_base_raw=0.0, growth_base=0.0, growth_target=0.0,
@@ -520,7 +554,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         contribution_bonus = items * item_rate
         # growth_actual/target are already period-prorated per account (regular 4-week + sporadic annual/13)
         growth_bonus = max(0.0, t["growth_actual"] - t["growth_target"]) * growth_payout_rate
-        acquisition_bonus = new_rev_by_rep.get(rep, 0.0) * acq_revenue_pct
+        acquisition_bonus = acq_by_rep.get(rep, 0.0)            # size-tiered flat, paid once when an account lands
         cards.append(dict(
             associate=rep, items_placed=items, contribution_bonus=contribution_bonus,
             growth_base_raw=t["growth_base_raw"], growth_base=t["growth_base"],

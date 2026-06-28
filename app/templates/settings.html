@@ -13,6 +13,7 @@
       <tr><td>Size bands (for the de-trend)</td><td class="num"><input name="size_band_count" type="number" step="1" value="{{ settings.size_band_count }}" style="width:90px"></td></tr>
       <tr><td>Stretch above the bar</td><td class="num"><input name="growth_stretch_pct" type="number" step="0.01" value="{{ settings.growth_stretch_pct }}" style="width:90px"> (e.g. 0.03 = +3%)</td></tr>
       <tr><td>Payout per $ above the bar</td><td class="num"><input name="growth_payout_rate" type="number" step="0.005" value="{{ settings.growth_payout_rate }}" style="width:90px"></td></tr>
+      <tr><td>Cost-inflation window (weeks)</td><td class="num"><input name="cost_inflation_weeks" type="number" step="1" value="{{ settings.cost_inflation_weeks }}" style="width:90px"> (bar covers today's cost of last year's basket + last year's profit)</td></tr>
       <tr><td>Glide catch-up speed (0–1)</td><td class="num"><input name="glide_alpha" type="number" step="0.05" value="{{ settings.glide_alpha }}" style="width:90px"> (~0.2 = about a quarter of memory; lower = rewards growth longer)</td></tr>
       <tr><td>Use last-year only if ≥ this × recent</td><td class="num"><input name="min_baseline_ratio" type="number" step="0.05" value="{{ settings.min_baseline_ratio }}" style="width:90px"> (else the glide bar; 0.8 = lean on glide)</td></tr>
       <tr><td>Flag a "big jump" at (× the bar)</td><td class="num"><input name="jump_multiple" type="number" step="0.5" value="{{ settings.jump_multiple }}" style="width:90px"> (2 = a doubling; the whole windfall is withheld for /jumps review)</td></tr>
@@ -21,8 +22,10 @@
       <tr><th colspan="2">New products</th></tr>
       <tr><td>"New" window (weeks after first sale)</td><td class="num"><input name="new_product_weeks" type="number" step="1" value="{{ settings.new_product_weeks }}" style="width:90px"></td></tr>
       <tr><td>Featured-new product growth attribution</td><td class="num"><input name="new_product_attribution" type="number" step="0.05" value="{{ settings.new_product_attribution }}" style="width:90px"> (0.20 = a featured new product counts 20% toward growth)</td></tr>
-      <tr><th colspan="2">Acquisition (new accounts)</th></tr>
-      <tr><td>Acquisition revenue share (% of a new account's revenue)</td><td class="num"><input name="acq_revenue_pct" type="number" step="0.005" value="{{ settings.acq_revenue_pct }}" style="width:90px"> (e.g. 0.01 = 1%)</td></tr>
+      <tr><th colspan="2">Acquisition (flat bonus by new-account size, paid once at landing)</th></tr>
+      <tr><td>Small new account: < $ / yr → flat $</td><td class="num"><input name="acq_tier_small_max" type="number" step="1000" value="{{ settings.acq_tier_small_max }}" style="width:90px"> → $<input name="acq_flat_small" type="number" step="25" value="{{ settings.acq_flat_small }}" style="width:70px"></td></tr>
+      <tr><td>Medium: < $ / yr → flat $</td><td class="num"><input name="acq_tier_medium_max" type="number" step="1000" value="{{ settings.acq_tier_medium_max }}" style="width:90px"> → $<input name="acq_flat_medium" type="number" step="25" value="{{ settings.acq_flat_medium }}" style="width:70px"></td></tr>
+      <tr><td>Large (≥ medium cutoff) → flat $</td><td class="num">$<input name="acq_flat_large" type="number" step="25" value="{{ settings.acq_flat_large }}" style="width:70px"></td></tr>
       <tr><td>"New" window (periods ≈ 1 quarter)</td><td class="num"><input name="acq_ramp_periods" type="number" step="1" value="{{ settings.acq_ramp_periods }}" style="width:90px"></td></tr>
       <tr><th colspan="2">Other</th></tr>
       <tr><td>Behavior-churn fine ($)</td><td class="num"><input name="fine_amount" type="number" step="50" value="{{ settings.fine_amount }}" style="width:90px"></td></tr>

@@ -21,9 +21,10 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=8 * 3600)
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count", "growth_stretch_pct",
-                  "growth_payout_rate", "glide_alpha", "min_baseline_ratio", "jump_multiple",
+                  "growth_payout_rate", "cost_inflation_weeks", "glide_alpha", "min_baseline_ratio", "jump_multiple",
                   "mature_smooth_weeks", "sporadic_gap_weeks", "new_product_weeks", "new_product_attribution",
-                  "acq_revenue_pct", "acq_ramp_periods", "fine_amount"]
+                  "acq_tier_small_max", "acq_tier_medium_max", "acq_flat_small", "acq_flat_medium", "acq_flat_large",
+                  "acq_ramp_periods", "fine_amount"]
 
 
 def current_user(request: Request, db: Session):

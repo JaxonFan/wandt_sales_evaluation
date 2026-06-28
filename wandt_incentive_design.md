@@ -53,10 +53,18 @@ contribution, so we don't pay twice. Key properties (each fixes a real failure m
 The stretch is a flat **+3%** for every rep (no FTE/hours scaling). Each rep's roster data (hours, salary,
 role) is a managed reference record on the **`/reps`** page, with a change history — it does not feed the bonus.
 
-### 3. Acquisition — an elevated 1% revenue share on **self-acquired** new accounts
-A new account (first order within the last ~quarter) pays the rep an **elevated 1% of its revenue**
-each period it's "new," then it graduates into the normal book. Simple, and bigger accounts pay
-more (it's a % of their revenue). No quota — a quiet period costs nothing.
+### Cost-protected growth bar (2026 update)
+Growth stays **revenue-based**, but the year-ago bar = **(last-year cost × a company cost-inflation factor)
++ last-year profit** — "cover today's cost of last year's basket and still clear last year's profit." The
+factor is a matched-item Laspeyres (same basket repriced at today's cost, ~1.06). The size-tier de-trend is
+computed **on this cost-adjusted baseline**, which strips cost OUT of the de-trend (its factor falls ~0.87→0.83
+= /1.06), so the de-trend reflects only the *real* market move while cost is handled precisely per account. Net:
+a rep who merely passes higher costs through earns ~0 growth. `growth_payout_rate` is **3%** (was 4.5%).
+
+### 3. Acquisition — a **size-tiered flat bonus**, paid once when a self-acquired account lands
+A self-acquired new account pays a **flat bonus by size** when it lands — **$100 / $200 / $300** for
+small / medium / large (by annualized revenue: <$15k / $15–65k / >$65k). Flat (not a % of revenue) so the
+reward is for *winning* the account, not its size — landing a small shop and a big one take similar effort.
 **Manager review (default = Assigned):** new accounts default to **Assigned** — they earn line items now
 and provisional growth once they have a quarter of history, but **no 1% share**. On the *New accounts*
 page the manager confirms the ones the rep actually **won** as **Self-acquired**, which releases the
