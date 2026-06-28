@@ -27,7 +27,7 @@ DEFAULTS = {
     # --- Growth (beat what accounts your size are doing, measured over the trailing 4 weeks) ---
     "growth_window_weeks": 4,      # measure growth on the trailing 4 weeks (= the pay period; jumps surface to review)
     "size_band_count": 5,          # group accounts into this many size bands for the "typical move" de-trend
-    "growth_payout_rate": 0.03,    # $ earned per sales-dollar above target (bar = cost-adjusted last-year x real-market move; no stretch)
+    "growth_payout_rate": 0.01,    # $ earned per sales-dollar above target (bar = cost-adjusted last-year x real-market move; no stretch)
     "cost_inflation_weeks": 13,    # window for the company cost-inflation factor (same basket repriced at today's cost); the bar = last-year cost x this factor + last-year profit, so passing cost through isn't "growth"
     "glide_alpha": 0.20,           # how fast a level-shifted account's bar catches up to its new run-rate (0..1); ~0.2 = a quarter of memory
     "min_baseline_ratio": 0.80,    # year-ago window must be >= this x recent to use it (else glide, not YoY) — high = lean on the smoother glide bar
@@ -42,9 +42,9 @@ DEFAULTS = {
     # --- Acquisition (new accounts: a flat bonus by size, paid once when the account lands) ---
     "acq_tier_small_max": 15000,   # annualized revenue < this -> "small" new account
     "acq_tier_medium_max": 65000,  # annualized revenue < this -> "medium"; >= this -> "large"
-    "acq_flat_small": 100,         # flat $ for landing a small new account (rewards the effort, not raw size)
-    "acq_flat_medium": 200,        # flat $ for a medium new account
-    "acq_flat_large": 300,         # flat $ for a large new account
+    "acq_flat_small": 50,          # flat $ for landing a small new account (rewards the effort, not raw size)
+    "acq_flat_medium": 100,        # flat $ for a medium new account
+    "acq_flat_large": 150,         # flat $ for a large new account
     "acq_revenue_pct": 0.01,       # (deprecated — acquisition is now a size-tiered flat amount, not a % of revenue)
     "acq_ramp_periods": 3,         # an account counts as "new" for ~1 quarter (3 periods), then graduates
 

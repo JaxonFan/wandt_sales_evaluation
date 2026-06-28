@@ -63,9 +63,11 @@ computed **on this cost-adjusted baseline**, which strips cost OUT of the de-tre
 a rep who merely passes higher costs through earns ~0 growth. `growth_payout_rate` is **3%** (was 4.5%).
 
 ### 3. Acquisition — a **size-tiered flat bonus**, paid once when a self-acquired account lands
-A self-acquired new account pays a **flat bonus by size** when it lands — **$100 / $200 / $300** for
-small / medium / large (by annualized revenue: <$15k / $15–65k / >$65k). Flat (not a % of revenue) so the
-reward is for *winning* the account, not its size — landing a small shop and a big one take similar effort.
+A self-acquired new account pays a **flat bonus by size** — **$50 / $100 / $150** for small / medium / large
+(by annualized revenue: <$15k / $15–65k / >$65k). Flat (not a % of revenue) so the reward is for *winning* the
+account, not its size. Paid **once at the ~quarter mark** (the period its age is `[2·period, 3·period)` after
+first order), sized by its **annualized first-quarter run-rate** (trailing-13wk × 4) — not a noisy first-period
+guess. One payment per account, to the rep with the most of its revenue over that quarter.
 **Manager review (default = Assigned):** new accounts default to **Assigned** — they earn line items now
 and provisional growth once they have a quarter of history, but **no 1% share**. On the *New accounts*
 page the manager confirms the ones the rep actually **won** as **Self-acquired**, which releases the
@@ -103,8 +105,8 @@ Each rep also gets a **"where am I vs my target"** dashboard: one target number,
 
 ## Dials the manager sets (all editable in the app)
 - Contribution: **$ per line item** (≈ $0.10)
-- Growth: measurement window (4 wks), # size bands (5), **cost-inflation window** (13 wks), **payout per $ above target** (3%), glide/jump dials
-- Acquisition: **size-tiered flat bonus** ($100/$200/$300 by size), "new" window (**1 quarter**)
+- Growth: measurement window (4 wks), # size bands (5), **cost-inflation window** (13 wks), **payout per $ above target** (1%), glide/jump dials
+- Acquisition: **size-tiered flat bonus** ($50/$100/$150 by size, paid at the quarter mark), "new" window (**1 quarter**)
 *(Calibrated so total bonus lands ~$3,000/period across the team; tune to your budget.)*
 
 *(Numbers are illustrative starting points — set them to land at your intended bonus budget, with acquisition weighted as you like.)*

@@ -452,22 +452,28 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     iter_rows = pd.concat([reg_rows, spo_rows], ignore_index=True)
     items_by_rep_account = (current[current["associate"].isin(sales_team)]
                             .groupby(["associate", "account"])["extended_price"].size())
-    # acquisition: a FLAT bonus by the new account's size, paid ONCE when it lands, to its primary rep
-    # (rewards the effort of landing, not raw account size). Annualized size from the account's recent run-rate.
+    # acquisition: a FLAT bonus by the new account's size (rewards landing, not raw size), paid ONCE at the
+    # ~quarter mark — once the account has a quarter of history we can size it by its real annualized run-rate
+    # (not a noisy first-period guess). Self-acquired accounts only.
     def _acq_flat(annual_rev):
         return acq_flat_small if annual_rev < acq_tier_small_max else (
             acq_flat_medium if annual_rev < acq_tier_medium_max else acq_flat_large)
-    annualize = 52.0 / growth_window_weeks
-    acq_by_rep = {a: 0.0 for a in sales_team}      # one-time flat per landing account
+    pay_lo, pay_hi = (acq_ramp_periods - 1) * period_days, acq_ramp_periods * period_days   # the quarter-mark period
+    qwin = pd.Timedelta(weeks=13)
+    acq_by_rep = {a: 0.0 for a in sales_team}
     new_count_by_rep = {}
-    cur_team = current[current["associate"].isin(sales_team)]
-    for acc, grp in cur_team.groupby("account"):
-        if account_status(acc) != "landing":       # only the period it first lands (self-acquired)
+    for acc in self_acquired:                       # manager-confirmed self-acquired only
+        seen = first_seen.get(acc)
+        if seen is None or not (pay_lo <= (period_end - seen).days < pay_hi):
+            continue                                # only the one period at its quarter mark
+        q = df[(df["account"] == acc) & (df["document_date"] > period_end - qwin) & (df["document_date"] <= period_end)]
+        qt = q[q["associate"].isin(sales_team)]
+        if not len(qt):
             continue
-        primary = grp.groupby("associate")["extended_price"].sum().idxmax()   # rep with the most of it
-        flat = _acq_flat(float(account_recent_q.get(acc, 0.0)) * annualize)
-        acq_by_rep[primary] = acq_by_rep.get(primary, 0.0) + flat
-        new_count_by_rep[primary] = new_count_by_rep.get(primary, 0) + 1
+        rep = qt.groupby("associate")["extended_price"].sum().idxmax()         # primary rep over the quarter
+        annual_rev = float(q["extended_price"].sum()) * (52.0 / 13.0)          # annualized first-quarter run-rate
+        acq_by_rep[rep] = acq_by_rep.get(rep, 0.0) + _acq_flat(annual_rev)
+        new_count_by_rep[rep] = new_count_by_rep.get(rep, 0) + 1
 
     account_rows = []
     rep_totals = {a: dict(items=0, growth_base_raw=0.0, growth_base=0.0, growth_target=0.0,

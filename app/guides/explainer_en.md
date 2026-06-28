@@ -55,10 +55,10 @@ your manager confirms **you** won it, it's released into your growth. Ordinary g
 right through.
 
 ## 3. New accounts
-- **You won it (self-acquired):** when a new account lands, you earn a **flat bonus based on its size** —
-  small / medium / large. It's flat (not a % of sales) on purpose: landing a small shop and a big one take
-  similar effort, so the reward is for *winning* the account, not for how big it happens to be. After it lands,
-  it joins your normal book.
+- **You won it (self-acquired):** you earn a **flat bonus based on its size** — small **$50** / medium **$100** /
+  large **$150**. It's flat (not a % of sales) on purpose: landing a small shop and a big one take similar
+  effort, so the reward is for *winning* the account, not how big it is. It's paid **once the account has been
+  around about a quarter** — long enough to size it by its real run-rate, not a lucky first order.
 - **It was assigned to you:** you didn't win it, so no landing bonus — but you still earn line items for working
   it now, and once it has history it starts earning **growth**.
 
