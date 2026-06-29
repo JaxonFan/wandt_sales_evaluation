@@ -1,0 +1,34 @@
+{% extends "base.html" %}{% block body %}
+<div class="card">
+  <h2>Annual review — infrequent accounts</h2>
+  <p class="hint">Through {{ data_through }} · rolling <b>trailing 12 months vs the prior 12 months</b>.
+    These accounts order too infrequently for a 4-week measure (median gap over the sporadic cutoff), so they're
+    pulled out of the per-period scorecard and reviewed <b>once a year</b> here. Growth = beating the cost-adjusted
+    prior-year bar; the manager sets the annual award. Only line items &amp; acquisition for these accounts stay in
+    the per-period bonus. Click a rep to see their accounts.</p>
+  {% if cards %}
+  <table>
+    <thead><tr><th>Rep</th><th class="num">Accounts</th>
+      <th class="num">Annual sales (12 mo)</th><th class="num">Annual target</th><th class="num">Growth $</th>
+      <th class="num">Suggested</th><th class="num">Award</th></tr></thead>
+    <tbody>
+    {% for c in cards %}
+      <tr class="click" onclick="location='/annual/{{ c.associate }}'">
+        <td><strong>{{ c.associate }}</strong></td>
+        <td class="num">{{ c.annual_accounts }}</td>
+        <td class="num {{ 'pos' if c.annual_actual>=c.annual_target else 'neg' }}">${{ '{:,.0f}'.format(c.annual_actual) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(c.annual_target) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(c.annual_growth_bonus) }}</td>
+        <td class="num"><strong>${{ '{:,.0f}'.format(c.annual_growth_bonus) }}</strong></td>
+        <td class="num">{% if c.associate in awards %}${{ '%.0f'|format(awards[c.associate].award_amount) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="hint" style="margin-top:10px">Suggested = annual growth bonus (a fair starting point); the manager sets the
+    final annual award on each rep's page. Paid once a year, separate from the per-period bonus.</p>
+  {% else %}
+  <p class="hint">No infrequent accounts to review yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

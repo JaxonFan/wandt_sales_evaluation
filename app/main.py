@@ -107,6 +107,63 @@ def rep_goal_view(name: str, request: Request, db: Session = Depends(get_db), p:
     return templates.TemplateResponse("me.html", {"request": request, "user": user, "g": goal, "viewer": "manager"})
 
 
+# ---------- Annual Review track (infrequent accounts, rolling trailing 12 months; paid once a year) ----------
+@app.get("/annual", response_class=HTMLResponse)
+def annual(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if user.role == "rep":
+        return RedirectResponse("/me/annual", status_code=303)
+    res, as_of, s = service.run_annual_review(db)
+    cards = res["scorecards"]
+    cards = (cards[cards["annual_accounts"] > 0].sort_values("annual_growth_bonus", ascending=False)
+             .to_dict("records")) if len(cards) else []
+    awards = {a.associate: a for a in db.query(M.AnnualAward)}
+    return templates.TemplateResponse("annual.html", {
+        "request": request, "user": user, "cards": cards, "awards": awards, "data_through": as_of})
+
+
+@app.get("/annual/{name}", response_class=HTMLResponse)
+def annual_rep(name: str, request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login" if not user else "/me/annual", status_code=303)
+    goal = service.compute_annual_goal(db, name)
+    award = db.query(M.AnnualAward).filter(M.AnnualAward.associate == name).first()
+    return templates.TemplateResponse("annual_me.html", {"request": request, "user": user, "g": goal, "viewer": "manager", "award": award})
+
+
+@app.get("/me/annual", response_class=HTMLResponse)
+def my_annual(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if user.role == "rep" and not user.associate_name:
+        return RedirectResponse("/logout", status_code=303)
+    name = user.associate_name if user.role == "rep" else None
+    if not name:  # a manager hitting /me/annual -> the team annual page
+        return RedirectResponse("/annual", status_code=303)
+    goal = service.compute_annual_goal(db, name)
+    return templates.TemplateResponse("annual_me.html", {"request": request, "user": user, "g": goal, "viewer": "self"})
+
+
+@app.post("/annual/award")
+def set_annual_award(request: Request, associate: str = Form(...), award_amount: float = Form(0),
+                     note: str = Form(""), db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    aw = db.query(M.AnnualAward).filter(M.AnnualAward.associate == associate).first()
+    if not aw:
+        aw = M.AnnualAward(associate=associate); db.add(aw)
+    aw.award_amount, aw.note = award_amount, note
+    aw.user_id, aw.created_at, aw.as_of = user.user_id, dt.datetime.utcnow(), dt.date.today()
+    db.commit()
+    audit(db, user, "set_annual_award", f"associate:{associate}", {"award": award_amount})
+    return RedirectResponse("/annual", status_code=303)
+
+
 # ---------- team overview (manager) ----------
 @app.get("/", response_class=HTMLResponse)
 def overview(request: Request, db: Session = Depends(get_db), p: int = None):
@@ -139,7 +196,7 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
     if len(sub):
         for _, r in sub.iterrows():
             target = r["account_target"]
-            sales = float(r["rep_quarter_sales"])               # trailing-quarter sales
+            sales = float(r["rep_quarter_sales"])               # trailing 4-week sales (regular accounts only)
             perf = ((sales / target - 1) * 100) if (target and pd.notna(target)) else None
             rows.append(dict(account=r["account"], name=names.get(r["account"], r["account"]),
                              sales=round(sales), counted=round(sales - float(r["held_back"])),

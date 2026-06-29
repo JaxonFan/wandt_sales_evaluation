@@ -1,7 +1,7 @@
 """Bridge between the DB and the pure engine: load sales lines, settings, overrides; run scorecards."""
 import pandas as pd
 from sqlalchemy import func
-from .engine import compute_period_bonus, day_of_week_weights, selling_day_capacity
+from .engine import compute_period_bonus, compute_annual_review, day_of_week_weights, selling_day_capacity
 from . import models as M
 from .config import DEFAULTS, SALES_ROLES
 
@@ -291,6 +291,49 @@ def run_period_bonus(db, idx=None):
                                featured_new_products=featured_new_product_set(db), **_dials(s))
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of
+
+
+def annual_exempt_set(db):
+    """Accounts the manager exempted in ANY period -> removed from the annual growth track (closed/collapsed).
+    The annual track is rolling (not per-period), so an exemption applies regardless of when it was set."""
+    return {a.account for a in db.query(M.ManagerAction).filter(M.ManagerAction.status == "exempt")}
+
+
+def run_annual_review(db):
+    """Compute the Annual Review track (sporadic accounts, rolling trailing 12 months vs prior 12 months).
+    Rolling / as-of the latest data date — independent of the 4-week period grid. Returns (res, as_of, settings)."""
+    s = get_settings(db)
+    _, idx_cur0, _ = period_grid(db, s["window_weeks"])
+    period, as_of, *_ = resolve_period(db, idx_cur0, s["window_weeks"])
+    df = _lines_cached(db, _data_version(db))
+    _, _, team = attribution_maps(db)
+    res = compute_annual_review(df, as_of, team,
+                                exempt_accounts=annual_exempt_set(db),
+                                featured_new_products=featured_new_product_set(db), **_dials(s))
+    return res, as_of, s
+
+
+def compute_annual_goal(db, associate):
+    """Rep-facing Annual Review payload: this rep's infrequent accounts on a rolling trailing-12-month basis,
+    with the annual growth bonus they're earning. Mirrors compute_rep_goal but on the annual cadence."""
+    res, as_of, s = run_annual_review(db)
+    card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == associate), None)
+    names = customer_names(db)
+    accounts = res["accounts"]
+    rows = []
+    if len(accounts):
+        sub = accounts[accounts["associate"] == associate]
+        for _, r in sub.iterrows():
+            rows.append({"customer": names.get(r["account"], r["account"]), "status": r["status"],
+                         "sales": int(r["sales"]), "target": (int(r["target"]) if pd.notna(r["target"]) else None),
+                         "perf": (int(r["perf"]) if pd.notna(r["perf"]) else None)})
+        rows.sort(key=lambda x: -(x["sales"] or 0))
+    actual = float(card["annual_actual"]) if card else 0.0
+    target = float(card["annual_target"]) if card else 0.0
+    bonus = float(card["annual_growth_bonus"]) if card else 0.0
+    return {"associate": associate, "as_of": as_of, "card": card, "rows": rows,
+            "actual": actual, "target": target, "bonus": bonus,
+            "pct": (actual / target * 100) if target else 0.0}
 
 
 def compute_rep_goal(db, associate, idx=None):

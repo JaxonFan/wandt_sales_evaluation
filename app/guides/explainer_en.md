@@ -69,8 +69,10 @@ right through.
   last-year number to use yet).
 - **Mature** — a year or more of real history; growth measured against the **same 4 weeks last year** (smoothed
   so a shift in *when* an account orders doesn't fake growth), vs accounts your size.
-- **Annual** — orders only a few times a year; measured over a **full trailing year** instead of 4 weeks, so a big
-  once-a-quarter order isn't mistaken for a sudden jump.
+- **Annual** — orders too infrequently for a 4-week measure (only a few times a year). These accounts are pulled
+  **out of your per-period bonus** and reviewed on the separate **Annual** tab, measured over the **last 12 months
+  vs the 12 before** and **paid once a year** — so a big once-a-quarter order isn't mistaken for a sudden jump, and
+  you don't see lumpy month-to-month swings from them. You still earn **line items** on them every period as usual.
 - **Provisional** — has some history but not a usable last-year window; measured against its own prior weeks.
 - **Big jump** — did 2×+ its usual level in 4 weeks; the windfall is **held back for the manager to investigate**
   (released if it's confirmed your win).

@@ -1,0 +1,62 @@
+{% extends "base.html" %}{% block body %}
+{% set c = g.card %}
+{% if viewer == 'manager' %}<p style="font-size:13px"><a href="/annual" style="color:var(--blue);text-decoration:none">‹ Annual review</a></p>{% endif %}
+
+<div class="card">
+  <h2>{{ g.associate }} · annual review</h2>
+  <p class="hint" style="margin:2px 0 0">Through {{ g.as_of }} · your <b>infrequent accounts</b>, measured over the
+    <b>last 12 months vs the 12 before</b>. These order too rarely for a 4-week measure, so they're reviewed and paid
+    here <b>once a year</b> — separate from your per-period bonus (where you still earn line items now).</p>
+</div>
+
+<div class="card">
+  <h2>Grow your infrequent accounts</h2>
+  {% set pct = g.pct if g.pct < 100 else 100 %}
+  <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
+    <span>Last 12 months <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
+    <span>Target <b>${{ '{:,.0f}'.format(g.target) }}</b></span>
+  </div>
+  <div style="background:#eef2f6;border-radius:10px;height:22px;overflow:hidden;border:1px solid var(--line)">
+    <div style="width:{{ pct }}%;height:100%;background:{{ 'var(--green)' if g.actual>=g.target else 'var(--amber)' }}"></div>
+  </div>
+  <div style="margin-top:8px;font-size:13.5px">
+    {{ '%.0f'|format(g.pct) }}% of target ·
+    {% if g.actual>=g.target %}<span class="pos">above target — earning annual growth bonus on the excess</span>
+    {% else %}<span class="neg">below target — keep going</span>{% endif %}
+  </div>
+  <p class="hint" style="margin-top:8px">Target = today's cost of last year's orders + the same profit, then moved by
+    how much accounts this size really grew. Annual growth bonus on the excess:
+    <b>${{ '{:,.0f}'.format(g.bonus) }}</b> (suggested; your manager sets the final annual award).</p>
+</div>
+
+{% if viewer == 'manager' %}
+<div class="card">
+  <h2>Annual award</h2>
+  <form method="post" action="/annual/award" class="ov-form">
+    <input type="hidden" name="associate" value="{{ g.associate }}">
+    Award $<input name="award_amount" type="number" step="50" value="{{ award.award_amount|round(0)|int if award else (g.bonus|round(0)|int) }}" style="width:100px">
+    &nbsp; Note <input name="note" value="{{ award.note or '' if award else '' }}" style="width:240px">
+    <button type="submit">Save</button>
+  </form>
+</div>
+{% endif %}
+
+{% if g.rows %}
+<div class="card">
+  <h2>Your infrequent accounts</h2>
+  <table><thead><tr><th>Customer</th><th class="num">Sales (12 mo)</th><th class="num">Target</th><th class="num">vs target</th><th>Status</th></tr></thead><tbody>
+    {% for r in g.rows %}<tr>
+      <td>{{ r.customer }}</td>
+      <td class="num">${{ '{:,}'.format(r.sales) }}</td>
+      <td class="num">{% if r.target is not none %}${{ '{:,}'.format(r.target) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+      <td class="num {{ 'pos' if (r.perf or 0)>=0 else 'neg' }}">{% if r.perf is not none %}{{ '%+d'|format(r.perf) }}%{% else %}—{% endif %}</td>
+      <td>{% if r.status=='exempt' %}<span class="badge b-ramp">exempt</span>
+          {% elif r.status=='no_basis' %}<span class="mut">line items only</span>
+          {% else %}<span class="badge b-new">annual</span>{% endif %}</td>
+    </tr>{% endfor %}
+  </tbody></table>
+</div>
+{% else %}
+<div class="card"><p class="hint">No infrequent accounts attributed to you right now.</p></div>
+{% endif %}
+{% endblock %}

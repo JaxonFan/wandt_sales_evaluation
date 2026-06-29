@@ -143,6 +143,20 @@ class Award(Base):
     __table_args__ = (UniqueConstraint("period_id", "associate"),)
 
 
+class AnnualAward(Base):
+    """The once-a-year manager award for a rep's infrequent ("annual") accounts (the Annual Review track).
+    Keyed by associate only (one current annual award per rep); a new table so it adds via create_all with
+    no ALTER on the live RDS."""
+    __tablename__ = "annual_awards"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    associate = Column(String, unique=True)
+    award_amount = Column(Float, default=0)
+    note = Column(String)
+    as_of = Column(Date)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class Setting(Base):
     __tablename__ = "settings"
     key = Column(String, primary_key=True)

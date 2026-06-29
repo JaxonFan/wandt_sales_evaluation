@@ -40,8 +40,9 @@
 
 <div class="card">
   <h2>Per-account this period</h2>
-  <p class="hint" style="margin:0 0 8px">Sales/target are the trailing <b>4 weeks</b>. See the
-    <a href="/guide" style="color:var(--blue)">guide</a> for what each status means.
+  <p class="hint" style="margin:0 0 8px">Sales/target are the trailing <b>4 weeks</b>. Infrequent accounts
+    (ordering too rarely for a 4-week measure) are on the <a href="/annual/{{ name }}" style="color:var(--blue)">Annual
+    review</a> tab instead. See the <a href="/guide" style="color:var(--blue)">guide</a> for what each status means.
     <span class="badge b-new">self-acquired</span> <span class="badge b-ramp">ramp</span>
     <span class="badge" style="background:#eee;color:#555">assigned</span>
     <span class="badge b-ok">mature</span> <span class="badge b-prov">provisional</span>
@@ -64,7 +65,6 @@
             {% elif r.status=='assigned' %}<span class="badge" style="background:#eee;color:#555">assigned</span>
             {% elif r.status=='provisional' %}<span class="badge b-prov">provisional</span>
             {% elif r.status=='glide' %}<span class="badge" style="background:#efe9fb;color:#6b46c1">glide</span>
-            {% elif r.status=='annual' %}<span class="badge" style="background:var(--blue-bg);color:var(--blue)" title="orders too infrequently for a 4-week measure; scored on a trailing year">annual</span>
             {% elif r.status=='mature' %}<span class="badge b-ok">growth</span>
             {% elif r.status=='exempt' %}<span class="badge b-ramp">exempt</span>
             {% else %}<span class="mut">line items</span>{% endif %}</td>

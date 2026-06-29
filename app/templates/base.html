@@ -47,11 +47,11 @@
   <span class="brand">W&T Sales Scorecard</span>
   {% if user.role != 'rep' %}
   <nav>
-    <a href="/">Team</a><a href="/acquisitions">New accounts</a><a href="/jumps">Big jumps</a><a href="/constrained">Limited stock</a>
+    <a href="/">Team</a><a href="/annual">Annual review</a><a href="/acquisitions">New accounts</a><a href="/jumps">Big jumps</a><a href="/constrained">Limited stock</a>
     <a href="/closures">Closures</a><a href="/products">New products</a><a href="/reps">Reps</a><a href="/guide">Guide</a><a href="/upload">Import</a><a href="/settings">Settings</a><a href="/export.csv">Export</a>
   </nav>
   {% else %}
-  <nav><a href="/me">My goal</a><a href="/guide">How my bonus works</a></nav>
+  <nav><a href="/me">My goal</a><a href="/me/annual">Annual</a><a href="/guide">How my bonus works</a></nav>
   {% endif %}
   <span class="right">{{ user.username }} ({{ user.role }}) · <a href="/logout" style="color:#cdd9e8">log out</a></span>
 </header>
