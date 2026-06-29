@@ -503,15 +503,21 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         t = rep_totals[rep]
         target_for_rep = None
         jump = False
+        jump_bar = jump_ratio = None
         held = windfall = 0.0
         if raw_for_rep is not None:
             base_for_rep = raw_for_rep * lift                     # baseline x size/market lift
             target_for_rep = base_for_rep                       # bar = cost-adjusted last-year (cost+profit) x real-market move; no stretch hurdle
-            # jump review: an account that DOUBLED (recent >= jump_multiple x its bar, i.e. 100%+ over) is the
-            # anomaly itself — a 10x is usually the customer growing, not the rep. The whole over-bar amount is
-            # withheld for the manager to investigate (no dollar floor); ordinary growth pays through; the
-            # manager releases the full windfall if the rep genuinely won it.
-            jump = target_for_rep > BASELINE_MIN and rep_q >= target_for_rep * jump_multiple
+            # jump review: an account that DOUBLED its NORMAL LEVEL (recent >= jump_multiple x normal) is the
+            # anomaly itself — a 10x is usually the customer growing, not the rep. "Normal level" is the HIGHER of
+            # the account's recent run-rate and its seasonally-adjusted year-ago bar, so a weak year-ago comp can't
+            # flag an account that's merely at/below its own pace. The over-GROWTH-bar amount is withheld for the
+            # manager to investigate (no dollar floor); ordinary growth pays through; released if the rep won it.
+            jump_bar = max(target_for_rep, established * work_share)   # higher of seasonal year-ago bar and recent pace
+            jump = target_for_rep > BASELINE_MIN and jump_bar > 0 and rep_q >= jump_multiple * jump_bar
+            jump_ratio = round(rep_q / jump_bar, 1) if jump_bar > 0 else None
+            # account-level "normal" for display (work_share cancels, so account_q/jump_bar_acct == jump_ratio)
+            jump_bar = jump_bar / work_share if work_share else jump_bar
             if jump and not released:
                 effective_recent = target_for_rep               # withhold ALL over-bar growth pending review
                 windfall = held = rep_q - target_for_rep
@@ -530,7 +536,9 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                                  account_target=target_for_rep, capped=jump, held_back=round(held),
                                  windfall=round(windfall if raw_for_rep is not None else 0.0),
                                  released=released, account_recent=round(account_q),
-                                 established=round(established)))
+                                 established=round(established),
+                                 jump_bar=(round(jump_bar) if jump_bar is not None else None),
+                                 jump_ratio=jump_ratio))
 
     # contribution (line items, current period) per rep
     items_per_rep = items_by_rep_account.groupby(level=0).sum().to_dict() if len(items_by_rep_account) else {}

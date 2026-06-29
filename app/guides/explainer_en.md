@@ -74,8 +74,9 @@ right through.
   vs the 12 before** and **paid once a year** — so a big once-a-quarter order isn't mistaken for a sudden jump, and
   you don't see lumpy month-to-month swings from them. You still earn **line items** on them every period as usual.
 - **Provisional** — has some history but not a usable last-year window; measured against its own prior weeks.
-- **Big jump** — did 2×+ its usual level in 4 weeks; the windfall is **held back for the manager to investigate**
-  (released if it's confirmed your win).
+- **Big jump** — did 2×+ its **normal level** in 4 weeks (the higher of its recent pace and its
+  seasonally-adjusted year-ago, so a weak year-ago comp doesn't false-flag a normal month); the windfall is
+  **held back for the manager to investigate** (released if it's confirmed your win).
 - **Exempt** — the manager set an account aside (e.g. it closed) so it doesn't drag your growth down.
 
 ## New products
