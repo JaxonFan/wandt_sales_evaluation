@@ -62,12 +62,14 @@ Blue/green rollout takes a few minutes; the URL stays up throughout.
 
 ## Operational notes
 - **Cost:** ~$30–40/month (1 always-on Fargate task + ALB + RDS t4g.micro + small data transfer).
-- **Metric:** **revenue**-based, paid per 4-week period as three direct pieces — Contribution (line items),
-  Growth (revenue above a per-account bar: the same 4 weeks last year × size-band de-trend for established
-  accounts, or the account's own adaptive **glide** run-rate for newer/level-shifted ones), and Acquisition
-  (1% of a self-acquired new account's revenue, ~1 quarter). A single-period **doubling** (≥2× its bar) is
-  withheld for the manager's `/jumps` review. Scope = the 5 sales reps (managers/inactive excluded).
-  See `wandt_incentive_design.md`.
+- **Metric:** **revenue**-based, paid per 4-week period as three direct pieces — Contribution (line items ×
+  $0.10), Growth (1% of revenue above a per-account bar: cost-adjusted same 4 weeks last year × size-band
+  de-trend for established accounts, or the account's adaptive **glide** run-rate for newer/level-shifted ones),
+  and Acquisition (a **flat $50/$100/$150 by size**, paid once at the ~quarter mark, for a self-acquired new
+  account). A single-period **doubling** (≥2× its normal level) is withheld for the manager's `/jumps` review;
+  **growth doesn't count if the account's quarter is down >5% YoY** (quarter-health gate); and **infrequent
+  accounts (median order gap ≥ 4 weeks) are scored on a rolling annual track** (12-mo-vs-prior, paid once a
+  year). Scope = the 5 sales reps (managers/inactive excluded). See `wandt_incentive_design.md`.
 - **Performance:** each page recomputes the engine over ~102k item-level lines (cached per period until import/override).
 - **Security TODO:** rotate the demo logins; RDS is SG-gated but `publicly-accessible` — to drop its public IP:
   `aws rds modify-db-instance --db-instance-identifier wandt-db --no-publicly-accessible --apply-immediately`.

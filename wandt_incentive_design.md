@@ -39,17 +39,22 @@ contribution, so we don't pay twice. Key properties (each fixes a real failure m
   (≈ 0.80) governs the handful of accounts with a genuinely representative same-4-weeks-last-year window, which
   still use **last-year × size-band** instead. This fixed both the +3000% near-zero-baseline artifact *and* the
   "overpay an elevated account for a year" problem of pure year-over-year.
-- **Jump review (no dollar floor).** A single-period **doubling** — `recent ≥ jump_multiple`(2)`× its bar`, i.e.
-  100%+ over — is itself the anomaly (a 10× is almost always the *customer* expanding, not the rep), so the
-  **entire over-bar amount is withheld** and the account is put on the manager's `/jumps` page. **Any** doubling
-  qualifies regardless of size (no minimum), and nothing is silently withheld — only flagged accounts are held.
-  The manager releases the windfall in full if the rep genuinely won it; ordinary (sub-double) growth pays through.
+- **Jump review (no dollar floor).** A single-period **doubling** — `recent ≥ 2× its normal level`, where
+  **normal level = the higher of** the account's recent run-rate **and** its seasonally-adjusted year-ago bar
+  (so a weak year-ago comp can't false-flag a normal month) — is itself the anomaly (a 10× is almost always the
+  *customer* expanding, not the rep), so the **entire over-bar amount is withheld** and the account is put on the
+  manager's `/jumps` page. The manager releases the windfall in full if the rep genuinely won it; ordinary
+  (sub-double) growth pays through. The `/jumps` page shows a this-year-vs-last-year **chart**, a **12-mo-vs-prior**
+  figure, and a *"likely timing"* badge when the swing is just a recurring order that shifted weeks.
 - **Lunar New Year:** any period within ~3 weeks of CNY is auto-aligned to *last year's* CNY (a moving
   holiday) so the spike lines up on both sides.
 - **Accounts without a full year of history** are never compared to a fake $0 baseline (which used to
   double-pay a new account as acquisition *and* "growth"). New accounts earn **acquisition** for their
   first quarter; then **provisional** (their own prior quarter × the company's seasonal swing) until they
-  have a year; then year-over-year. Too-sparse accounts earn line-item contribution only.
+  have a year; then year-over-year. Accounts that order too infrequently for a 4-week measure (median gap ≥ 4
+  weeks) are scored on the **Annual Review** track (rolling 12 months vs. the prior 12, paid once a year), and
+  still earn line-item contribution each period. A *"new (<1 yr)"* tag marks accounts with no full year of
+  history so a $0 prior-year reads as new, not an error.
 There is **no stretch hurdle** — once a rep covers today's cost and last year's profit, every dollar above earns.
 Each rep's roster data (hours, salary, role) is a managed reference record on the **`/reps`** page, with a change
 history — it does not feed the bonus.
@@ -60,7 +65,20 @@ Growth stays **revenue-based**, but the year-ago bar = **(last-year cost × a co
 factor is a matched-item Laspeyres (same basket repriced at today's cost, ~1.06). The size-tier de-trend is
 computed **on this cost-adjusted baseline**, which strips cost OUT of the de-trend (its factor falls ~0.87→0.83
 = /1.06), so the de-trend reflects only the *real* market move while cost is handled precisely per account. Net:
-a rep who merely passes higher costs through earns ~0 growth. `growth_payout_rate` is **3%** (was 4.5%).
+a rep who merely passes higher costs through earns ~0 growth. `growth_payout_rate` is **1%** of every dollar above the bar.
+
+### Quarter-health gate (2026 update)
+A 4-week pop doesn't pay if the account is **shrinking over the bigger picture**. If an account's **trailing 13
+weeks are below 95% of the same 13 weeks last year** (and it has a real prior-year quarter, > $3k), its growth
+**doesn't count** this period — it's dropped automatically (not a manager-review item). The rep sees it on their
+page under *"growth not counted,"* the manager sees a *"qtr down"* badge. So growth only pays when the account
+is genuinely healthy, not when a one-off order lands on a declining account.
+
+### Annual vs. periodic accounts (2026 update)
+An account whose **median order gap is ≥ 4 weeks** (it orders monthly or sparser) can't be measured fairly in a
+4-week window — its order lands in different weeks each year. Those accounts are pulled onto a separate **Annual
+Review** track: **rolling 12 months vs. the prior 12 months, paid once a year**, off the per-period flow. They
+still earn line-item contribution every period. Everything else is scored per 4-week period as below.
 
 ### 3. Acquisition — a **size-tiered flat bonus**, paid once when a self-acquired account lands
 A self-acquired new account pays a **flat bonus by size** — **$50 / $100 / $150** for small / medium / large
@@ -69,9 +87,9 @@ account, not its size. Paid **once at the ~quarter mark** (the period its age is
 first order), sized by its **annualized first-quarter run-rate** (trailing-13wk × 4) — not a noisy first-period
 guess. One payment per account, to the rep with the most of its revenue over that quarter.
 **Manager review (default = Assigned):** new accounts default to **Assigned** — they earn line items now
-and provisional growth once they have a quarter of history, but **no 1% share**. On the *New accounts*
+and provisional growth once they have a quarter of history, but **no landing bonus**. On the *New accounts*
 page the manager confirms the ones the rep actually **won** as **Self-acquired**, which releases the
-1% revenue share for the account's first ~quarter. (Assigned ≠ self-acquired: no acquisition credit.)
+**flat landing bonus** ($50 / $100 / $150 by size). (Assigned ≠ self-acquired: no acquisition credit.)
 
 **Exempt:** the manager can mark any account **Exempt** for a period (e.g. it closed or collapsed). Exempt
 removes it from **Growth only** — its drop no longer drags the rep's growth down — while line items and any
@@ -85,7 +103,7 @@ A rep — this period
    Your bonus:
      Sell line items   ~800 lines × $0.10                     = $80
      Grow your book    beating your $590k target              = $1,350
-     New accounts      1% revenue share on new accounts       = $120
+     New accounts      flat bonus by size (1 landed, medium)  = $100
      ─────────────────────────────────────────────────────────
      Total                                                    ≈ $1,550
 ```
@@ -112,7 +130,14 @@ Each rep also gets a **"where am I vs my target"** dashboard: one target number,
 *(Numbers are illustrative starting points — set them to land at your intended bonus budget, with acquisition weighted as you like.)*
 
 ## One honest trade-off
-To keep it understandable, growth is measured against **your own last year**, not adjusted for market-wide swings. If the whole market booms or slumps, the manager nudges the growth-% dials that period rather than the system doing it automatically. We can layer a market adjustment back in later if it's worth the added complexity.
+Growth is measured over a short **4-week window**, which keeps it intuitive ("you beat your bar this month") and
+surfaces one-time jumps to the manager — but a 4-week window is **lumpy** for accounts that order irregularly.
+We handle that without smoothing the number itself: the **size-band de-trend** already removes market-wide
+swings (you earn for beating accounts your size, so a boom or slump moves your bar with it); the **jump review**
+withholds one-time spikes; the **timing badge + chart** flag a shifted order; the **quarter-health gate** stops
+a pop from paying on a shrinking account; and genuinely infrequent accounts move to the **annual track**. The
+residual cost — small period-to-period bounce on the smallest accounts — is intentional, and the manager always
+sets the final award.
 
 ## Lineage
 This mirrors how Sysco / US Foods pay — a base on the book, an accelerator on growth, an elevated rate on new accounts during a ramp, and a salary guarantee for new reps — adapted to W&T (margins are set centrally, so we work in sales dollars, and "items placed" stands in for the distributors' drop-size / penetration metrics).
