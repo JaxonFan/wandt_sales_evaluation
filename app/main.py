@@ -399,11 +399,12 @@ def jumps_page(request: Request, db: Session = Depends(get_db), p: int = None):
     if len(accounts):
         flagged = accounts[accounts["capped"] == True]
         for _, r in flagged.sort_values("windfall", ascending=False).iterrows():
+            ar = int(r["account_recent"])                                   # whole-account 4wk sales
+            rs = round(float(r["rep_quarter_sales"]))                       # this rep's slice
+            nm = int(r["jump_bar"]) if pd.notna(r["jump_bar"]) else 0       # account-level normal
+            rep_bar = round(nm * rs / ar) if ar else 0                      # this rep's slice of the bar (rs/rep_bar == jump ×)
             rows.append(dict(account=r["account"], customer=names.get(r["account"], r["account"]),
-                             associate=r["associate"],
-                             account_recent=int(r["account_recent"]),       # whole-account 4wk sales
-                             rep_share=round(float(r["rep_quarter_sales"])), # this rep's slice
-                             normal=int(r["jump_bar"]) if pd.notna(r["jump_bar"]) else 0,
+                             associate=r["associate"], account_recent=ar, rep_share=rs, normal=nm, rep_bar=rep_bar,
                              ratio=(float(r["jump_ratio"]) if pd.notna(r["jump_ratio"]) else None),
                              q_recent=int(r["q_recent"]), q_prior=int(r["q_prior"]), timing=bool(r["timing"]),
                              windfall=int(r["windfall"]), released=bool(r["released"]),

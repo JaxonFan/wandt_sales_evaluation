@@ -6,7 +6,9 @@
     recent pace and its seasonally-adjusted year-ago — has its windfall <b>withheld by default</b> (a 10× is
     usually the customer growing their own business, not the rep's win). Confirm <b>Rep won it</b> to release
     the windfall into growth, or leave it <b>Customer-driven</b> to keep it withheld. The <b>Jump ×</b> is the
-    whole-account multiple that triggered the flag; <b>Rep share</b> is this rep's slice of it. Smaller,
+    whole-account multiple that triggered the flag; <b>Account 4 wks</b> / <b>Normal level</b> are account-level,
+    while <b>Rep share</b> (sold vs that rep's own slice of the bar) and <b>Windfall held</b> are each rep's
+    proportional slice — which is why the × is the same for everyone who touched it. Smaller,
     ordinary overage isn't listed here — it pays automatically.
     A <span class="badge" style="background:var(--blue-bg);color:var(--blue)">likely timing</span> badge means the
     account's <b>last 12 months are flat</b> vs the prior 12 — so the spike is probably a recurring order that
@@ -23,7 +25,7 @@
         <td class="num">${{ '{:,}'.format(r.normal) }}</td>
         <td class="num">{% if r.ratio %}{{ r.ratio }}×{% else %}—{% endif %}</td>
         <td class="num">${{ '{:,}'.format(r.q_recent) }} <span class="mut">vs</span> ${{ '{:,}'.format(r.q_prior) }}</td>
-        <td class="num">${{ '{:,}'.format(r.rep_share) }}</td>
+        <td class="num">${{ '{:,}'.format(r.rep_share) }} <span class="mut">vs ${{ '{:,}'.format(r.rep_bar) }} bar</span></td>
         <td class="num">{% if r.released %}<span class="pos">released</span>{% else %}${{ '{:,}'.format(r.windfall) }}{% endif %}</td>
         <td>
           {% if nav.is_current %}
