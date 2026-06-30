@@ -84,6 +84,12 @@ same weeks last year** (current 4 weeks shaded). You can confirm a timing shift 
 app: if last year's and this year's spikes sit at *different* weeks, it's a shifted order; if this year's line
 rides clearly above last year's, it's real growth.
 
+**A note on small timing bumps.** Only **big** spikes (2×+) are auto-withheld for your review. A *small* bump
+from a shifted order just pays through — it's usually a few dollars and not worth chasing, and leaving it flow
+avoids holding back a rep who's genuinely starting to grow. If you ever see an account's **"timing?" badge** (on
+a rep's detail page) sitting on a number that's clearly inflating that rep's growth, you can trim it with the
+**award**. The system handles the big cases automatically and leaves the small judgment calls to you.
+
 ---
 
 ## Closures — set a dead account aside
