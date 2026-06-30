@@ -344,6 +344,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
                          glide_alpha=0.35, jump_multiple=2.0, min_baseline_ratio=0.30,
                          mature_smooth_weeks=4, sporadic_gap_weeks=4, cost_inflation_weeks=13,
+                         growth_quarter_floor=0.0, growth_quarter_min_prior=3000,
                          featured_new_products=frozenset(), new_product_weeks=26, new_product_attribution=0.20,
                          acq_tier_small_max=15000, acq_tier_medium_max=65000,
                          acq_flat_small=100, acq_flat_medium=200, acq_flat_large=300,
@@ -486,6 +487,9 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         work_share = rep_q / account_q if account_q else 0.0
         status = account_status(account_id)
         prior_q = float(account_prior_q.get(account_id, 0.0))
+        # trailing-QUARTER context (for the quarter-health gate + the timing flag)
+        q_rec = float(q_recent_by.get(account_id, 0.0)); q_pri = float(q_prior_by.get(account_id, 0.0))
+        gated = False
 
         established = float(glide_levels.get(account_id, 0.0))
         raw_for_rep = lift = None
@@ -514,32 +518,36 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         if raw_for_rep is not None:
             base_for_rep = raw_for_rep * lift                     # baseline x size/market lift
             target_for_rep = base_for_rep                       # bar = cost-adjusted last-year (cost+profit) x real-market move; no stretch hurdle
-            # jump review: an account that DOUBLED its NORMAL LEVEL (recent >= jump_multiple x normal) is the
-            # anomaly itself — a 10x is usually the customer growing, not the rep. "Normal level" is the HIGHER of
-            # the account's recent run-rate and its seasonally-adjusted year-ago bar, so a weak year-ago comp can't
-            # flag an account that's merely at/below its own pace. The over-GROWTH-bar amount is withheld for the
-            # manager to investigate (no dollar floor); ordinary growth pays through; released if the rep won it.
-            jump_bar = max(target_for_rep, established * work_share)   # higher of seasonal year-ago bar and recent pace
-            jump = target_for_rep > BASELINE_MIN and jump_bar > 0 and rep_q >= jump_multiple * jump_bar
-            jump_ratio = round(rep_q / jump_bar, 1) if jump_bar > 0 else None
-            # account-level "normal" for display (work_share cancels, so account_q/jump_bar_acct == jump_ratio)
-            jump_bar = jump_bar / work_share if work_share else jump_bar
-            if jump and not released:
-                effective_recent = target_for_rep               # withhold ALL over-bar growth pending review
-                windfall = held = rep_q - target_for_rep
-            else:
-                effective_recent, held = rep_q, 0.0             # pay in full (normal overage, or released)
-                windfall = max(0.0, rep_q - target_for_rep) if jump else 0.0
-            # accumulate as PERIOD-equivalents (x acct_fraction): regular x1, annual x period_days/364
-            t["growth_base_raw"] += raw_for_rep * acct_fraction
-            t["growth_base"] += base_for_rep * acct_fraction
-            t["growth_target"] += target_for_rep * acct_fraction
-            t["growth_actual"] += effective_recent * acct_fraction
-            t["held_back"] += held * acct_fraction
-            t["flagged"] += int(jump and not released)
+            # quarter-health gate: a 4-week pop on an account that's actually SHRINKING over the quarter doesn't
+            # count as growth. If its trailing 13 weeks are below growth_quarter_floor x the same 13 weeks last
+            # year (and it has a real prior-year quarter), drop it from growth entirely (neutral, not a review).
+            quarter_gated = (q_pri > growth_quarter_min_prior) and (q_rec < growth_quarter_floor * q_pri)
+            gated = quarter_gated and rep_q > target_for_rep      # a 4-week pop on a SHRINKING account -> no growth
+            if not gated:
+                # jump review: an account that DOUBLED its NORMAL LEVEL (recent >= jump_multiple x normal) is the
+                # anomaly itself — "Normal level" is the HIGHER of the account's recent run-rate and its
+                # seasonally-adjusted year-ago bar. The over-bar amount is withheld for the manager to investigate;
+                # ordinary growth pays through; released if the rep won it.
+                jump_bar = max(target_for_rep, established * work_share)   # higher of seasonal year-ago bar and recent pace
+                jump = target_for_rep > BASELINE_MIN and jump_bar > 0 and rep_q >= jump_multiple * jump_bar
+                jump_ratio = round(rep_q / jump_bar, 1) if jump_bar > 0 else None
+                # account-level "normal" for display (work_share cancels, so account_q/jump_bar_acct == jump_ratio)
+                jump_bar = jump_bar / work_share if work_share else jump_bar
+                if jump and not released:
+                    effective_recent = target_for_rep           # withhold ALL over-bar growth pending review
+                    windfall = held = rep_q - target_for_rep
+                else:
+                    effective_recent, held = rep_q, 0.0         # pay in full (normal overage, or released)
+                    windfall = max(0.0, rep_q - target_for_rep) if jump else 0.0
+                # accumulate as PERIOD-equivalents (x acct_fraction): regular x1, annual x period_days/364
+                t["growth_base_raw"] += raw_for_rep * acct_fraction
+                t["growth_base"] += base_for_rep * acct_fraction
+                t["growth_target"] += target_for_rep * acct_fraction
+                t["growth_actual"] += effective_recent * acct_fraction
+                t["held_back"] += held * acct_fraction
+                t["flagged"] += int(jump and not released)
         # likely order-TIMING shift: last 12 months flat YoY, but this 4-week window swings far from the
         # quarter's own 4-week pace -> a recurring bulk order probably landed on a different week (not growth).
-        q_rec = float(q_recent_by.get(account_id, 0.0)); q_pri = float(q_prior_by.get(account_id, 0.0))
         q_pace4 = q_rec * 4.0 / 13.0
         quarter_flat = q_pri > 3000.0 and 0.75 <= (q_rec / q_pri) <= 1.33
         timing = bool(quarter_flat and q_pace4 > 0 and (account_q > 1.5 * q_pace4 or account_q < 0.6 * q_pace4))
@@ -551,7 +559,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                                  established=round(established),
                                  jump_bar=(round(jump_bar) if jump_bar is not None else None),
                                  jump_ratio=jump_ratio,
-                                 q_recent=round(q_rec), q_prior=round(q_pri), timing=timing))
+                                 q_recent=round(q_rec), q_prior=round(q_pri), timing=timing, gated=gated))
 
     # contribution (line items, current period) per rep
     items_per_rep = items_by_rep_account.groupby(level=0).sum().to_dict() if len(items_by_rep_account) else {}

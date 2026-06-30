@@ -61,6 +61,21 @@
 </div>
 {% endif %}
 
+{% if g.gated_accounts %}
+<div class="card">
+  <h2>Growth not counted this period</h2>
+  <p class="hint">These accounts beat their 4‑week bar, but their <b>last 3 months are down vs last year</b> — so the
+    growth doesn't count (a one‑off order doesn't pay while the account is shrinking). Win the account back to its
+    old level and its growth starts counting again.</p>
+  <table><thead><tr><th>Customer</th><th class="num">Last 3 months</th><th class="num">vs last year</th></tr></thead><tbody>
+    {% for n in g.gated_accounts %}<tr>
+      <td>{{ n.customer }}</td>
+      <td class="num">${{ '{:,}'.format(n.q_recent) }} <span class="mut">vs ${{ '{:,}'.format(n.q_prior) }}</span></td>
+      <td class="num neg">{{ '%+d'|format(n.qoy_pct) }}%</td></tr>{% endfor %}
+  </tbody></table>
+</div>
+{% endif %}
+
 {% if g.watch %}
 <div class="card">
   <h2>Accounts to watch</h2>

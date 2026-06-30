@@ -84,6 +84,12 @@ same weeks last year** (current 4 weeks shaded). You can confirm a timing shift 
 app: if last year's and this year's spikes sit at *different* weeks, it's a shifted order; if this year's line
 rides clearly above last year's, it's real growth.
 
+**Quarter-health gate.** Growth only counts if the account is actually growing: if its **last 13 weeks are more
+than 5% below the same 13 weeks last year**, a 4-week pop **doesn't** earn growth — it's dropped automatically
+(not a review item). You'll see those accounts with a **"qtr down — no growth"** badge on the rep detail page,
+and the rep sees them on their own page under "growth not counted." This is what now handles GW-Corona-style
+cases (jumped in the window, but down over the quarter). The 5% floor is a Settings dial.
+
 **A note on small timing bumps.** Only **big** spikes (2×+) are auto-withheld for your review. A *small* bump
 from a shifted order just pays through — it's usually a few dollars and not worth chasing, and leaving it flow
 avoids holding back a rep who's genuinely starting to grow. If you ever see an account's **"timing?" badge** (on

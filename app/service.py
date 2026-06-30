@@ -298,6 +298,7 @@ def _dials(s):
         min_baseline_ratio=float(s["min_baseline_ratio"]), growth_review_min=float(s["growth_review_min"]),
         mature_smooth_weeks=int(s["mature_smooth_weeks"]), sporadic_gap_weeks=int(s["sporadic_gap_weeks"]),
         cost_inflation_weeks=int(s["cost_inflation_weeks"]),
+        growth_quarter_floor=float(s["growth_quarter_floor"]), growth_quarter_min_prior=float(s["growth_quarter_min_prior"]),
         new_product_weeks=int(s["new_product_weeks"]), new_product_attribution=float(s["new_product_attribution"]),
         acq_tier_small_max=float(s["acq_tier_small_max"]), acq_tier_medium_max=float(s["acq_tier_medium_max"]),
         acq_flat_small=float(s["acq_flat_small"]), acq_flat_medium=float(s["acq_flat_medium"]),
@@ -387,10 +388,17 @@ def compute_rep_goal(db, associate, idx=None):
     rep_accounts = res["accounts"]
     rep_accounts = rep_accounts[rep_accounts["associate"] == associate] if len(rep_accounts) else rep_accounts
     new_accounts = []
+    gated_accounts = []
     if len(rep_accounts):
         for _, r in rep_accounts[rep_accounts["status"].isin(["landing", "ramp"])].iterrows():
             new_accounts.append({"customer": names.get(r["account"], r["account"]),
                                  "status": r["status"], "sales": round(float(r["rep_quarter_sales"]))})
+        # accounts whose growth didn't count this period because their last 3 months are shrinking vs last year
+        for _, r in rep_accounts[rep_accounts.get("gated", False) == True].iterrows():
+            qp = float(r["q_prior"]) or 1.0
+            gated_accounts.append({"customer": names.get(r["account"], r["account"]),
+                                   "q_recent": int(r["q_recent"]), "q_prior": int(r["q_prior"]),
+                                   "qoy_pct": round((float(r["q_recent"]) / qp - 1) * 100)})
 
     # accounts to watch = silent accounts in this rep's book (touched in the trailing window)
     book_cut = period_end - pd.Timedelta(weeks=s["window_weeks"])
@@ -400,7 +408,7 @@ def compute_rep_goal(db, associate, idx=None):
     return {"associate": associate, "card": card, "period": period, "nav": nav,
             "actual": actual, "target": target, "pct": (actual / target * 100) if target else 0.0,
             "last_year": last_year, "lift_pct": lift_pct,
-            "new_accounts": new_accounts, "watch": watch}
+            "new_accounts": new_accounts, "gated_accounts": gated_accounts, "watch": watch}
 
 
 def flag_silent_accounts(db, gap_multiple=3.0, min_orders=5):

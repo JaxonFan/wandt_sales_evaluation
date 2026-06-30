@@ -82,6 +82,11 @@ account, and the page labels which one you're on:
   almost always the customer growing, not your selling. "Normal level" is the **higher of** its recent pace
   **and** its seasonally-adjusted year-ago, so a weak comparison can't false-flag a normal month. If your
   manager confirms **you** won it, it's released into your growth. Ordinary growth pays right through.
+- **The account has to actually be growing.** A single strong 4 weeks doesn't earn growth if the account is
+  **shrinking over the bigger picture** — if its **last 3 months are more than 5% below the same 3 months last
+  year**, a one-off good month doesn't count (you'll see those accounts on your page under *"growth not
+  counted"*). Win the account back toward its old level and its growth counts again. New or small accounts
+  aren't affected — this only kicks in once an account has a real track record.
 
 ---
 

@@ -34,6 +34,8 @@ DEFAULTS = {
     "jump_multiple": 2.0,          # flag a DOUBLING: recent >= this x its bar (100%+ over) -> whole over-bar amount withheld for manager review
     "mature_smooth_weeks": 0,      # 0 = OFF (strict: compare to the EXACT same 4 weeks last year). Smoothing >0 was found to inflate growth via the size-band de-trend, so it's off; timing shifts are handled by the glide/annual paths.
     "sporadic_gap_weeks": 4,       # accounts whose median order gap exceeds this (order less often than the window) are scored ANNUALLY
+    "growth_quarter_floor": 0.95,  # an account earns growth ONLY if its trailing 13 weeks are >= this x the same 13 weeks last year (else a 4-week pop on a shrinking account doesn't count)
+    "growth_quarter_min_prior": 3000,  # only apply the quarter gate to accounts with at least this much in the prior-year quarter (new/small accounts are never gated)
     "new_product_weeks": 26,       # a SKU is "new" for this many weeks after its company-wide first sale
     "new_product_attribution": 0.20,  # a featured-new product's revenue counts at this fraction toward GROWTH (rep credited but discounted)
     "growth_cap_multiple": 2.0,    # (legacy alias; superseded by jump_multiple)
