@@ -195,7 +195,8 @@ def account_quarter_chart(db, account, end, weeks=13, w=300, h=54):
 
     return dict(cur_pts=pts(cur), prev_pts=pts(prev), w=w, h=h, vmax=round(vmax),
                 period_x=round((weeks - 4) / (weeks - 1) * w, 1),
-                cur4=round(sum(cur[-4:])), prev4=round(sum(prev[-4:])))
+                cur4=round(sum(cur[-4:])), prev4=round(sum(prev[-4:])),
+                cur_total=round(sum(cur)), prev_total=round(sum(prev)))
 
 
 def run_engine(db, idx=None):

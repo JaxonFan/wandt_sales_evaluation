@@ -223,7 +223,7 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
                              perf=(round(perf, 0) if perf is not None else None),
                              status=r["status"], capped=bool(r["capped"]), held_back=int(r["held_back"]),
                              timing=bool(r["timing"]), q_recent=int(r["q_recent"]), q_prior=int(r["q_prior"]),
-                             gated=bool(r["gated"])))
+                             gated=bool(r["gated"]), new_account=bool(r["new_account"])))
         rows.sort(key=lambda x: (not x["capped"], x["status"] != "mature", -(x["sales"] or 0)))
     card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == name), None)
     actions = {a.account: a for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id)}
@@ -409,6 +409,7 @@ def jumps_page(request: Request, db: Session = Depends(get_db), p: int = None):
                              associate=r["associate"], account_recent=ar, rep_share=rs, normal=nm, rep_bar=rep_bar,
                              ratio=(float(r["jump_ratio"]) if pd.notna(r["jump_ratio"]) else None),
                              q_recent=int(r["q_recent"]), q_prior=int(r["q_prior"]), timing=bool(r["timing"]),
+                             new_account=bool(r["new_account"]),
                              windfall=int(r["windfall"]), released=bool(r["released"]),
                              chart=service.account_quarter_chart(db, r["account"], _as_of)))
     return templates.TemplateResponse("jumps.html", {

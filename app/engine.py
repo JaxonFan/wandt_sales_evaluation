@@ -419,7 +419,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     _dd = df.assign(_d=df["document_date"].dt.normalize()).drop_duplicates(["account", "_d"]).sort_values(["account", "_d"])
     _dd["_gap"] = _dd.groupby("account")["_d"].diff().dt.days
     _median_gap = _dd.groupby("account")["_gap"].median()
-    sporadic_accounts = set(_median_gap[_median_gap > sporadic_gap_weeks * 7].index)
+    sporadic_accounts = set(_median_gap[_median_gap >= sporadic_gap_weeks * 7].index)   # >= : order every 4 weeks or sparser -> annual
     # trailing-QUARTER context (display-only) — used to flag a likely order-TIMING shift: when the account's
     # last 12 months are flat vs the prior 12 but a single 4-week window swings hard, the swing is probably a
     # recurring bulk order landing on a different week, not real growth/decline.
@@ -559,7 +559,8 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                                  established=round(established),
                                  jump_bar=(round(jump_bar) if jump_bar is not None else None),
                                  jump_ratio=jump_ratio,
-                                 q_recent=round(q_rec), q_prior=round(q_pri), timing=timing, gated=gated))
+                                 q_recent=round(q_rec), q_prior=round(q_pri), timing=timing, gated=gated,
+                                 new_account=bool((period_end - first_seen.get(account_id, period_end)).days < 364)))
 
     # contribution (line items, current period) per rep
     items_per_rep = items_by_rep_account.groupby(level=0).sum().to_dict() if len(items_by_rep_account) else {}
@@ -621,7 +622,7 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
     _dd = df.assign(_d=df["document_date"].dt.normalize()).drop_duplicates(["account", "_d"]).sort_values(["account", "_d"])
     _dd["_gap"] = _dd.groupby("account")["_d"].diff().dt.days
     _median_gap = _dd.groupby("account")["_gap"].median()
-    sporadic = set(_median_gap[_median_gap > sporadic_gap_weeks * 7].index)
+    sporadic = set(_median_gap[_median_gap >= sporadic_gap_weeks * 7].index)   # >= : order every 4 weeks or sparser -> annual
     if not sporadic:
         return empty
 

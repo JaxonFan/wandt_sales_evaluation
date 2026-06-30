@@ -11,15 +11,15 @@
     proportional slice — which is why the × is the same for everyone who touched it. Smaller,
     ordinary overage isn't listed here — it pays automatically.
     A <span class="badge" style="background:var(--blue-bg);color:var(--blue)">likely timing</span> badge means the
-    account's <b>last 12 months are flat</b> vs the prior 12 — so the spike is probably a recurring order that
+    account's <b>last 3 months are flat</b> vs the prior 3 — so the spike is probably a recurring order that
     landed on a different week, not real growth → usually leave it <b>customer-driven / withheld</b>.</p>
   <table>
     <thead><tr><th>Customer</th><th>Rep</th><th class="num">Account 4 wks</th><th class="num">Normal level</th>
-      <th class="num">Jump ×</th><th class="num">Last 12 mo vs prior</th><th class="num">Rep share</th><th class="num">Windfall held</th><th>Who drove it?</th></tr></thead>
+      <th class="num">Jump ×</th><th class="num">Last 3 months vs prior</th><th class="num">Rep share</th><th class="num">Windfall held</th><th>Who drove it?</th></tr></thead>
     <tbody>
     {% for r in rows %}
       <tr>
-        <td>{{ r.customer }}{% if r.timing %} <span class="badge" style="background:var(--blue-bg);color:var(--blue)" title="Last 12 months are flat vs the prior 12 — the 4-week spike is likely a shifted recurring order, not real growth.">likely timing</span>{% endif %}</td>
+        <td>{{ r.customer }}{% if r.new_account %} <span class="badge" style="background:#eef2f6;color:#55606e" title="Less than a year of history — it didn't exist a year ago, so the prior-year figure is $0 (new account, not an error).">new (&lt;1 yr)</span>{% endif %}{% if r.timing %} <span class="badge" style="background:var(--blue-bg);color:var(--blue)" title="Last 3 months are flat vs the prior 3 — the 4-week spike is likely a shifted recurring order, not real growth.">likely timing</span>{% endif %}</td>
         <td>{{ r.associate }}</td>
         <td class="num">${{ '{:,}'.format(r.account_recent) }}</td>
         <td class="num">${{ '{:,}'.format(r.normal) }}</td>
@@ -53,7 +53,7 @@
             <span style="color:var(--blue);font-weight:700">&#8212; this year</span> &nbsp;
             <span style="color:#94a3b8;font-weight:700">- - last year</span> &nbsp;
             <span style="background:var(--blue-bg);padding:0 5px;border-radius:3px">shaded = current 4 weeks</span><br>
-            last 4 weeks: <b>${{ '{:,}'.format(c.cur4) }}</b> vs <b>${{ '{:,}'.format(c.prev4) }}</b> a year ago
+            last 3 months: <b>${{ '{:,}'.format(c.cur_total) }}</b> vs <b>${{ '{:,}'.format(c.prev_total) }}</b> a year ago
             &nbsp;·&nbsp; weekly sales, last 13 weeks
           </div>
         </div>
