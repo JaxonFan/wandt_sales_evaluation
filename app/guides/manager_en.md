@@ -79,6 +79,11 @@ you see it, you'll usually leave the windfall **customer-driven / withheld**. Th
 detail page on accounts whose *drop* this period is merely a shifted order — so you don't misread a normal
 account as one the rep is losing.
 
+Each flagged row also has a **mini chart** — the account's weekly sales for the **last 13 weeks this year vs the
+same weeks last year** (current 4 weeks shaded). You can confirm a timing shift at a glance without leaving the
+app: if last year's and this year's spikes sit at *different* weeks, it's a shifted order; if this year's line
+rides clearly above last year's, it's real growth.
+
 ---
 
 ## Closures — set a dead account aside

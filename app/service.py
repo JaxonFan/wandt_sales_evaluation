@@ -166,6 +166,38 @@ def _lines_cached(db, ver):
     return df
 
 
+def account_quarter_chart(db, account, end, weeks=13, w=300, h=54):
+    """SVG-ready data for a this-year-vs-last-year weekly sales chart for ONE account (Big Jumps review).
+    Weekly (7-day) bins, oldest->newest, over the last `weeks` weeks ending `end`, and the same span a year
+    earlier (364 days). Returns polyline point strings + geometry for the template. Display-only."""
+    end = pd.Timestamp(end).normalize()
+    df = _lines_cached(db, _data_version(db))
+    d = df[df["account"] == account]
+
+    def weekly(anchor):
+        lo = anchor - pd.Timedelta(weeks=weeks)
+        wdf = d[(d["document_date"] > lo) & (d["document_date"] <= anchor)]
+        if not len(wdf):
+            return [0.0] * weeks
+        wk = ((anchor - wdf["document_date"]).dt.days // 7)            # 0 = most recent 7 days
+        sums = wdf.assign(_wk=wk).groupby("_wk")["extended_price"].sum()
+        return [float(sums.get(weeks - 1 - i, 0.0)) for i in range(weeks)]   # oldest -> newest
+
+    cur = weekly(end)
+    prev = weekly(end - pd.Timedelta(days=364))
+    vmax = max(cur + prev + [1.0])
+    pad = 3.0
+
+    def pts(vals):
+        n = len(vals)
+        return " ".join("%.1f,%.1f" % (i / (n - 1) * w, h - pad - (v / vmax) * (h - 2 * pad))
+                        for i, v in enumerate(vals))
+
+    return dict(cur_pts=pts(cur), prev_pts=pts(prev), w=w, h=h, vmax=round(vmax),
+                period_x=round((weeks - 4) / (weeks - 1) * w, 1),
+                cur4=round(sum(cur[-4:])), prev4=round(sum(prev[-4:])))
+
+
 def run_engine(db, idx=None):
     s = get_settings(db)
     ww = s["window_weeks"]

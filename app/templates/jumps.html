@@ -39,6 +39,23 @@
           {% else %}<span class="mut">{{ 'rep-won' if r.released else 'customer-driven' }}</span>{% endif %}
         </td>
       </tr>
+      {% set c = r.chart %}
+      <tr><td colspan="9" style="border-top:0;padding-top:2px">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <svg viewBox="0 0 {{ c.w }} {{ c.h }}" width="{{ c.w }}" height="{{ c.h }}" style="background:#fff;border:1px solid var(--line);border-radius:6px">
+            <rect x="{{ c.period_x }}" y="0" width="{{ c.w - c.period_x }}" height="{{ c.h }}" fill="var(--blue-bg)"/>
+            <polyline points="{{ c.prev_pts }}" fill="none" stroke="#aab4c0" stroke-width="1.4" stroke-dasharray="3,3"/>
+            <polyline points="{{ c.cur_pts }}" fill="none" stroke="var(--blue)" stroke-width="1.9"/>
+          </svg>
+          <div class="hint" style="margin:0;line-height:1.5">
+            <span style="color:var(--blue);font-weight:700">&#8212; this year</span> &nbsp;
+            <span style="color:#94a3b8;font-weight:700">- - last year</span> &nbsp;
+            <span style="background:var(--blue-bg);padding:0 5px;border-radius:3px">shaded = current 4 weeks</span><br>
+            last 4 weeks: <b>${{ '{:,}'.format(c.cur4) }}</b> vs <b>${{ '{:,}'.format(c.prev4) }}</b> a year ago
+            &nbsp;·&nbsp; weekly sales, last 13 weeks
+          </div>
+        </div>
+      </td></tr>
     {% else %}
       <tr><td colspan="9" class="mut">No big jumps to review this period.</td></tr>
     {% endfor %}

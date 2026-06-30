@@ -406,7 +406,8 @@ def jumps_page(request: Request, db: Session = Depends(get_db), p: int = None):
                              normal=int(r["jump_bar"]) if pd.notna(r["jump_bar"]) else 0,
                              ratio=(float(r["jump_ratio"]) if pd.notna(r["jump_ratio"]) else None),
                              q_recent=int(r["q_recent"]), q_prior=int(r["q_prior"]), timing=bool(r["timing"]),
-                             windfall=int(r["windfall"]), released=bool(r["released"])))
+                             windfall=int(r["windfall"]), released=bool(r["released"]),
+                             chart=service.account_quarter_chart(db, r["account"], _as_of)))
     return templates.TemplateResponse("jumps.html", {
         "request": request, "user": user, "period": period, "nav": nav, "rows": rows})
 
