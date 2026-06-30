@@ -1,93 +1,139 @@
 # How your bonus works (plain English)
 
-Your pay is your **salary** plus a **bonus**. The bonus rewards three things — and you can check each one yourself.
+Your pay is your **salary** plus a **bonus**. The bonus rewards three things you do — and every piece is a
+simple "you did X, so you earned $Y" formula. There's **no shared pool and no ranking against coworkers**, so
+you can always work out your own number.
 
-## 1. Selling (line items)
-You earn a small amount for **every line you write** on an order. Sell more, and sell more *kinds* of
-items per order, and this goes up. It's small on purpose — your salary already covers showing up and
-servicing your accounts; this is a little extra for the work.
+The three pieces are: **1) selling (line items)**, **2) growing your accounts**, and **3) landing new
+accounts**. Here's each one.
 
-## 2. Growing your book (the big one)
-We give you a **target** each 4 weeks, and you earn a bonus for **beating it**. Here's how your target is set,
-in plain words:
+---
 
-> **Your target = what it would cost today to sell last year's order, plus the same profit you made last year,
-> then adjusted by how much accounts your size are *really* growing now.**
+## 1. Selling — paid per line item
 
-So the bar moves up with your costs: if a product costs more this year, just charging more to cover it isn't
-"growth" — you only grow by beating *today's cost + last year's profit*. (And the size-size adjustment uses the
-*real* growth of accounts your size, with cost increases already taken out, so a market-wide price rise doesn't
-count either way.)
+You earn **$0.10 for every line you write on an order** this period. A "line" is one product on one order — so
+an order with 12 different products is 12 lines.
 
-Worked example (one 4-week period):
+This rewards the actual work, and because more lines come from both *more orders* and *more products per
+order*, it quietly rewards **cross-selling** (getting an account to add items). It's small on purpose — your
+salary already covers servicing your accounts; this is a little extra for the effort.
 
-- Last year these accounts ran **$40,000** — and at *today's* cost plus the same profit, that's about **$42,000**.
-- Accounts your size are really growing about **+5%** this year. So your bar is about **$44,000**.
-- If your last 4 weeks come in at **$48,000**, you beat the bar by $4,000 → that's your growth bonus (every dollar above counts).
+*Example: 800 lines this period × $0.10 = **$80**.*
 
-**Where does "what your accounts were already running" come from?** For an established account, it's the
-**same 4 weeks last year** — Christmas vs Christmas, Lunar New Year vs Lunar New Year, so the seasons line up
-fairly. For a **newer or just-woken-up account** (one that didn't really exist a year ago), there's no fair
-last-year number, so the bar instead **follows the account's own recent pace and slides up as it grows** — you
-get well-paid for the climb, and once it settles, that new size becomes its normal bar.
+---
 
-**Why "how accounts your size are growing"?** If the whole market is up and you just ride the wave, that's
-not *you* outperforming — so your target already moved up with the market. You earn the growth bonus for
-**beating what accounts like yours are doing**, not for the rising tide. (And if the market's *down*, your
-target comes down too, so you're not punished for a slump everyone's in.)
+## 2. Growing your accounts — the big one
 
-Concretely, every account is sorted into **5 size tiers** by how much it buys (smallest to biggest), and your
-bar moves with **your tier's** typical change — so you're measured against accounts your own size, not the whole
-book. The tiers are re-sorted every period, so they always reflect the current mix.
+We give you a **target** for your accounts, and you earn **1% of every dollar of sales above it**. The whole
+trick is setting that target **fairly**. Here's how, built up one idea at a time.
 
-**"I hit my target — why no growth bonus?"** Hitting your target means you're **on pace**, and that's
-already paid — by your salary, your per-line pay, and any new-account pay. The growth bonus is the **extra
-for going above** the target. Think of it like a quota: meeting it is the job; beating it earns the bonus.
+### Your starting bar: cover today's cost + last year's profit
 
-**"Some weeks I beat it, some I don't — why does my growth bonus come and go?"** It's measured every 4 weeks
-against your whole book, so an off month can land at zero. A strong month pays; a flat one doesn't. Over time
-it tracks whether you're really growing.
+We look at what your accounts bought in the **same 4 weeks last year**, and we rebuild that bar two ways:
 
-**One big account that jumped way up:** if a single account suddenly does **2× or more** its usual level (say a
-one-time bulk order, or the customer expanded their own business), the extra is **held back and shown to your
-manager to investigate** — because a 10× is almost always the customer growing, not selling on your part. If
-your manager confirms **you** won it, it's released into your growth. Ordinary growth isn't touched — it pays
-right through.
+- **today's cost** of last year's order (costs rise over time, so we re-price last year's basket at this
+  year's cost), plus
+- the **same profit** you made last year.
 
-## 3. New accounts
-- **You won it (self-acquired):** you earn a **flat bonus based on its size** — small **$50** / medium **$100** /
-  large **$150**. It's flat (not a % of sales) on purpose: landing a small shop and a big one take similar
-  effort, so the reward is for *winning* the account, not how big it is. It's paid **once the account has been
-  around about a quarter** — long enough to size it by its real run-rate, not a lucky first order.
-- **It was assigned to you:** you didn't win it, so no landing bonus — but you still earn line items for working
-  it now, and once it has history it starts earning **growth**.
+So the bar means: *"cover what last year's order would cost today, and still clear the same profit."* The point
+is that **just raising your price to cover a higher cost is not growth** — you only grow by beating *today's
+cost + last year's profit*.
 
-## What the words mean
-- **Self-acquired** (new) — you won it; earns a flat landing bonus by size (small/medium/large).
-- **Assigned** (new) — handed to you; line items now, then growth once it has history (no landing bonus).
-- **Glide** — newer or just-woken-up; its bar **follows its own recent pace and slides up as it grows** (no fair
-  last-year number to use yet).
-- **Mature** — a year or more of real history; growth measured against the **same 4 weeks last year** (smoothed
-  so a shift in *when* an account orders doesn't fake growth), vs accounts your size.
-- **Annual** — orders too infrequently for a 4-week measure (only a few times a year). These accounts are pulled
-  **out of your per-period bonus** and reviewed on the separate **Annual** tab, measured over the **last 12 months
-  vs the 12 before** and **paid once a year** — so a big once-a-quarter order isn't mistaken for a sudden jump, and
-  you don't see lumpy month-to-month swings from them. You still earn **line items** on them every period as usual.
-- **Provisional** — has some history but not a usable last-year window; measured against its own prior weeks.
-- **Big jump** — did 2×+ its **normal level** in 4 weeks (the higher of its recent pace and its
-  seasonally-adjusted year-ago, so a weak year-ago comp doesn't false-flag a normal month); the windfall is
-  **held back for the manager to investigate** (released if it's confirmed your win).
+### Then we adjust for how accounts your size are really doing
+
+If the whole market is up and you just ride the wave, that's not **you** outperforming. So we sort every
+account into **5 size groups** (smallest to largest by how much they buy) and move your bar by the **typical
+change for accounts your size** this year. You earn for **beating accounts like yours**, not for a rising
+tide. (And if the market is *down*, your bar comes down too — you're not punished for a slump everyone's in.)
+
+> **There is no "stretch" or extra hurdle.** Once you're above the bar (today's cost + last year's profit,
+> adjusted for your size group), **every single dollar above it earns** — at 1%.
+
+**Worked example (one 4-week period):**
+
+- Last year these accounts ran **$40,000**; at today's cost plus the same profit, that's about **$42,000**.
+- Accounts your size are really up about **+5%** this year, so your bar is about **$44,000**.
+- Your last 4 weeks come in at **$48,000** → you beat the bar by **$4,000** → growth bonus = 1% × $4,000 = **$40**.
+
+### How we pick a *fair* bar for each account
+
+Not every account has a clean "same 4 weeks last year" to compare to. So we pick the fairest available bar per
+account, and the page labels which one you're on:
+
+- **Mature** — a full year of history with a usable last-year window → compared to the **same 4 weeks last
+  year** (Christmas vs Christmas, etc.), adjusted for your size group.
+- **Glide** — newer, or an account that recently stepped up to a new level, so last year isn't a fair
+  comparison → the bar instead **follows the account's own recent pace and slides up as it grows**. You get
+  well paid while it climbs; once it settles, that new level becomes its normal bar.
+- **Provisional** — some history but no clean last-year window → compared to its **own recent weeks**, nudged
+  by the company's seasonal swing.
+- **No basis** — too little history to judge growth fairly → you still earn **line items** on it, just no
+  growth bonus yet.
+
+### A few more fairness rules
+
+- **Lunar New Year** — any period near Lunar New Year is automatically lined up against *last year's* Lunar
+  New Year (it's a moving holiday), so the spike matches on both sides.
+- **Brand-new products** — when the company launches a genuinely new product and you sell it, it counts toward
+  your growth at a **reduced 20%** (the company created the product, so it's credited but discounted). Your
+  manager confirms which products count, so a re-coded version of something you already sell doesn't get extra.
+- **A sudden big jump** — if an account does **2×+ its normal level** in 4 weeks (a one-time bulk order, or
+  the customer expanding their own business), the extra is **held back for your manager to review** — a 10× is
+  almost always the customer growing, not your selling. "Normal level" is the **higher of** its recent pace
+  **and** its seasonally-adjusted year-ago, so a weak comparison can't false-flag a normal month. If your
+  manager confirms **you** won it, it's released into your growth. Ordinary growth pays right through.
+
+---
+
+## 3. Annual vs. regular customers
+
+Most accounts order often enough to measure every 4 weeks — those are scored each period as above.
+
+But some accounts only order **once in a while** (less often than every 4 weeks). A 4-week look at them is
+meaningless — they're $0 most periods, then a big order. So those **annual** accounts are pulled out of the
+per-period bonus and reviewed on a separate **Annual** page, measured over the **last 12 months vs. the 12
+before** and **paid once a year**. This keeps a lumpy once-a-quarter order from looking like a sudden spike.
+You still earn **line items** on these accounts every period as usual.
+
+---
+
+## 4. New accounts — a flat bonus for landing them
+
+When you **win a brand-new account yourself**, you earn a **flat bonus based on its size**:
+
+- **$50** for a small account (under ~$15,000/year of sales)
+- **$100** for a medium account (~$15,000–$65,000/year)
+- **$150** for a large account (over ~$65,000/year)
+
+It's a flat amount — not a percentage — on purpose: landing a small shop and a big one take similar effort, so
+the reward is for **winning** the account, not how big it is. It's paid **once, about a quarter after the
+account starts** — long enough to size it by its real sales pace rather than a lucky first order.
+
+If an account was **assigned** to you (handed over, not won by you), there's **no landing bonus** — but you
+still earn line items on it now, and it starts earning growth once it has history. Your manager confirms which
+accounts you actually won.
+
+---
+
+## What the words on your page mean
+
+- **Self-acquired** — a new account you won → earns the flat landing bonus by size.
+- **Assigned** — a new account handed to you → line items now, growth later, no landing bonus.
+- **Mature** — a year+ of history → growth vs the same 4 weeks last year, adjusted for your size group.
+- **Glide** — newer / stepped-up → bar follows your own recent pace and slides up as you grow.
+- **Provisional** — some history, no clean last-year window → compared to your own recent weeks.
+- **Annual** — orders too rarely for a 4-week measure → reviewed once a year on the Annual page.
+- **Big jump** — did 2×+ its normal level → windfall held for the manager to confirm (released if you won it).
 - **Exempt** — the manager set an account aside (e.g. it closed) so it doesn't drag your growth down.
 
-## New products
-When the company launches a **brand-new product** and you sell it, you're credited for it — but at a **reduced
-weight** toward growth (the company created the product, so it's not fully your win). Your manager confirms which
-launches count, so a product that's just a re-coded size/brand of something you already sell doesn't get credit.
+---
 
 ## The bottom line
-- **Sell** → a little per line.
-- **Grow** → beat a fair target that already accounts for the market and your account sizes.
-- **Land new** → a flat bonus by size for each new account you win.
 
-Everything is "you did this, so you earned this" — measured against a fair bar every 4 weeks,
-so your bonus reflects *your* performance, not luck or the market.
+- **Sell** → $0.10 a line.
+- **Grow** → 1% of every dollar above a fair bar that already accounts for cost increases, the market, and
+  your account sizes — no stretch, no hurdle.
+- **Land new** → a flat $50 / $100 / $150 for each new account you win.
+
+Everything is "you did this, so you earned this" — measured against a fair bar, so your bonus reflects **your**
+performance, not luck or the market.

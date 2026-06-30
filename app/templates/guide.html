@@ -1,10 +1,10 @@
 {% extends "base.html" %}{% block body %}
 <div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-  <h2 style="margin:0">{{ 'How your bonus works' if lang=='en' else '你的奖金是怎么算的' }}</h2>
-  <span class="hint" style="margin:0;flex:1">{{ 'A plain-language guide for the team.' if lang=='en' else '给团队的大白话说明。' }}</span>
+  <h2 style="margin:0">{{ title }}</h2>
+  <span class="hint" style="margin:0;flex:1">{{ subtitle }}</span>
   <span style="white-space:nowrap">
-    <a class="pnav {{ 'dis' if lang=='en' }}" href="/guide?lang=en">EN</a>
-    <a class="pnav {{ 'dis' if lang=='zh' }}" href="/guide?lang=zh">中文</a>
+    <a class="pnav {{ 'dis' if lang=='en' }}" href="{{ toggle_base }}?lang=en">EN</a>
+    <a class="pnav {{ 'dis' if lang=='zh' }}" href="{{ toggle_base }}?lang=zh">中文</a>
   </span>
 </div>
 

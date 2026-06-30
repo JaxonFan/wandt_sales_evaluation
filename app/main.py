@@ -70,17 +70,35 @@ def logout(request: Request):
 GUIDES_DIR = os.path.join(os.path.dirname(__file__), "guides")
 
 
+def _render_guide(request, user, lang, stem, title_en, title_zh, subtitle_en, subtitle_zh, toggle_base):
+    import markdown as _md
+    lang = "zh" if lang == "zh" else "en"
+    with open(os.path.join(GUIDES_DIR, f"{stem}_{lang}.md"), encoding="utf-8") as f:
+        html = _md.markdown(f.read(), extensions=["extra", "sane_lists"])
+    return templates.TemplateResponse("guide.html", {
+        "request": request, "user": user, "body": html, "lang": lang, "toggle_base": toggle_base,
+        "title": (title_en if lang == "en" else title_zh),
+        "subtitle": (subtitle_en if lang == "en" else subtitle_zh)})
+
+
 @app.get("/guide", response_class=HTMLResponse)
 def guide(request: Request, db: Session = Depends(get_db), lang: str = "en"):
     user = current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    import markdown as _md
-    lang = "zh" if lang == "zh" else "en"
-    path = os.path.join(GUIDES_DIR, f"explainer_{lang}.md")
-    with open(path, encoding="utf-8") as f:
-        html = _md.markdown(f.read(), extensions=["extra", "sane_lists"])
-    return templates.TemplateResponse("guide.html", {"request": request, "user": user, "body": html, "lang": lang})
+    return _render_guide(request, user, lang, "explainer",
+                         "How your bonus works", "你的奖金是怎么算的",
+                         "A plain-language guide for the team.", "给团队的大白话说明。", "/guide")
+
+
+@app.get("/guide/manager", response_class=HTMLResponse)
+def manager_guide(request: Request, db: Session = Depends(get_db), lang: str = "en"):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login" if not user else "/guide", status_code=303)
+    return _render_guide(request, user, lang, "manager",
+                         "Manager guide", "经理指南",
+                         "What managers can do, in plain language.", "经理能做什么，大白话版。", "/guide/manager")
 
 
 # ---------- rep goal dashboard ----------
