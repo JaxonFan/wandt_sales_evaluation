@@ -68,7 +68,7 @@ Blue/green rollout takes a few minutes; the URL stays up throughout.
   and Acquisition (a **flat $50/$100/$150 by size**, paid once at the ~quarter mark, for a self-acquired new
   account). A single-period **doubling** (≥2× its normal level) is withheld for the manager's `/jumps` review;
   **growth doesn't count if the account's quarter is down >5% YoY** (quarter-health gate); and **infrequent
-  accounts (median order gap ≥ 4 weeks) are scored on a rolling annual track** (12-mo-vs-prior, paid once a
+  accounts (median **or mean** order gap ≥ 4 weeks) are scored on a rolling annual track** (12-mo-vs-prior, paid once a
   year). Scope = the 5 sales reps (managers/inactive excluded). See `wandt_incentive_design.md`.
 - **Performance:** each page recomputes the engine over ~102k item-level lines (cached per period until import/override).
 - **Security TODO:** rotate the demo logins; RDS is SG-gated but `publicly-accessible` — to drop its public IP:

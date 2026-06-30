@@ -418,8 +418,9 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     # are EXCLUDED here and scored on the Annual Review track (compute_annual_review) instead.
     _dd = df.assign(_d=df["document_date"].dt.normalize()).drop_duplicates(["account", "_d"]).sort_values(["account", "_d"])
     _dd["_gap"] = _dd.groupby("account")["_d"].diff().dt.days
-    _median_gap = _dd.groupby("account")["_gap"].median()
-    sporadic_accounts = set(_median_gap[_median_gap >= sporadic_gap_weeks * 7].index)   # >= : order every 4 weeks or sparser -> annual
+    _gb = _dd.groupby("account")["_gap"]
+    _cut = sporadic_gap_weeks * 7   # sporadic if MEDIAN or MEAN order gap >= 4 weeks (mean catches burst-then-dormant accounts)
+    sporadic_accounts = set(_gb.median()[lambda s: s >= _cut].index) | set(_gb.mean()[lambda s: s >= _cut].index)
     # trailing-QUARTER context (display-only) — used to flag a likely order-TIMING shift: when the account's
     # last 12 months are flat vs the prior 12 but a single 4-week window swings hard, the swing is probably a
     # recurring bulk order landing on a different week, not real growth/decline.
@@ -621,8 +622,9 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
     # sporadic = median order-gap longer than the 4-week measurement window
     _dd = df.assign(_d=df["document_date"].dt.normalize()).drop_duplicates(["account", "_d"]).sort_values(["account", "_d"])
     _dd["_gap"] = _dd.groupby("account")["_d"].diff().dt.days
-    _median_gap = _dd.groupby("account")["_gap"].median()
-    sporadic = set(_median_gap[_median_gap >= sporadic_gap_weeks * 7].index)   # >= : order every 4 weeks or sparser -> annual
+    _gb = _dd.groupby("account")["_gap"]
+    _cut = sporadic_gap_weeks * 7   # sporadic if MEDIAN or MEAN order gap >= 4 weeks (mean catches burst-then-dormant accounts)
+    sporadic = set(_gb.median()[lambda s: s >= _cut].index) | set(_gb.mean()[lambda s: s >= _cut].index)
     if not sporadic:
         return empty
 

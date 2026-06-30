@@ -51,8 +51,9 @@ contribution, so we don't pay twice. Key properties (each fixes a real failure m
 - **Accounts without a full year of history** are never compared to a fake $0 baseline (which used to
   double-pay a new account as acquisition *and* "growth"). New accounts earn **acquisition** for their
   first quarter; then **provisional** (their own prior quarter × the company's seasonal swing) until they
-  have a year; then year-over-year. Accounts that order too infrequently for a 4-week measure (median gap ≥ 4
-  weeks) are scored on the **Annual Review** track (rolling 12 months vs. the prior 12, paid once a year), and
+  have a year; then year-over-year. Accounts that order too infrequently for a 4-week measure (**median or mean
+  order gap ≥ 4 weeks** — i.e. less than ~one order per period on average, which also catches burst-then-dormant
+  accounts) are scored on the **Annual Review** track (rolling 12 months vs. the prior 12, paid once a year), and
   still earn line-item contribution each period. A *"new (<1 yr)"* tag marks accounts with no full year of
   history so a $0 prior-year reads as new, not an error.
 There is **no stretch hurdle** — once a rep covers today's cost and last year's profit, every dollar above earns.
@@ -75,7 +76,8 @@ page under *"growth not counted,"* the manager sees a *"qtr down"* badge. So gro
 is genuinely healthy, not when a one-off order lands on a declining account.
 
 ### Annual vs. periodic accounts (2026 update)
-An account whose **median order gap is ≥ 4 weeks** (it orders monthly or sparser) can't be measured fairly in a
+An account whose **median or mean order gap is ≥ 4 weeks** (it orders monthly or sparser on average — including
+burst-then-dormant accounts) can't be measured fairly in a
 4-week window — its order lands in different weeks each year. Those accounts are pulled onto a separate **Annual
 Review** track: **rolling 12 months vs. the prior 12 months, paid once a year**, off the per-period flow. They
 still earn line-item contribution every period. Everything else is scored per 4-week period as below.
