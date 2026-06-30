@@ -220,7 +220,8 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
                              sales=round(sales), counted=round(sales - float(r["held_back"])),
                              target=(round(float(target)) if (target and pd.notna(target)) else None),
                              perf=(round(perf, 0) if perf is not None else None),
-                             status=r["status"], capped=bool(r["capped"]), held_back=int(r["held_back"])))
+                             status=r["status"], capped=bool(r["capped"]), held_back=int(r["held_back"]),
+                             timing=bool(r["timing"]), q_recent=int(r["q_recent"]), q_prior=int(r["q_prior"])))
         rows.sort(key=lambda x: (not x["capped"], x["status"] != "mature", -(x["sales"] or 0)))
     card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == name), None)
     actions = {a.account: a for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id)}
@@ -404,6 +405,7 @@ def jumps_page(request: Request, db: Session = Depends(get_db), p: int = None):
                              rep_share=round(float(r["rep_quarter_sales"])), # this rep's slice
                              normal=int(r["jump_bar"]) if pd.notna(r["jump_bar"]) else 0,
                              ratio=(float(r["jump_ratio"]) if pd.notna(r["jump_ratio"]) else None),
+                             q_recent=int(r["q_recent"]), q_prior=int(r["q_prior"]), timing=bool(r["timing"]),
                              windfall=int(r["windfall"]), released=bool(r["released"])))
     return templates.TemplateResponse("jumps.html", {
         "request": request, "user": user, "period": period, "nav": nav, "rows": rows})

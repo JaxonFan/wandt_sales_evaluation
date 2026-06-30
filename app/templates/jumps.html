@@ -7,17 +7,22 @@
     usually the customer growing their own business, not the rep's win). Confirm <b>Rep won it</b> to release
     the windfall into growth, or leave it <b>Customer-driven</b> to keep it withheld. The <b>Jump ×</b> is the
     whole-account multiple that triggered the flag; <b>Rep share</b> is this rep's slice of it. Smaller,
-    ordinary overage isn't listed here — it pays automatically.</p>
+    ordinary overage isn't listed here — it pays automatically.
+    A <span class="badge" style="background:var(--blue-bg);color:var(--blue)">likely timing</span> badge means the
+    account's <b>last 12 months are flat</b> vs the prior 12 — so the spike is probably a recurring order that
+    landed on a different week, not real growth → usually leave it <b>customer-driven / withheld</b>.</p>
   <table>
     <thead><tr><th>Customer</th><th>Rep</th><th class="num">Account 4 wks</th><th class="num">Normal level</th>
-      <th class="num">Jump ×</th><th class="num">Rep share</th><th class="num">Windfall held</th><th>Who drove it?</th></tr></thead>
+      <th class="num">Jump ×</th><th class="num">Last 12 mo vs prior</th><th class="num">Rep share</th><th class="num">Windfall held</th><th>Who drove it?</th></tr></thead>
     <tbody>
     {% for r in rows %}
       <tr>
-        <td>{{ r.customer }}</td><td>{{ r.associate }}</td>
+        <td>{{ r.customer }}{% if r.timing %} <span class="badge" style="background:var(--blue-bg);color:var(--blue)" title="Last 12 months are flat vs the prior 12 — the 4-week spike is likely a shifted recurring order, not real growth.">likely timing</span>{% endif %}</td>
+        <td>{{ r.associate }}</td>
         <td class="num">${{ '{:,}'.format(r.account_recent) }}</td>
         <td class="num">${{ '{:,}'.format(r.normal) }}</td>
         <td class="num">{% if r.ratio %}{{ r.ratio }}×{% else %}—{% endif %}</td>
+        <td class="num">${{ '{:,}'.format(r.q_recent) }} <span class="mut">vs</span> ${{ '{:,}'.format(r.q_prior) }}</td>
         <td class="num">${{ '{:,}'.format(r.rep_share) }}</td>
         <td class="num">{% if r.released %}<span class="pos">released</span>{% else %}${{ '{:,}'.format(r.windfall) }}{% endif %}</td>
         <td>
@@ -35,7 +40,7 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="mut">No big jumps to review this period.</td></tr>
+      <tr><td colspan="9" class="mut">No big jumps to review this period.</td></tr>
     {% endfor %}
     </tbody>
   </table>

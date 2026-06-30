@@ -70,8 +70,14 @@ business, not the rep's selling. For each one you decide:
 - **Rep won it — pay windfall**: releases it into the rep's growth.
 
 The page shows the whole-account 4-week sales, the **normal level** it's compared to (the higher of its recent
-pace and its seasonally-adjusted year-ago), the **jump ×**, the rep's share, and the dollars held. Ordinary
-growth (under 2×) is never listed here — it pays automatically.
+pace and its seasonally-adjusted year-ago), the **jump ×**, the **last 12 months vs the prior 12**, the rep's
+share, and the dollars held. Ordinary growth (under 2×) is never listed here — it pays automatically.
+
+A **"likely timing" badge** means the account's **last 12 months are flat** versus the prior 12 — so a 4-week
+spike is probably just a recurring order that landed on a different week this year, **not** real growth. When
+you see it, you'll usually leave the windfall **customer-driven / withheld**. The same badge appears on a rep's
+detail page on accounts whose *drop* this period is merely a shifted order — so you don't misread a normal
+account as one the rep is losing.
 
 ---
 

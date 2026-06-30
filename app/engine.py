@@ -419,6 +419,12 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     _dd["_gap"] = _dd.groupby("account")["_d"].diff().dt.days
     _median_gap = _dd.groupby("account")["_gap"].median()
     sporadic_accounts = set(_median_gap[_median_gap > sporadic_gap_weeks * 7].index)
+    # trailing-QUARTER context (display-only) — used to flag a likely order-TIMING shift: when the account's
+    # last 12 months are flat vs the prior 12 but a single 4-week window swings hard, the swing is probably a
+    # recurring bulk order landing on a different week, not real growth/decline.
+    _ql = pd.Timedelta(weeks=13)
+    q_recent_by = df[(df["document_date"] > qend - _ql) & (df["document_date"] <= qend)].groupby("account")[GV].sum()
+    q_prior_by = df[(df["document_date"] > qend - _ql - ONE_YEAR) & (df["document_date"] <= qend - ONE_YEAR)].groupby("account")[GV].sum()
     # company quarter-over-quarter seasonal swing (for provisional accounts with no year-ago baseline)
     company_seasonal_factor = 1.0
     if account_prior_q.sum() and account_recent_q.sum():
@@ -531,6 +537,12 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
             t["growth_actual"] += effective_recent * acct_fraction
             t["held_back"] += held * acct_fraction
             t["flagged"] += int(jump and not released)
+        # likely order-TIMING shift: last 12 months flat YoY, but this 4-week window swings far from the
+        # quarter's own 4-week pace -> a recurring bulk order probably landed on a different week (not growth).
+        q_rec = float(q_recent_by.get(account_id, 0.0)); q_pri = float(q_prior_by.get(account_id, 0.0))
+        q_pace4 = q_rec * 4.0 / 13.0
+        quarter_flat = q_pri > 3000.0 and 0.75 <= (q_rec / q_pri) <= 1.33
+        timing = bool(quarter_flat and q_pace4 > 0 and (account_q > 1.5 * q_pace4 or account_q < 0.6 * q_pace4))
         account_rows.append(dict(associate=rep, account=account_id, status=status,
                                  rep_quarter_sales=rep_q, baseline_quarter=raw_for_rep,
                                  account_target=target_for_rep, capped=jump, held_back=round(held),
@@ -538,7 +550,8 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                                  released=released, account_recent=round(account_q),
                                  established=round(established),
                                  jump_bar=(round(jump_bar) if jump_bar is not None else None),
-                                 jump_ratio=jump_ratio))
+                                 jump_ratio=jump_ratio,
+                                 q_recent=round(q_rec), q_prior=round(q_pri), timing=timing))
 
     # contribution (line items, current period) per rep
     items_per_rep = items_by_rep_account.groupby(level=0).sum().to_dict() if len(items_by_rep_account) else {}
