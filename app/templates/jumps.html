@@ -24,7 +24,7 @@
         <td class="num">${{ '{:,}'.format(r.account_recent) }}</td>
         <td class="num">${{ '{:,}'.format(r.normal) }}</td>
         <td class="num">{% if r.ratio %}{{ r.ratio }}×{% else %}—{% endif %}</td>
-        <td class="num">${{ '{:,}'.format(r.q_recent) }} <span class="mut">vs</span> ${{ '{:,}'.format(r.q_prior) }}</td>
+        <td class="num">{% if r.new_account %}${{ '{:,}'.format(r.q_recent) }} <span class="mut">· new (no last yr)</span>{% else %}${{ '{:,}'.format(r.q_recent) }} <span class="mut">vs</span> ${{ '{:,}'.format(r.q_prior) }}{% endif %}</td>
         <td class="num">${{ '{:,}'.format(r.rep_share) }} <span class="mut">vs ${{ '{:,}'.format(r.rep_bar) }} bar</span></td>
         <td class="num">{% if r.released %}<span class="pos">released</span>{% else %}${{ '{:,}'.format(r.windfall) }}{% endif %}</td>
         <td>
@@ -53,7 +53,8 @@
             <span style="color:var(--blue);font-weight:700">&#8212; this year</span> &nbsp;
             <span style="color:#94a3b8;font-weight:700">- - last year</span> &nbsp;
             <span style="background:var(--blue-bg);padding:0 5px;border-radius:3px">shaded = current 4 weeks</span><br>
-            last 3 months: <b>${{ '{:,}'.format(c.cur_total) }}</b> vs <b>${{ '{:,}'.format(c.prev_total) }}</b> a year ago
+            {% if r.new_account %}last 3 months: <b>${{ '{:,}'.format(c.cur_total) }}</b> &nbsp;·&nbsp; <b>new account</b> — no last year; growth measured vs its <b>${{ '{:,}'.format(r.normal) }}</b> run-rate
+            {% else %}last 3 months: <b>${{ '{:,}'.format(c.cur_total) }}</b> vs <b>${{ '{:,}'.format(c.prev_total) }}</b> a year ago{% endif %}
             &nbsp;·&nbsp; weekly sales, last 13 weeks
           </div>
         </div>
