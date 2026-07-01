@@ -1,62 +1,77 @@
 {% extends "base.html" %}{% block body %}
 {% set c = g.card %}
-{% if viewer == 'manager' %}<p style="font-size:13px"><a href="/annual" style="color:var(--blue);text-decoration:none">‹ Annual review</a></p>{% endif %}
+{% if viewer == 'manager' %}<p style="font-size:14px"><a href="/annual" style="color:var(--blue);text-decoration:none">‹ {{ 'Annual review' if lang=='en' else '按年回顾' }}</a></p>{% endif %}
 
-<div class="card">
-  <h2>{{ g.associate }} · annual review</h2>
-  <p class="hint" style="margin:2px 0 0">Through {{ g.as_of }} · your <b>infrequent accounts</b>, measured over the
-    <b>last 12 months vs the 12 before</b>. These order too rarely for a 4-week measure, so they're reviewed and paid
-    here <b>once a year</b> — separate from your per-period bonus (where you still earn line items now).</p>
+<div style="text-align:right;margin-bottom:8px">
+  <a class="pnav {{ 'dis' if lang=='en' }}" href="{{ toggle_base }}?lang=en">EN</a>
+  <a class="pnav {{ 'dis' if lang=='zh' }}" href="{{ toggle_base }}?lang=zh">中文</a>
 </div>
 
 <div class="card">
-  <h2>Grow your infrequent accounts</h2>
+  <h2>{{ g.associate }} · {{ 'annual review' if lang=='en' else '按年回顾' }}</h2>
+  {% if lang=='en' %}
+  <p class="hint" style="margin:2px 0 0">Through {{ g.as_of }} · your <b>infrequent accounts</b>, measured over the
+    <b>last 12 months vs the 12 before</b>. These order too rarely for a 4-week measure, so they're reviewed and paid
+    here <b>once a year</b> — separate from your per-period bonus (where you still earn line items now).</p>
+  {% else %}
+  <p class="hint" style="margin:2px 0 0">截至 {{ g.as_of }} · 你的 <b>不常下单的客户</b>，按 <b>最近 12 个月对比之前 12 个月</b> 来衡量。
+    这些客户下单太稀疏、4 周看不准，所以放在这里 <b>一年结算一次</b> —— 和你的每期奖金分开（那边你照样每期拿订单行的钱）。</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>{{ 'Grow your infrequent accounts' if lang=='en' else '把不常下单的客户做大' }}</h2>
   {% set pct = g.pct if g.pct < 100 else 100 %}
-  <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
-    <span>Last 12 months <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
-    <span>Target <b>${{ '{:,.0f}'.format(g.target) }}</b></span>
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+    <span>{{ 'Last 12 months' if lang=='en' else '最近 12 个月' }} <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
+    <span>{{ 'Target' if lang=='en' else '目标' }} <b>${{ '{:,.0f}'.format(g.target) }}</b></span>
   </div>
-  <div style="background:#eef2f6;border-radius:10px;height:22px;overflow:hidden;border:1px solid var(--line)">
+  <div style="background:#eef2f6;border-radius:10px;height:26px;overflow:hidden;border:1px solid var(--line)">
     <div style="width:{{ pct }}%;height:100%;background:{{ 'var(--green)' if g.actual>=g.target else 'var(--amber)' }}"></div>
   </div>
-  <div style="margin-top:8px;font-size:13.5px">
-    {{ '%.0f'|format(g.pct) }}% of target ·
-    {% if g.actual>=g.target %}<span class="pos">above target — earning annual growth bonus on the excess</span>
-    {% else %}<span class="neg">below target — keep going</span>{% endif %}
+  <div style="margin-top:8px">
+    {{ '%.0f'|format(g.pct) }}% {{ 'of target' if lang=='en' else '（占目标）' }} ·
+    {% if g.actual>=g.target %}<span class="pos">{{ 'above target — earning annual growth bonus on the excess' if lang=='en' else '已超过目标 —— 超出的部分拿年度增长奖金' }}</span>
+    {% else %}<span class="neg">{{ 'below target — keep going' if lang=='en' else '还没到目标 —— 继续加油' }}</span>{% endif %}
   </div>
+  {% if lang=='en' %}
   <p class="hint" style="margin-top:8px">Target = today's cost of last year's orders + the same profit, then moved by
     how much accounts this size really grew. Annual growth bonus on the excess:
     <b>${{ '{:,.0f}'.format(g.bonus) }}</b> (suggested; your manager sets the final annual award).</p>
+  {% else %}
+  <p class="hint" style="margin-top:8px">目标 = 用今天的成本卖去年那些单 + 同样的利润，再按和这个规模相近的客户真正涨了多少来调整。
+    超出部分的年度增长奖金：<b>${{ '{:,.0f}'.format(g.bonus) }}</b>（这是建议值；最终年度金额由经理确定）。</p>
+  {% endif %}
 </div>
 
 {% if viewer == 'manager' %}
 <div class="card">
-  <h2>Annual award</h2>
+  <h2>{{ 'Annual award' if lang=='en' else '年度金额' }}</h2>
   <form method="post" action="/annual/award" class="ov-form">
     <input type="hidden" name="associate" value="{{ g.associate }}">
-    Award $<input name="award_amount" type="number" step="50" value="{{ award.award_amount|round(0)|int if award else (g.bonus|round(0)|int) }}" style="width:100px">
-    &nbsp; Note <input name="note" value="{{ award.note or '' if award else '' }}" style="width:240px">
-    <button type="submit">Save</button>
+    {{ 'Award $' if lang=='en' else '金额 $' }}<input name="award_amount" type="number" step="50" value="{{ award.award_amount|round(0)|int if award else (g.bonus|round(0)|int) }}" style="width:100px">
+    &nbsp; {{ 'Note' if lang=='en' else '备注' }} <input name="note" value="{{ award.note or '' if award else '' }}" style="width:240px">
+    <button type="submit">{{ 'Save' if lang=='en' else '保存' }}</button>
   </form>
 </div>
 {% endif %}
 
 {% if g.rows %}
 <div class="card">
-  <h2>Your infrequent accounts</h2>
-  <table><thead><tr><th>Customer</th><th class="num">Sales (12 mo)</th><th class="num">Target</th><th class="num">vs target</th><th>Status</th></tr></thead><tbody>
+  <h2>{{ 'Your infrequent accounts' if lang=='en' else '你不常下单的客户' }}</h2>
+  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th class="num">{{ 'Sales (12 mo)' if lang=='en' else '销售（12 个月）' }}</th><th class="num">{{ 'Target' if lang=='en' else '目标' }}</th><th class="num">{{ 'vs target' if lang=='en' else '对比目标' }}</th><th>{{ 'Status' if lang=='en' else '状态' }}</th></tr></thead><tbody>
     {% for r in g.rows %}<tr>
       <td>{{ r.customer }}</td>
       <td class="num">${{ '{:,}'.format(r.sales) }}</td>
       <td class="num">{% if r.target is not none %}${{ '{:,}'.format(r.target) }}{% else %}<span class="mut">—</span>{% endif %}</td>
       <td class="num {{ 'pos' if (r.perf or 0)>=0 else 'neg' }}">{% if r.perf is not none %}{{ '%+d'|format(r.perf) }}%{% else %}—{% endif %}</td>
-      <td>{% if r.status=='exempt' %}<span class="badge b-ramp">exempt</span>
-          {% elif r.status=='no_basis' %}<span class="mut">line items only</span>
-          {% else %}<span class="badge b-new">annual</span>{% endif %}</td>
+      <td>{% if r.status=='exempt' %}<span class="badge b-ramp">{{ 'exempt' if lang=='en' else '豁免' }}</span>
+          {% elif r.status=='no_basis' %}<span class="mut">{{ 'line items only' if lang=='en' else '仅订单行' }}</span>
+          {% else %}<span class="badge b-new">{{ 'annual' if lang=='en' else '按年' }}</span>{% endif %}</td>
     </tr>{% endfor %}
   </tbody></table>
 </div>
 {% else %}
-<div class="card"><p class="hint">No infrequent accounts attributed to you right now.</p></div>
+<div class="card"><p class="hint">{{ 'No infrequent accounts attributed to you right now.' if lang=='en' else '目前没有归到你名下的不常下单客户。' }}</p></div>
 {% endif %}
 {% endblock %}

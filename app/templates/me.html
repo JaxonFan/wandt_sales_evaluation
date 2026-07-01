@@ -1,61 +1,85 @@
 {% extends "base.html" %}{% block body %}
 {% set c = g.card %}
-{% if g.viewer == 'manager' %}<p style="font-size:13px"><a href="/?p={{ g.nav.idx }}" style="color:var(--blue);text-decoration:none">‹ Team</a></p>{% endif %}
+{% if viewer == 'manager' %}<p style="font-size:14px"><a href="/?p={{ g.nav.idx }}" style="color:var(--blue);text-decoration:none">‹ {{ 'Team' if lang=='en' else '团队' }}</a></p>{% endif %}
+
+<div style="text-align:right;margin-bottom:8px">
+  <a class="pnav {{ 'dis' if lang=='en' }}" href="{{ toggle_base }}?lang=en&p={{ g.nav.idx }}">EN</a>
+  <a class="pnav {{ 'dis' if lang=='zh' }}" href="{{ toggle_base }}?lang=zh&p={{ g.nav.idx }}">中文</a>
+</div>
 
 <div class="card">
   <div class="pbar">
-    {% if g.nav.prev_idx is not none %}<a class="pnav" href="?p={{ g.nav.prev_idx }}">◀ prev</a>{% else %}<span class="pnav dis">◀ prev</span>{% endif %}
-    <div class="mid"><div class="ttl">{{ g.associate }} · your goal</div>
-      <div class="hint" style="margin:3px 0">Period {{ g.nav.n }} · {{ g.nav.start }} ~ {{ g.nav.end }}{% if not g.nav.is_current %} <span class="badge b-ramp">past</span>{% endif %}</div></div>
-    {% if g.nav.next_idx is not none %}<a class="pnav" href="?p={{ g.nav.next_idx }}">next ▶</a>{% else %}<span class="pnav dis">next ▶</span>{% endif %}
+    {% if g.nav.prev_idx is not none %}<a class="pnav" href="?p={{ g.nav.prev_idx }}&lang={{ lang }}">◀ {{ 'prev' if lang=='en' else '上一期' }}</a>{% else %}<span class="pnav dis">◀ {{ 'prev' if lang=='en' else '上一期' }}</span>{% endif %}
+    <div class="mid"><div class="ttl">{{ g.associate }} · {{ 'your goal' if lang=='en' else '我的目标' }}</div>
+      <div class="hint" style="margin:3px 0">{{ 'Period' if lang=='en' else '周期' }} {{ g.nav.n }} · {{ g.nav.start }} ~ {{ g.nav.end }}{% if not g.nav.is_current %} <span class="badge b-ramp">{{ 'past' if lang=='en' else '已过期' }}</span>{% endif %}</div></div>
+    {% if g.nav.next_idx is not none %}<a class="pnav" href="?p={{ g.nav.next_idx }}&lang={{ lang }}">{{ 'next' if lang=='en' else '下一期' }} ▶</a>{% else %}<span class="pnav dis">{{ 'next' if lang=='en' else '下一期' }} ▶</span>{% endif %}
   </div>
 </div>
 
 <div class="card">
-  <h2>Grow your book</h2>
+  <h2>{{ 'Grow your book' if lang=='en' else '把客户做大' }}</h2>
   {% set pct = g.pct if g.pct < 100 else 100 %}
-  <div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px">
-    <span>Your last 4 weeks <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
-    <span>Target <b>${{ '{:,.0f}'.format(g.target) }}</b></span>
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+    <span>{{ 'Your last 4 weeks' if lang=='en' else '你最近 4 周' }} <b>${{ '{:,.0f}'.format(g.actual) }}</b></span>
+    <span>{{ 'Target' if lang=='en' else '目标' }} <b>${{ '{:,.0f}'.format(g.target) }}</b></span>
   </div>
-  <div style="background:#eef2f6;border-radius:10px;height:22px;overflow:hidden;border:1px solid var(--line)">
+  <div style="background:#eef2f6;border-radius:10px;height:26px;overflow:hidden;border:1px solid var(--line)">
     <div style="width:{{ pct }}%;height:100%;background:{{ 'var(--green)' if g.actual>=g.target else 'var(--amber)' }}"></div>
   </div>
-  <div style="margin-top:8px;font-size:13.5px">
-    {{ '%.0f'|format(g.pct) }}% of target ·
-    {% if g.actual>=g.target %}<span class="pos">above target — earning growth bonus on the excess</span>
-    {% else %}<span class="neg">below target — keep going</span>{% endif %}
+  <div style="margin-top:8px">
+    {{ '%.0f'|format(g.pct) }}% {{ 'of target' if lang=='en' else '（占目标）' }} ·
+    {% if g.actual>=g.target %}<span class="pos">{{ 'above target — earning growth bonus on the excess' if lang=='en' else '已超过目标 —— 超出的部分开始拿增长奖金' }}</span>
+    {% else %}<span class="neg">{{ 'below target — keep going' if lang=='en' else '还没到目标 —— 继续加油' }}</span>{% endif %}
   </div>
+  {% if lang=='en' %}
   <p class="hint" style="margin-top:8px">Your <b>${{ '{:,.0f}'.format(g.target) }}</b> target =
     today's cost of last year's order + the same profit you made last year (${{ '{:,.0f}'.format(g.last_year) }}),
     then moved by how much accounts your size really grew ({{ '%+.0f'|format(g.lift_pct) }}%).
     <b>Hitting it = on pace</b> (already paid by your salary, per-line pay, and new-account pay);
     the <b>growth bonus is the extra for beating it</b> — every dollar above earns, so you grow only by beating cost + last year's profit, not by riding a good market.</p>
+  {% else %}
+  <p class="hint" style="margin-top:8px">你的 <b>${{ '{:,.0f}'.format(g.target) }}</b> 目标 =
+    用今天的成本卖去年那一单 + 去年赚到的同样利润（${{ '{:,.0f}'.format(g.last_year) }}），
+    再按和你规模相近的客户今年真正涨了多少来调整（{{ '%+.0f'|format(g.lift_pct) }}%）。
+    <b>达到目标 = 踩在节奏上</b>（这部分已经由底薪、按行计酬和新客户奖金付过了）；
+    <b>增长奖金是超出目标后的额外奖励</b> —— 超出的每一块钱都算，所以你只有超过成本 + 去年的利润才算增长，光靠大盘好是不算的。</p>
+  {% endif %}
   {% if c and c.held_back and c.held_back > 0 %}
+  {% if lang=='en' %}
   <p class="lock-note" style="margin-top:10px">${{ '{:,.0f}'.format(c.held_back) }} of a <b>big-jump windfall</b> is
     <b>withheld pending your manager's review</b> — when one account jumps to 2×+ its usual level, the extra is checked
     first (a big jump is often the customer growing, not selling). It's released into your growth if it's confirmed your win.</p>
+  {% else %}
+  <p class="lock-note" style="margin-top:10px">有 <b>${{ '{:,.0f}'.format(c.held_back) }}</b> 的 <b>大跳涨意外部分</b>
+    <b>被暂时扣住、等经理审核</b> —— 当某个客户 4 周内做到平时的 2 倍以上时，多出来的部分会先核实
+    （大跳涨往往是客户自己在做大，而不是你的销售本事）。如果确认是你拿下的，就会释放计入你的增长。</p>
+  {% endif %}
   {% endif %}
 </div>
 
 <div class="card">
-  <h2>Your bonus this period</h2>
+  <h2>{{ 'Your bonus this period' if lang=='en' else '你这个周期的奖金' }}</h2>
   <table>
-    <tr><td>Sell line items <span class="mut">— {{ '{:,}'.format(c.items_placed) }} lines</span></td><td class="num">${{ '{:,.0f}'.format(c.contribution_bonus) }}</td></tr>
-    <tr><td>Grow your book <span class="mut">— beating your target</span></td><td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td></tr>
-    <tr><td>New accounts <span class="mut">— {{ c.new_accounts }} qualified (flat bonus by size)</span></td><td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td></tr>
-    <tr><td><b>Total</b></td><td class="num"><b>${{ '{:,.0f}'.format(c.total_bonus) }}</b></td></tr>
+    <tr><td>{{ 'Sell line items' if lang=='en' else '卖货（订单行数）' }} <span class="mut">— {{ '{:,}'.format(c.items_placed) }} {{ 'lines' if lang=='en' else '行' }}</span></td><td class="num">${{ '{:,.0f}'.format(c.contribution_bonus) }}</td></tr>
+    <tr><td>{{ 'Grow your book' if lang=='en' else '把客户做大' }} <span class="mut">— {{ 'beating your target' if lang=='en' else '超过你的目标' }}</span></td><td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td></tr>
+    <tr><td>{{ 'New accounts' if lang=='en' else '新客户' }} <span class="mut">— {{ c.new_accounts }} {{ 'qualified (flat bonus by size)' if lang=='en' else '个符合（按规模的固定奖金）' }}</span></td><td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td></tr>
+    <tr><td><b>{{ 'Total' if lang=='en' else '合计' }}</b></td><td class="num"><b>${{ '{:,.0f}'.format(c.total_bonus) }}</b></td></tr>
   </table>
+  {% if lang=='en' %}
   <p class="hint" style="margin-top:8px">Every line is "you did this → you earned this." Growth is measured over your last 4 weeks
     vs your bar; a sudden 2×+ jump on one account is checked by your manager first; a new account you win pays a flat bonus by its size once it's been around ~a quarter.</p>
+  {% else %}
+  <p class="hint" style="margin-top:8px">每一项都是"你做了这件事 → 你赚到了这份钱"。增长按你最近 4 周对比门槛来算；
+    某个客户 4 周内突然做到 2 倍以上会先由经理核实；你拿下的新客户，在它开张约一个季度后按规模拿一笔固定奖金。</p>
+  {% endif %}
 </div>
 
 {% if g.new_accounts %}
 <div class="card">
-  <h2>New accounts earning for you</h2>
-  <table><thead><tr><th>Customer</th><th>Stage</th><th class="num">Sales this period</th></tr></thead><tbody>
+  <h2>{{ 'New accounts earning for you' if lang=='en' else '正在为你赚钱的新客户' }}</h2>
+  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th>{{ 'Stage' if lang=='en' else '阶段' }}</th><th class="num">{{ 'Sales this period' if lang=='en' else '本期销售' }}</th></tr></thead><tbody>
     {% for n in g.new_accounts %}<tr><td>{{ n.customer }}</td>
-      <td>{% if n.status=='landing' %}<span class="badge b-new">just landed</span>{% else %}<span class="badge b-ramp">in ramp</span>{% endif %}</td>
+      <td>{% if n.status=='landing' %}<span class="badge b-new">{{ 'just landed' if lang=='en' else '刚拿下' }}</span>{% else %}<span class="badge b-ramp">{{ 'in ramp' if lang=='en' else '爬坡中' }}</span>{% endif %}</td>
       <td class="num">${{ '{:,}'.format(n.sales) }}</td></tr>{% endfor %}
   </tbody></table>
 </div>
@@ -63,11 +87,16 @@
 
 {% if g.gated_accounts %}
 <div class="card">
-  <h2>Growth not counted this period</h2>
+  <h2>{{ 'Growth not counted this period' if lang=='en' else '这个周期不计入增长的客户' }}</h2>
+  {% if lang=='en' %}
   <p class="hint">These accounts beat their 4‑week bar, but their <b>last 3 months are down vs last year</b> — so the
     growth doesn't count (a one‑off order doesn't pay while the account is shrinking). Win the account back to its
     old level and its growth starts counting again.</p>
-  <table><thead><tr><th>Customer</th><th class="num">Last 3 months</th><th class="num">vs last year</th></tr></thead><tbody>
+  {% else %}
+  <p class="hint">这些客户虽然超过了 4 周门槛，但它们的 <b>最近 3 个月比去年同期在下滑</b> —— 所以这部分增长不算
+    （客户整体在萎缩时，偶尔一单不给增长奖金）。把客户做回原来的水平，它的增长就会重新计入。</p>
+  {% endif %}
+  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th class="num">{{ 'Last 3 months' if lang=='en' else '最近 3 个月' }}</th><th class="num">{{ 'vs last year' if lang=='en' else '对比去年' }}</th></tr></thead><tbody>
     {% for n in g.gated_accounts %}<tr>
       <td>{{ n.customer }}</td>
       <td class="num">${{ '{:,}'.format(n.q_recent) }} <span class="mut">vs ${{ '{:,}'.format(n.q_prior) }}</span></td>
@@ -78,10 +107,10 @@
 
 {% if g.watch %}
 <div class="card">
-  <h2>Accounts to watch</h2>
-  <p class="hint">These usually order more often than they have lately — worth a call to keep them active.</p>
-  <table><thead><tr><th>Customer</th><th class="num">Quiet for</th></tr></thead><tbody>
-    {% for w in g.watch %}<tr><td>{{ w.customer }}</td><td class="num">{{ w.days_silent }} days</td></tr>{% endfor %}
+  <h2>{{ 'Accounts to watch' if lang=='en' else '需要留意的客户' }}</h2>
+  <p class="hint">{{ 'These usually order more often than they have lately — worth a call to keep them active.' if lang=='en' else '这些客户平时下单比最近更勤 —— 值得打个电话，别让它们冷下来。' }}</p>
+  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th class="num">{{ 'Quiet for' if lang=='en' else '已沉默' }}</th></tr></thead><tbody>
+    {% for w in g.watch %}<tr><td>{{ w.customer }}</td><td class="num">{{ w.days_silent }} {{ 'days' if lang=='en' else '天' }}</td></tr>{% endfor %}
   </tbody></table>
 </div>
 {% endif %}

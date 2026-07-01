@@ -49,7 +49,7 @@ def resolve_p(db, p):
 # ---------- login ----------
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse("login.html", {"request": request, "error": None, "big": True})
 
 
 @app.post("/login")
@@ -58,7 +58,7 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     if user and verify_password(password, user.password_hash):
         request.session["uid"] = user.user_id
         return RedirectResponse("/me" if user.role == "rep" else "/", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "error": "Wrong username or password"})
+    return templates.TemplateResponse("login.html", {"request": request, "error": "Wrong username or password", "big": True})
 
 
 @app.get("/logout")
@@ -71,25 +71,28 @@ def logout(request: Request):
 GUIDES_DIR = os.path.join(os.path.dirname(__file__), "guides")
 
 
-def _render_guide(request, user, lang, stem, title_en, title_zh, subtitle_en, subtitle_zh, toggle_base):
+def _render_guide(request, user, lang, stem, title_en, title_zh, subtitle_en, subtitle_zh, toggle_base, big=False):
     import markdown as _md
     lang = "zh" if lang == "zh" else "en"
     with open(os.path.join(GUIDES_DIR, f"{stem}_{lang}.md"), encoding="utf-8") as f:
         html = _md.markdown(f.read(), extensions=["extra", "sane_lists"])
     return templates.TemplateResponse("guide.html", {
-        "request": request, "user": user, "body": html, "lang": lang, "toggle_base": toggle_base,
+        "request": request, "user": user, "body": html, "lang": lang, "toggle_base": toggle_base, "big": big,
         "title": (title_en if lang == "en" else title_zh),
         "subtitle": (subtitle_en if lang == "en" else subtitle_zh)})
 
 
 @app.get("/guide", response_class=HTMLResponse)
-def guide(request: Request, db: Session = Depends(get_db), lang: str = "en"):
+def guide(request: Request, db: Session = Depends(get_db), lang: str = None):
     user = current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
+    if lang is None:
+        lang = "zh" if user.role == "rep" else "en"   # reps default to 中文
     return _render_guide(request, user, lang, "explainer",
                          "How your bonus works", "你的奖金是怎么算的",
-                         "A plain-language guide for the team.", "给团队的大白话说明。", "/guide")
+                         "A plain-language guide for the team.", "给团队的大白话说明。", "/guide",
+                         big=(user.role == "rep"))
 
 
 @app.get("/guide/manager", response_class=HTMLResponse)
@@ -104,7 +107,7 @@ def manager_guide(request: Request, db: Session = Depends(get_db), lang: str = "
 
 # ---------- rep goal dashboard ----------
 @app.get("/me", response_class=HTMLResponse)
-def my_goal(request: Request, db: Session = Depends(get_db), p: int = None):
+def my_goal(request: Request, db: Session = Depends(get_db), p: int = None, lang: str = None):
     user = current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
@@ -114,16 +117,18 @@ def my_goal(request: Request, db: Session = Depends(get_db), p: int = None):
     if not name:  # a manager hitting /me with no rep -> send to team page
         return RedirectResponse("/", status_code=303)
     goal = service.compute_rep_goal(db, name, p)
-    return templates.TemplateResponse("me.html", {"request": request, "user": user, "g": goal, "viewer": "self"})
+    return templates.TemplateResponse("me.html", {"request": request, "user": user, "g": goal, "viewer": "self",
+                                                  "lang": (lang or "zh"), "big": True, "toggle_base": "/me"})
 
 
 @app.get("/rep/{name}", response_class=HTMLResponse)
-def rep_goal_view(name: str, request: Request, db: Session = Depends(get_db), p: int = None):
+def rep_goal_view(name: str, request: Request, db: Session = Depends(get_db), p: int = None, lang: str = None):
     user = current_user(request, db)
     if not user or user.role == "rep":
         return RedirectResponse("/login" if not user else "/me", status_code=303)
     goal = service.compute_rep_goal(db, name, p)
-    return templates.TemplateResponse("me.html", {"request": request, "user": user, "g": goal, "viewer": "manager"})
+    return templates.TemplateResponse("me.html", {"request": request, "user": user, "g": goal, "viewer": "manager",
+                                                  "lang": (lang or "en"), "big": True, "toggle_base": "/rep/" + name})
 
 
 # ---------- Annual Review track (infrequent accounts, rolling trailing 12 months; paid once a year) ----------
@@ -144,17 +149,18 @@ def annual(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/annual/{name}", response_class=HTMLResponse)
-def annual_rep(name: str, request: Request, db: Session = Depends(get_db)):
+def annual_rep(name: str, request: Request, db: Session = Depends(get_db), lang: str = None):
     user = current_user(request, db)
     if not user or user.role == "rep":
         return RedirectResponse("/login" if not user else "/me/annual", status_code=303)
     goal = service.compute_annual_goal(db, name)
     award = db.query(M.AnnualAward).filter(M.AnnualAward.associate == name).first()
-    return templates.TemplateResponse("annual_me.html", {"request": request, "user": user, "g": goal, "viewer": "manager", "award": award})
+    return templates.TemplateResponse("annual_me.html", {"request": request, "user": user, "g": goal, "viewer": "manager", "award": award,
+                                                         "lang": (lang or "en"), "big": True, "toggle_base": "/annual/" + name})
 
 
 @app.get("/me/annual", response_class=HTMLResponse)
-def my_annual(request: Request, db: Session = Depends(get_db)):
+def my_annual(request: Request, db: Session = Depends(get_db), lang: str = None):
     user = current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
@@ -164,7 +170,8 @@ def my_annual(request: Request, db: Session = Depends(get_db)):
     if not name:  # a manager hitting /me/annual -> the team annual page
         return RedirectResponse("/annual", status_code=303)
     goal = service.compute_annual_goal(db, name)
-    return templates.TemplateResponse("annual_me.html", {"request": request, "user": user, "g": goal, "viewer": "self"})
+    return templates.TemplateResponse("annual_me.html", {"request": request, "user": user, "g": goal, "viewer": "self",
+                                                         "lang": (lang or "zh"), "big": True, "toggle_base": "/me/annual"})
 
 
 @app.post("/annual/award")
