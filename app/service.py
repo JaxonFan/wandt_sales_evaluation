@@ -360,8 +360,10 @@ def compute_annual_goal(db, associate):
         for _, r in sub.iterrows():
             rows.append({"customer": names.get(r["account"], r["account"]), "status": r["status"],
                          "sales": int(r["sales"]), "target": (int(r["target"]) if pd.notna(r["target"]) else None),
-                         "perf": (int(r["perf"]) if pd.notna(r["perf"]) else None)})
-        rows.sort(key=lambda x: -(x["sales"] or 0))
+                         "perf": (int(r["perf"]) if pd.notna(r["perf"]) else None),
+                         "acct12": int(r["acct12"]), "prior12": int(r["prior12"]),
+                         "yoy": (int(r["yoy"]) if pd.notna(r["yoy"]) else None)})
+        rows.sort(key=lambda x: -(x["acct12"] or 0))
     actual = float(card["annual_actual"]) if card else 0.0
     target = float(card["annual_target"]) if card else 0.0
     bonus = float(card["annual_growth_bonus"]) if card else 0.0

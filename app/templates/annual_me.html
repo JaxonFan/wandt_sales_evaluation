@@ -59,12 +59,13 @@
 {% if g.rows %}
 <div class="card">
   <h2>{{ 'Your infrequent accounts' if lang=='en' else '你不常下单的客户' }}</h2>
-  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th class="num">{{ 'Sales (12 mo)' if lang=='en' else '销售（12 个月）' }}</th><th class="num">{{ 'Target' if lang=='en' else '目标' }}</th><th class="num">{{ 'vs target' if lang=='en' else '对比目标' }}</th><th>{{ 'Status' if lang=='en' else '状态' }}</th></tr></thead><tbody>
+  <p class="hint" style="margin:0 0 10px">{{ 'The % is each customer\'s real year-over-year (last 12 months vs the 12 before). Your bonus target above is size-adjusted, so it can differ.' if lang=='en' else '下面的百分比是每个客户真实的同比（最近 12 个月对比之前 12 个月）。上面用来算奖金的目标经过了规模调整，可能不一样。' }}</p>
+  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th class="num">{{ 'Last 12 mo' if lang=='en' else '近 12 个月' }}</th><th class="num">{{ 'Prior 12 mo' if lang=='en' else '去年同期' }}</th><th class="num">{{ 'vs last year' if lang=='en' else '同比' }}</th><th>{{ 'Status' if lang=='en' else '状态' }}</th></tr></thead><tbody>
     {% for r in g.rows %}<tr>
       <td>{{ r.customer }}</td>
-      <td class="num">${{ '{:,}'.format(r.sales) }}</td>
-      <td class="num">{% if r.target is not none %}${{ '{:,}'.format(r.target) }}{% else %}<span class="mut">—</span>{% endif %}</td>
-      <td class="num {{ 'pos' if (r.perf or 0)>=0 else 'neg' }}">{% if r.perf is not none %}{{ '%+d'|format(r.perf) }}%{% else %}—{% endif %}</td>
+      <td class="num">${{ '{:,}'.format(r.acct12) }}</td>
+      <td class="num">{% if r.prior12 %}${{ '{:,}'.format(r.prior12) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+      <td class="num {% if r.yoy is not none %}{{ 'pos' if r.yoy>=0 else 'neg' }}{% endif %}">{% if r.yoy is not none %}{{ '%+d'|format(r.yoy) }}%{% else %}<span class="badge b-new">{{ 'new' if lang=='en' else '新' }}</span>{% endif %}</td>
       <td>{% if r.status=='exempt' %}<span class="badge b-ramp">{{ 'exempt' if lang=='en' else '豁免' }}</span>
           {% elif r.status=='no_basis' %}<span class="mut">{{ 'line items only' if lang=='en' else '仅订单行' }}</span>
           {% else %}<span class="badge b-new">{{ 'annual' if lang=='en' else '按年' }}</span>{% endif %}</td>

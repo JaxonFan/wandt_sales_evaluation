@@ -634,6 +634,9 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
     annual_recent = df[(df["document_date"] > as_of - year) & (df["document_date"] <= as_of)].groupby("account")[GV].sum()
     annual_baseline = _cost_adjusted_baseline(df, as_of - 2 * year, as_of - year, cost_factor)
     band_factor, overall_band = _size_band_factors(annual_baseline, annual_recent, size_band_count)
+    # raw (un-adjusted) account revenue, trailing 12 months vs the prior 12 months -> shown to reps as plain YoY
+    raw_recent = df[(df["document_date"] > as_of - year) & (df["document_date"] <= as_of)].groupby("account")["extended_price"].sum()
+    raw_prior = df[(df["document_date"] > as_of - 2 * year) & (df["document_date"] <= as_of - year)].groupby("account")["extended_price"].sum()
 
     team_annual = df[(df["document_date"] > as_of - year) & (df["document_date"] <= as_of) & df["associate"].isin(sales_team)]
     rep_account = (team_annual[team_annual["account"].isin(sporadic)]
@@ -659,9 +662,12 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
         else:
             status = "no_basis"                                  # no usable prior-year window -> not scored
         perf = ((rep_q / target - 1) * 100) if target else None
+        rr = float(raw_recent.get(account_id, 0.0)); rp = float(raw_prior.get(account_id, 0.0))
+        yoy = round((rr / rp - 1) * 100) if rp > 0 else None      # plain account-level year-over-year (shown to reps)
         account_rows.append(dict(associate=rep, account=account_id, status=status,
                                  sales=round(rep_q), target=(round(target) if target is not None else None),
-                                 perf=(round(perf) if perf is not None else None)))
+                                 perf=(round(perf) if perf is not None else None),
+                                 acct12=round(rr), prior12=round(rp), yoy=yoy))
 
     cards = []
     for rep in sales_team:
