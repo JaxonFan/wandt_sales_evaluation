@@ -67,7 +67,7 @@
       <td class="num">{% if r.prior12 %}${{ '{:,}'.format(r.prior12) }}{% else %}<span class="mut">—</span>{% endif %}</td>
       <td class="num {% if r.yoy is not none %}{{ 'pos' if r.yoy>=0 else 'neg' }}{% endif %}">{% if r.yoy is not none %}{{ '%+d'|format(r.yoy) }}%{% else %}<span class="badge b-new">{{ 'new' if lang=='en' else '新' }}</span>{% endif %}</td>
       <td>{% if r.status=='exempt' %}<span class="badge b-ramp">{{ 'exempt' if lang=='en' else '豁免' }}</span>
-          {% elif r.status=='no_basis' %}<span class="mut">{{ 'line items only' if lang=='en' else '仅订单行' }}</span>
+          {% elif r.status=='no_basis' %}<span class="mut">{{ 'no growth yet' if lang=='en' else '暂不计增长' }}</span>
           {% else %}<span class="badge b-new">{{ 'annual' if lang=='en' else '按年' }}</span>{% endif %}</td>
     </tr>{% endfor %}
   </tbody></table>

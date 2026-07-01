@@ -90,7 +90,7 @@ def guide(request: Request, db: Session = Depends(get_db), lang: str = None):
     if lang is None:
         lang = "zh" if user.role == "rep" else "en"   # reps default to 中文
     return _render_guide(request, user, lang, "explainer",
-                         "How your bonus works", "你的奖金是怎么算的",
+                         "How your bonus works", "我们的奖金是怎么算的",
                          "A plain-language guide for the team.", "给团队的大白话说明。", "/guide",
                          big=(user.role == "rep"))
 
