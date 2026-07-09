@@ -124,10 +124,11 @@ rep's growth down. (You can also exempt any account directly from the rep detail
 
 ## New products — credit genuine launches
 
-**New products** page. Lists SKUs first sold company-wide in the last ~26 weeks. Most are catalog churn (a
+**New products** page. Lists SKUs first sold company-wide in the last ~13 weeks. Most are catalog churn (a
 re-coded size or brand of something already sold) and should stay **Not featured** (they pay nothing extra).
-Mark a **genuinely new** product **Featured**, and its sales count toward the seller's growth at a reduced
-**20%** (credited, but not fully, since the company created the product).
+Mark a **genuinely new** product **Featured**, and its growth credit **ramps from 20% up to 100% over its
+first 13 weeks** — discounted early (the company created it), full credit once it's become the rep's own
+book. The ramp is time-based on the product's age, so there's no sudden jump when it stops being "new".
 
 ---
 
@@ -196,8 +197,8 @@ Only the sales reps' lines are stored.
 - **Smooth last-year bar over ± weeks** — optional smoothing of the year-ago window (now **0** = off/strict).
 - **Annual cadence if order gap > weeks** — accounts whose median gap between orders exceeds this go to the
   Annual review (now **4 weeks**).
-- **New-product window / attribution** — how long a SKU counts as "new" (now 26 weeks) and at what fraction it
-  credits to growth (now **20%**).
+- **New-product window / attribution** — the ramp window over which a featured SKU climbs to full credit
+  (now 13 weeks) and the **starting** fraction it credits at (now **20%**, ramping to 100%).
 
 **Acquisition**
 

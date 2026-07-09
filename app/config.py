@@ -37,8 +37,8 @@ DEFAULTS = {
     "growth_quarter_floor": 0.95,  # an account earns growth ONLY if its trailing-13-week PROFIT is >= this x the same 13 weeks last year (else a 4-week pop on a profit-shrinking account doesn't count). Shown to reps as a revenue redline = today's cost + this x last-year quarter profit.
     "growth_quarter_min_prior": 3000,  # (legacy, revenue) retained for reference; the gate now uses growth_quarter_min_profit
     "growth_quarter_min_profit": 600,  # only apply the quarter gate to accounts with at least this much PROFIT in the prior-year quarter (new/small accounts are never gated)
-    "new_product_weeks": 26,       # a SKU is "new" for this many weeks after its company-wide first sale
-    "new_product_attribution": 0.20,  # a featured-new product's revenue counts at this fraction toward GROWTH (rep credited but discounted)
+    "new_product_weeks": 13,       # a SKU is "new" for this many weeks after its company-wide first sale; its credit ramps over this window
+    "new_product_attribution": 0.20,  # a featured-new product's growth credit STARTS here and ramps smoothly to 100% by new_product_weeks (no cliff)
     "growth_cap_multiple": 2.0,    # (legacy alias; superseded by jump_multiple)
     "growth_review_min": 10000,    # (deprecated — jumps now flag on the doubling alone, no dollar floor)
 

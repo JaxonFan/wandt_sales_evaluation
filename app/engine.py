@@ -389,10 +389,13 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     GV = "extended_price"
     if featured_new_products:
         item_first = df.groupby("item_number")["document_date"].min()
-        is_new = (df["item_number"].isin(featured_new_products) &
-                  ((period_end - df["item_number"].map(item_first)) <= pd.Timedelta(weeks=new_product_weeks)))
-        df = df.assign(growth_value=np.where(is_new, df["extended_price"] * new_product_attribution,
-                                             df["extended_price"]))
+        # A featured new product's growth credit RAMPS smoothly from new_product_attribution (e.g. 20%) at
+        # first sale up to 100% by new_product_weeks of age, then stays 100% — no cliff at graduation. The
+        # ramp is time-based on the product's age (weeks since its company-wide first sale).
+        age_weeks = (period_end - df["item_number"].map(item_first)).dt.days / 7.0
+        ramp = new_product_attribution + (1.0 - new_product_attribution) * (age_weeks / new_product_weeks).clip(0.0, 1.0)
+        factor = np.where(df["item_number"].isin(featured_new_products), ramp, 1.0)
+        df = df.assign(growth_value=df["extended_price"] * factor)
         GV = "growth_value"
 
     # --- trailing windows for GROWTH ---
@@ -404,6 +407,9 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     prior_q_df = df[(df["document_date"] > qstart - win) & (df["document_date"] <= qend - win)]   # for provisional
     account_recent_q = recent_q_df.groupby("account")[GV].sum()
     account_prior_q = prior_q_df.groupby("account")[GV].sum()
+    # account's growth-window (4-week) profit + revenue -> margin, for the /jumps review (spot low-margin spikes)
+    account_recent_rev4 = recent_q_df.groupby("account")["extended_price"].sum()
+    account_recent_profit4 = recent_q_df.groupby("account")["line_profit"].sum()
     # company cost-inflation factor (last year's basket repriced at today's cost) — lifts the year-ago bar so a
     # rep isn't credited for merely passing higher costs through. One scalar over the trailing cost_inflation_weeks.
     ci = pd.Timedelta(weeks=cost_inflation_weeks)
@@ -492,6 +498,9 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         rep, account_id = r["associate"], r["account"]
         rep_q = float(r["rep_q"])
         account_q = float(account_recent_q.get(account_id, 0.0))   # regular: 4-week window
+        period_rev4 = float(account_recent_rev4.get(account_id, 0.0))
+        period_profit4 = float(account_recent_profit4.get(account_id, 0.0))
+        period_margin4 = (period_profit4 / period_rev4) if period_rev4 else 0.0
         acct_baseline = float(account_baseline_q.get(account_id, 0.0))
         acct_fraction = period_fraction
         work_share = rep_q / account_q if account_q else 0.0
@@ -574,6 +583,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                                  account_target=target_for_rep, capped=jump, held_back=round(held),
                                  windfall=round(windfall if raw_for_rep is not None else 0.0),
                                  released=released, account_recent=round(account_q),
+                                 period_profit=round(period_profit4), period_margin=round(period_margin4 * 100, 1),
                                  established=round(established),
                                  jump_bar=(round(jump_bar) if jump_bar is not None else None),
                                  jump_ratio=jump_ratio,

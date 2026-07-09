@@ -418,6 +418,7 @@ def jumps_page(request: Request, db: Session = Depends(get_db), p: int = None):
             rep_bar = round(nm * rs / ar) if ar else 0                      # this rep's slice of the bar (rs/rep_bar == jump ×)
             rows.append(dict(account=r["account"], customer=names.get(r["account"], r["account"]),
                              associate=r["associate"], account_recent=ar, rep_share=rs, normal=nm, rep_bar=rep_bar,
+                             period_profit=int(r["period_profit"]), period_margin=float(r["period_margin"]),
                              ratio=(float(r["jump_ratio"]) if pd.notna(r["jump_ratio"]) else None),
                              q_recent=int(r["q_recent"]), q_prior=int(r["q_prior"]), timing=bool(r["timing"]),
                              new_account=bool(r["new_account"]),

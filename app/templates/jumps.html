@@ -19,7 +19,7 @@
     landed on a different week, not real growth → usually leave it <b>customer-driven / withheld</b>.</p>
   <table>
     <thead><tr><th>Customer</th><th>Rep</th><th class="num">Account 4 wks</th><th class="num">Normal level</th>
-      <th class="num">Jump ×</th><th class="num">Last 3 months vs prior</th><th class="num">Rep share</th><th class="num">Windfall held</th><th>Who drove it?</th></tr></thead>
+      <th class="num">Jump ×</th><th class="num">Margin (4 wk)</th><th class="num">Last 3 months vs prior</th><th class="num">Rep share</th><th class="num">Windfall held</th><th>Who drove it?</th></tr></thead>
     <tbody>
     {% for r in rows %}
       <tr>
@@ -28,6 +28,7 @@
         <td class="num">${{ '{:,}'.format(r.account_recent) }}</td>
         <td class="num">${{ '{:,}'.format(r.normal) }}</td>
         <td class="num">{% if r.ratio %}{{ r.ratio }}×{% else %}—{% endif %}</td>
+        <td class="num {{ 'neg' if r.period_margin < 8 else '' }}" title="4-week profit ${{ '{:,}'.format(r.period_profit) }} on ${{ '{:,}'.format(r.account_recent) }} sales">${{ '{:,}'.format(r.period_profit) }} <span class="mut">· {{ r.period_margin }}%</span></td>
         <td class="num">{% if r.new_account %}${{ '{:,}'.format(r.q_recent) }} <span class="mut">· new (no last yr)</span>{% else %}${{ '{:,}'.format(r.q_recent) }} <span class="mut">vs</span> ${{ '{:,}'.format(r.q_prior) }}{% endif %}</td>
         <td class="num">${{ '{:,}'.format(r.rep_share) }} <span class="mut">vs ${{ '{:,}'.format(r.rep_bar) }} bar</span></td>
         <td class="num">{% if r.released %}<span class="pos">released</span>{% else %}${{ '{:,}'.format(r.windfall) }}{% endif %}</td>
@@ -46,7 +47,7 @@
         </td>
       </tr>
       {% set c = r.chart %}
-      <tr><td colspan="9" style="border-top:0;padding-top:2px">
+      <tr><td colspan="10" style="border-top:0;padding-top:2px">
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
           <svg viewBox="0 0 {{ c.w }} {{ c.h }}" width="{{ c.w }}" height="{{ c.h }}" style="background:#fff;border:1px solid var(--line);border-radius:6px">
             <rect x="{{ c.period_x }}" y="0" width="{{ c.w - c.period_x }}" height="{{ c.h }}" fill="var(--blue-bg)"/>
@@ -64,7 +65,7 @@
         </div>
       </td></tr>
     {% else %}
-      <tr><td colspan="9" class="mut">No big jumps to review this period.</td></tr>
+      <tr><td colspan="10" class="mut">No big jumps to review this period.</td></tr>
     {% endfor %}
     </tbody>
   </table>
