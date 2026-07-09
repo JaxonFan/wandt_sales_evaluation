@@ -5,16 +5,17 @@
     re-codes of the same product (catalog churn) — those should stay <b>Not featured</b>. Mark the genuinely
     <b>new</b> products as <b>Featured</b>: a featured product's revenue then counts at
     <b>{{ '%.0f'|format(attribution*100) }}%</b> toward the rep's growth (rewarded, but discounted since the
-    company created the product). Default = Not featured (pays nothing).</p>
+    company created the product). Default = Not featured (pays nothing). Missing one? <b>Add it by item #</b>
+    below — note that featuring only pays while a product is within its first <b>{{ weeks }} weeks</b>.</p>
   <table>
     <thead><tr><th>Item</th><th>Description</th><th class="num">First sold</th><th class="num">$/unit</th>
       <th class="num">Rev (13wk)</th><th>Featured?</th></tr></thead>
     <tbody>
     {% for r in rows %}
       <tr>
-        <td class="mut">{{ r.item }}</td>
+        <td class="mut">{{ r.item }}{% if r.manual %} <span class="badge b-ramp" title="Added manually by item #, not auto-detected.">added by hand</span>{% endif %}{% if r.stale %} <span class="badge" style="background:var(--amber-bg);color:var(--amber)" title="First sold more than {{ weeks }} weeks ago — outside the new-product window, so featuring it pays nothing.">outside window</span>{% endif %}{% if r.unknown %} <span class="badge" style="background:var(--red-bg);color:var(--red)" title="No sales recorded for this item # yet.">no sales yet</span>{% endif %}</td>
         <td>{{ r.desc }}</td>
-        <td class="num">{{ r.first_seen }}</td>
+        <td class="num">{{ r.first_seen or '—' }}</td>
         <td class="num">${{ r.unit_price }}</td>
         <td class="num">${{ '{:,}'.format(r.rev13) }}</td>
         <td>
@@ -32,5 +33,10 @@
     {% endfor %}
     </tbody>
   </table>
+  <form method="post" action="/products/flag" class="ov-form" style="margin-top:12px">
+    <input type="hidden" name="featured" value="yes">
+    Add product by item # <input name="item" required style="width:200px">
+    <button type="submit">Add &amp; feature</button>
+  </form>
 </div>
 {% endblock %}

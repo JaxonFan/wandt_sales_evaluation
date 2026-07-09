@@ -287,19 +287,20 @@ def constrained_page(request: Request, db: Session = Depends(get_db), p: int = N
         return RedirectResponse("/login", status_code=303)
     _res, period, _s, nav, _as_of = service.run_period_bonus(db, p)
     current = db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period.period_id).all()
+    num_to_desc = {i: d for i, d in db.query(M.SalesLine.item_number, M.SalesLine.item_description).distinct()}
     df = service.load_lines_df(db)
     candidates = []
     if len(df):
         df = df[df["document_date"] > pd.to_datetime(period.window_start)]
         if len(df):
-            num_to_desc = {i: d for i, d in db.query(M.SalesLine.item_number, M.SalesLine.item_description).distinct()}
             summary = df.groupby("item_number").agg(revenue=("extended_price", "sum")).sort_values("revenue", ascending=False).head(10)
             total = df["extended_price"].sum() or 1
             candidates = [{"item_number": i, "description": num_to_desc.get(i, ""),
                            "revenue": round(row.revenue), "share": round(row.revenue / total * 100, 1)}
                           for i, row in summary.iterrows()]
     return templates.TemplateResponse("constrained.html", {
-        "request": request, "user": user, "period": period, "nav": nav, "current": current, "candidates": candidates})
+        "request": request, "user": user, "period": period, "nav": nav, "current": current,
+        "candidates": candidates, "desc_by_item": num_to_desc})
 
 
 @app.post("/constrained/add")
@@ -452,6 +453,7 @@ def products_page(request: Request, db: Session = Depends(get_db)):
     weeks = int(service.get_settings(db)["new_product_weeks"])
     attribution = float(service.get_settings(db)["new_product_attribution"])
     rows = service.new_product_candidates(db, weeks)
+    rows = rows + service.featured_extra_products(db, [r["item"] for r in rows], weeks)
     return templates.TemplateResponse("products.html", {
         "request": request, "user": user, "rows": rows, "weeks": weeks, "attribution": attribution})
 

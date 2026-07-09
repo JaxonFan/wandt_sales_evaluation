@@ -10,15 +10,15 @@
   <p class="hint">Items you couldn't fully supply this period. They're removed from <b>both</b> the current and the
     baseline window (apples-to-apples), so a drop caused by "couldn't ship it" isn't charged to the rep.</p>
   <table>
-    <thead><tr><th>Item #</th><th>Note</th><th></th></tr></thead>
+    <thead><tr><th>Item #</th><th>Description</th><th>Note</th><th></th></tr></thead>
     <tbody>
     {% for c in current %}
-      <tr><td>{{ c.item_number }}</td><td class="mut">{{ c.note or '' }}</td>
+      <tr><td>{{ c.item_number }}</td><td>{{ desc_by_item.get(c.item_number, '') }}</td><td class="mut">{{ c.note or '' }}</td>
         <td><form method="post" action="/constrained/remove" style="margin:0">
           <input type="hidden" name="item_number" value="{{ c.item_number }}"><input type="hidden" name="p" value="{{ nav.idx }}">
           <button type="submit" class="ghost">remove</button></form></td></tr>
     {% else %}
-      <tr><td colspan="3" class="mut">None yet.</td></tr>
+      <tr><td colspan="4" class="mut">None yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

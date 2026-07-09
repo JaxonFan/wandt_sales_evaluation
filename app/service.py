@@ -282,6 +282,37 @@ def new_product_candidates(db, new_product_weeks=26):
     return sorted(out, key=lambda r: -r["rev13"])
 
 
+def featured_extra_products(db, existing_items, new_product_weeks=26):
+    """Manager-featured products that the auto-detector didn't surface (e.g. added manually by item#, or
+    first sold longer ago than new_product_weeks). Returned in the same row shape as new_product_candidates
+    so they render in the same table, tagged manual=True (and unknown=True if the item# isn't in sales yet)."""
+    existing = set(existing_items)
+    featured_items = [r.item_number for r in db.query(M.NewProductReview).filter(M.NewProductReview.featured == True)
+                      if r.item_number not in existing]
+    if not featured_items:
+        return []
+    rows = db.query(M.SalesLine.item_number, M.SalesLine.item_description, M.SalesLine.document_date,
+                    M.SalesLine.qty, M.SalesLine.extended_price).filter(
+                        M.SalesLine.item_number.in_(featured_items)).all()
+    df = pd.DataFrame(rows, columns=["item", "desc", "date", "qty", "rev"])
+    end = pd.to_datetime(df["date"]).max().normalize() if len(df) else None
+    out = []
+    for it in featured_items:
+        s = df[df["item"] == it] if len(df) else df
+        if len(s):
+            first_seen = pd.to_datetime(s["date"]).min()
+            within = end is not None and first_seen > end - pd.Timedelta(weeks=new_product_weeks)
+            out.append(dict(item=it, desc=(s["desc"].dropna().iloc[0] if s["desc"].notna().any() else ""),
+                            first_seen=first_seen.date(),
+                            unit_price=round(float((s["rev"] / s["qty"].replace(0, 1)).median()), 1),
+                            rev13=round(float(s[pd.to_datetime(s["date"]) > end - pd.Timedelta(weeks=13)]["rev"].sum())),
+                            featured=True, manual=True, stale=not within))
+        else:
+            out.append(dict(item=it, desc="", first_seen=None, unit_price=0, rev13=0,
+                            featured=True, manual=True, unknown=True))
+    return out
+
+
 def jump_released_set(db, period_id):
     """Accounts the manager confirmed the rep genuinely won this period -> release the withheld big-jump
     windfall (default for a flagged jump is customer-driven = withheld)."""
@@ -429,6 +460,9 @@ def flag_silent_accounts(db, gap_multiple=3.0, min_orders=5):
         median_gap_days = order_dates.diff().dt.days.median()
         days_silent = (as_of - order_dates.iloc[-1]).days
         if median_gap_days and days_silent > gap_multiple * median_gap_days:
+            rep_rev = group.dropna(subset=["associate"]).groupby("associate")["extended_price"].sum()
+            rep = rep_rev.idxmax() if len(rep_rev) else ""
             records.append({"account": account_id, "customer": names.get(account_id, account_id),
-                            "median_gap_days": round(float(median_gap_days), 1), "days_silent": int(days_silent)})
+                            "rep": rep, "median_gap_days": round(float(median_gap_days), 1),
+                            "days_silent": int(days_silent)})
     return sorted(records, key=lambda r: -r["days_silent"])

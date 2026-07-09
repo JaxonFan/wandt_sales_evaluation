@@ -136,6 +136,12 @@ instead, on a rolling **last-12-months vs the prior 12 months** basis, and **pai
 each rep's infrequent accounts, their annual sales vs target, and a suggested annual growth bonus; open a rep
 to **set their annual award**. These accounts still earn line items in the regular per-period flow.
 
+**Which accounts land here (regular vs annual).** The app decides automatically from how often the account
+orders: an account goes on the **annual** track when its **typical gap between orders is 4+ weeks** —
+specifically if the **median *or* mean** gap is 4 weeks or more (the mean also catches accounts that order in
+a burst and then go quiet). Everything else is a **regular** account, scored every 4-week period. The 4-week
+threshold is the **Annual cadence** dial in Settings.
+
 ---
 
 ## Roster — reps, hours, salary
