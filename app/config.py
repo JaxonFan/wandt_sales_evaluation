@@ -29,13 +29,14 @@ DEFAULTS = {
     "size_band_count": 5,          # group accounts into this many size bands for the "typical move" de-trend
     "growth_payout_rate": 0.01,    # $ earned per sales-dollar above target (bar = cost-adjusted last-year x real-market move; no stretch)
     "cost_inflation_weeks": 13,    # window for the company cost-inflation factor (same basket repriced at today's cost); the bar = last-year cost x this factor + last-year profit, so passing cost through isn't "growth"
-    "glide_alpha": 0.20,           # how fast a level-shifted account's bar catches up to its new run-rate (0..1); ~0.2 = a quarter of memory
+    "glide_alpha": 0.30,           # how fast a level-shifted account's bar catches up to its new run-rate (0..1); ~0.3 = a few periods of memory
     "min_baseline_ratio": 0.80,    # year-ago window must be >= this x recent to use it (else glide, not YoY) — high = lean on the smoother glide bar
     "jump_multiple": 2.0,          # flag a DOUBLING: recent >= this x its bar (100%+ over) -> whole over-bar amount withheld for manager review
     "mature_smooth_weeks": 0,      # 0 = OFF (strict: compare to the EXACT same 4 weeks last year). Smoothing >0 was found to inflate growth via the size-band de-trend, so it's off; timing shifts are handled by the glide/annual paths.
     "sporadic_gap_weeks": 4,       # accounts whose median order gap exceeds this (order less often than the window) are scored ANNUALLY
-    "growth_quarter_floor": 0.95,  # an account earns growth ONLY if its trailing 13 weeks are >= this x the same 13 weeks last year (else a 4-week pop on a shrinking account doesn't count)
-    "growth_quarter_min_prior": 3000,  # only apply the quarter gate to accounts with at least this much in the prior-year quarter (new/small accounts are never gated)
+    "growth_quarter_floor": 0.95,  # an account earns growth ONLY if its trailing-13-week PROFIT is >= this x the same 13 weeks last year (else a 4-week pop on a profit-shrinking account doesn't count). Shown to reps as a revenue redline = today's cost + this x last-year quarter profit.
+    "growth_quarter_min_prior": 3000,  # (legacy, revenue) retained for reference; the gate now uses growth_quarter_min_profit
+    "growth_quarter_min_profit": 600,  # only apply the quarter gate to accounts with at least this much PROFIT in the prior-year quarter (new/small accounts are never gated)
     "new_product_weeks": 26,       # a SKU is "new" for this many weeks after its company-wide first sale
     "new_product_attribution": 0.20,  # a featured-new product's revenue counts at this fraction toward GROWTH (rep credited but discounted)
     "growth_cap_multiple": 2.0,    # (legacy alias; superseded by jump_multiple)

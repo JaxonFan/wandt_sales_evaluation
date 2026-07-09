@@ -23,6 +23,7 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count",
                   "growth_payout_rate", "cost_inflation_weeks", "glide_alpha", "min_baseline_ratio", "jump_multiple",
                   "mature_smooth_weeks", "sporadic_gap_weeks", "growth_quarter_floor", "growth_quarter_min_prior",
+                  "growth_quarter_min_profit",
                   "new_product_weeks", "new_product_attribution",
                   "acq_tier_small_max", "acq_tier_medium_max", "acq_flat_small", "acq_flat_medium", "acq_flat_large",
                   "acq_ramp_periods", "fine_amount"]
@@ -230,6 +231,8 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
                              perf=(round(perf, 0) if perf is not None else None),
                              status=r["status"], capped=bool(r["capped"]), held_back=int(r["held_back"]),
                              timing=bool(r["timing"]), q_recent=int(r["q_recent"]), q_prior=int(r["q_prior"]),
+                             q_recent_rev=int(r["q_recent_rev"]), q_redline=int(r["q_redline"]),
+                             q_recent_profit=int(r["q_recent_profit"]), q_prior_profit=int(r["q_prior_profit"]),
                              gated=bool(r["gated"]), new_account=bool(r["new_account"])))
         rows.sort(key=lambda x: (not x["capped"], x["status"] != "mature", -(x["sales"] or 0)))
     card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == name), None)

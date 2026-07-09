@@ -344,7 +344,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
                          glide_alpha=0.35, jump_multiple=2.0, min_baseline_ratio=0.30,
                          mature_smooth_weeks=4, sporadic_gap_weeks=4, cost_inflation_weeks=13,
-                         growth_quarter_floor=0.0, growth_quarter_min_prior=3000,
+                         growth_quarter_floor=0.0, growth_quarter_min_prior=3000, growth_quarter_min_profit=600,
                          featured_new_products=frozenset(), new_product_weeks=26, new_product_attribution=0.20,
                          acq_tier_small_max=15000, acq_tier_medium_max=65000,
                          acq_flat_small=100, acq_flat_medium=200, acq_flat_large=300,
@@ -427,6 +427,15 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     _ql = pd.Timedelta(weeks=13)
     q_recent_by = df[(df["document_date"] > qend - _ql) & (df["document_date"] <= qend)].groupby("account")[GV].sum()
     q_prior_by = df[(df["document_date"] > qend - _ql - ONE_YEAR) & (df["document_date"] <= qend - ONE_YEAR)].groupby("account")[GV].sum()
+    # quarter-health gate is on PROFIT, shown to reps as a revenue "redline" (cover today's cost + hold last
+    # year's quarter profit). Use RAW price/cost/profit (not GV) so a discounted new product doesn't distort
+    # whether the account is actually shrinking. recent_rev < redline  <=>  recent_profit < floor x prior_profit.
+    _rec = df[(df["document_date"] > qend - _ql) & (df["document_date"] <= qend)].groupby("account")
+    _pri = df[(df["document_date"] > qend - _ql - ONE_YEAR) & (df["document_date"] <= qend - ONE_YEAR)].groupby("account")
+    q_recent_rev_by = _rec["extended_price"].sum()
+    q_recent_cost_by = _rec["extended_cost"].sum()
+    q_recent_profit_by = _rec["line_profit"].sum()
+    q_prior_profit_by = _pri["line_profit"].sum()
     # company quarter-over-quarter seasonal swing (for provisional accounts with no year-ago baseline)
     company_seasonal_factor = 1.0
     if account_prior_q.sum() and account_recent_q.sum():
@@ -490,6 +499,12 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         prior_q = float(account_prior_q.get(account_id, 0.0))
         # trailing-QUARTER context (for the quarter-health gate + the timing flag)
         q_rec = float(q_recent_by.get(account_id, 0.0)); q_pri = float(q_prior_by.get(account_id, 0.0))
+        # profit-health gate, shown as a revenue redline (cover today's cost + hold last year's quarter profit)
+        q_rec_rev = float(q_recent_rev_by.get(account_id, 0.0))
+        q_rec_cost = float(q_recent_cost_by.get(account_id, 0.0))
+        q_rec_profit = float(q_recent_profit_by.get(account_id, 0.0))
+        q_pri_profit = float(q_prior_profit_by.get(account_id, 0.0))
+        q_redline = q_rec_cost + growth_quarter_floor * q_pri_profit   # revenue needed at today's cost
         gated = False
 
         established = float(glide_levels.get(account_id, 0.0))
@@ -519,11 +534,13 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         if raw_for_rep is not None:
             base_for_rep = raw_for_rep * lift                     # baseline x size/market lift
             target_for_rep = base_for_rep                       # bar = cost-adjusted last-year (cost+profit) x real-market move; no stretch hurdle
-            # quarter-health gate: a 4-week pop on an account that's actually SHRINKING over the quarter doesn't
-            # count as growth. If its trailing 13 weeks are below growth_quarter_floor x the same 13 weeks last
-            # year (and it has a real prior-year quarter), drop it from growth entirely (neutral, not a review).
-            quarter_gated = (q_pri > growth_quarter_min_prior) and (q_rec < growth_quarter_floor * q_pri)
-            gated = quarter_gated and rep_q > target_for_rep      # a 4-week pop on a SHRINKING account -> no growth
+            # quarter-health gate: a 4-week pop on an account whose PROFIT is shrinking over the quarter doesn't
+            # count as growth. If its trailing-13-week profit is below growth_quarter_floor x the same 13 weeks
+            # last year (and it had a real prior-year quarter), drop it from growth entirely (neutral, not a
+            # review). Shown to reps as a revenue redline: recent revenue below (today's cost + floor x prior
+            # profit) == recent profit below floor x prior profit.
+            quarter_gated = (q_pri_profit > growth_quarter_min_profit) and (q_rec_profit < growth_quarter_floor * q_pri_profit)
+            gated = quarter_gated and rep_q > target_for_rep      # a 4-week pop on a SHRINKING-PROFIT account -> no growth
             if not gated:
                 # jump review: an account that DOUBLED its NORMAL LEVEL (recent >= jump_multiple x normal) is the
                 # anomaly itself — "Normal level" is the HIGHER of the account's recent run-rate and its
@@ -561,6 +578,8 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                                  jump_bar=(round(jump_bar) if jump_bar is not None else None),
                                  jump_ratio=jump_ratio,
                                  q_recent=round(q_rec), q_prior=round(q_pri), timing=timing, gated=gated,
+                                 q_recent_rev=round(q_rec_rev), q_redline=round(q_redline),
+                                 q_recent_profit=round(q_rec_profit), q_prior_profit=round(q_pri_profit),
                                  new_account=bool((period_end - first_seen.get(account_id, period_end)).days < 364)))
 
     # contribution (line items, current period) per rep

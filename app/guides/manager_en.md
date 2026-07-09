@@ -89,11 +89,22 @@ same weeks last year** (current 4 weeks shaded). You can confirm a timing shift 
 app: if last year's and this year's spikes sit at *different* weeks, it's a shifted order; if this year's line
 rides clearly above last year's, it's real growth.
 
-**Quarter-health gate.** Growth only counts if the account is actually growing: if its **last 13 weeks are more
-than 5% below the same 13 weeks last year**, a 4-week pop **doesn't** earn growth — it's dropped automatically
-(not a review item). You'll see those accounts with a **"qtr down — no growth"** badge on the rep detail page,
-and the rep sees them on their own page under "growth not counted." This is what now handles GW-Corona-style
-cases (jumped in the window, but down over the quarter). The 5% floor is a Settings dial.
+**Quarter-health gate (on profit).** Growth only counts if the account is actually growing **profit**: if its
+**last-13-week profit is more than 5% below the same 13 weeks last year**, a 4-week pop **doesn't** earn growth —
+it's dropped automatically (not a review item). Reps think in revenue, so we show it as a **revenue "redline"** =
+**today's cost + 95% of last year's quarter profit** (the revenue you'd need, at your current cost, to hold the
+margin). Recent revenue below the redline means profit is down. You'll see those accounts with a
+**"qtr profit down — no growth"** badge on the rep detail page, and the rep sees them under "growth not counted"
+with their revenue vs redline. This stops us rewarding **unprofitable** revenue spikes (big low-margin orders).
+The 5% floor and the minimum prior-year quarter profit are Settings dials.
+
+**How the target chases a spike (glide).** For a newer or level-shifted account (no reliable year-ago window),
+the bar isn't last year — it's the account's **own recent run-rate**, and it *chases* the account upward. Each
+period the bar closes about **30%** of the gap to the new level (the "glide catch-up speed" dial). So an account
+that jumps from ~$1,000 to ~$2,000 and holds sees its bar climb roughly $1,000 → $1,300 → $1,510 → $1,660 …,
+settling near $2,000 over ~4–5 periods. The rep earns growth on the *shrinking gap* while it catches up; if sales
+keep climbing, the bar always trails and growth keeps paying on the increase. (A higher speed catches up faster,
+so it rewards a one-time step-up for fewer periods.)
 
 **A note on small timing bumps.** Only **big** spikes (2×+) are auto-withheld for your review. A *small* bump
 from a shifted order just pays through — it's usually a few dollars and not worth chasing, and leaving it flow
@@ -177,7 +188,8 @@ Only the sales reps' lines are stored.
 - **Cost-inflation window (weeks)** — the window used to re-price last year's basket at today's cost (now 13),
   so passing higher costs through isn't counted as growth.
 - **Glide catch-up speed (0–1)** — how fast a newer/level-shifted account's bar catches up to its own recent
-  pace (now **0.20** ≈ a quarter of memory; lower = rewards a climb longer).
+  pace (now **0.30** ≈ a few periods of memory; lower = rewards a climb longer). See "How the target chases a
+  spike" above.
 - **Use last-year only if ≥ this × recent** — when the year-ago window is reliable enough to use vs. falling
   back to the glide bar (now 0.80).
 - **Flag a "big jump" at (× the bar)** — the doubling threshold for the jumps review (now **2×**).

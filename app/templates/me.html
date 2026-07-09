@@ -89,17 +89,18 @@
 <div class="card">
   <h2>{{ 'Growth not counted this period' if lang=='en' else '这个周期不计入增长的客户' }}</h2>
   {% if lang=='en' %}
-  <p class="hint">These accounts beat their 4‑week bar, but their <b>last 3 months are down vs last year</b> — so the
-    growth doesn't count (a one‑off order doesn't pay while the account is shrinking). Win the account back to its
-    old level and its growth starts counting again.</p>
+  <p class="hint">These accounts beat their 4‑week bar, but their <b>last‑3‑months profit is down vs last year</b> — so the
+    growth doesn't count (a one‑off order doesn't pay while the account's profit is shrinking). The <b>redline</b> is the
+    revenue you'd need <i>at today's cost</i> to hold last year's profit; get back above it and growth counts again.</p>
   {% else %}
-  <p class="hint">这些客户虽然超过了 4 周门槛，但它们的 <b>最近 3 个月比去年同期在下滑</b> —— 所以这部分增长先不算
-    （客户整体还在下滑时，偶尔一单先不计增长）。把客户做回原来的水平，它的增长就会重新计入。</p>
+  <p class="hint">这些客户虽然超过了 4 周门槛，但它们的 <b>最近 3 个月利润比去年同期在下滑</b> —— 所以这部分增长先不算
+    （客户利润还在下滑时，偶尔一单先不计增长）。<b>红线</b>是<i>按今天的成本</i>要守住去年利润所需的营收；重新回到红线之上，增长就会重新计入。</p>
   {% endif %}
-  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th class="num">{{ 'Last 3 months' if lang=='en' else '最近 3 个月' }}</th><th class="num">{{ 'vs last year' if lang=='en' else '对比去年' }}</th></tr></thead><tbody>
+  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th class="num">{{ 'Last 3mo revenue' if lang=='en' else '最近 3 个月营收' }}</th><th class="num">{{ 'Redline' if lang=='en' else '红线' }}</th><th class="num">{{ 'Profit vs last year' if lang=='en' else '利润对比去年' }}</th></tr></thead><tbody>
     {% for n in g.gated_accounts %}<tr>
       <td>{{ n.customer }}</td>
-      <td class="num">${{ '{:,}'.format(n.q_recent) }} <span class="mut">vs ${{ '{:,}'.format(n.q_prior) }}</span></td>
+      <td class="num">${{ '{:,}'.format(n.q_recent_rev) }}</td>
+      <td class="num">${{ '{:,}'.format(n.q_redline) }}</td>
       <td class="num neg">{{ '%+d'|format(n.qoy_pct) }}%</td></tr>{% endfor %}
   </tbody></table>
 </div>
