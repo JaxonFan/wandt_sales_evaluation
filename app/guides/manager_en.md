@@ -58,6 +58,11 @@ bonus**. When the rep genuinely **won** the account, flip it to **Self-acquired*
 acquisition bonus ($50/$100/$150 by the account's annualized size). This is the gate for acquisition pay:
 nothing pays until you confirm it here.
 
+**During the first ~3 periods (the "New" window), the account earns line items and — if self-acquired —
+acquisition, but no growth commission.** There's no fair year-ago baseline to grow against yet, so growth is
+held until the account graduates; the rep still earns $0.10/line and the acquisition bonus in the meantime.
+Once it graduates, it starts scoring on its own prior pace like any other account.
+
 ---
 
 ## Big jumps — release or withhold a windfall
