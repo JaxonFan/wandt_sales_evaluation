@@ -332,6 +332,7 @@ def _dials(s):
         cost_inflation_weeks=int(s["cost_inflation_weeks"]),
         growth_quarter_floor=float(s["growth_quarter_floor"]), growth_quarter_min_prior=float(s["growth_quarter_min_prior"]),
         growth_quarter_min_profit=float(s["growth_quarter_min_profit"]),
+        growth_annual_floor=float(s["growth_annual_floor"]), growth_annual_min_prior=float(s["growth_annual_min_prior"]),
         new_product_weeks=int(s["new_product_weeks"]), new_product_attribution=float(s["new_product_attribution"]),
         acq_tier_small_max=float(s["acq_tier_small_max"]), acq_tier_medium_max=float(s["acq_tier_medium_max"]),
         acq_flat_small=float(s["acq_flat_small"]), acq_flat_medium=float(s["acq_flat_medium"]),
@@ -428,13 +429,20 @@ def compute_rep_goal(db, associate, idx=None):
         for _, r in rep_accounts[rep_accounts["status"].isin(["landing", "ramp"])].iterrows():
             new_accounts.append({"customer": names.get(r["account"], r["account"]),
                                  "status": r["status"], "sales": round(float(r["rep_quarter_sales"]))})
-        # accounts whose growth didn't count this period because their last-quarter PROFIT is shrinking vs last year
+        # accounts whose growth didn't count this period — either quarter PROFIT shrinking, or flat/down YoY
         for _, r in rep_accounts[rep_accounts.get("gated", False) == True].iterrows():
-            pp = float(r["q_prior_profit"]) or 1.0
-            gated_accounts.append({"customer": names.get(r["account"], r["account"]),
-                                   "q_recent_rev": int(r["q_recent_rev"]), "q_redline": int(r["q_redline"]),
-                                   "q_recent_profit": int(r["q_recent_profit"]), "q_prior_profit": int(r["q_prior_profit"]),
-                                   "qoy_pct": round((float(r["q_recent_profit"]) / pp - 1) * 100)})
+            annual = (r.get("gate_reason") == "annual_flat")
+            if annual:
+                base = float(r["ann_prior_rev"]) or 1.0
+                gated_accounts.append({"customer": names.get(r["account"], r["account"]), "annual": True,
+                                       "q_recent_rev": int(r["ann_recent_rev"]), "q_redline": int(r["ann_prior_rev"]),
+                                       "qoy_pct": round((float(r["ann_recent_rev"]) / base - 1) * 100)})
+            else:
+                pp = float(r["q_prior_profit"]) or 1.0
+                gated_accounts.append({"customer": names.get(r["account"], r["account"]), "annual": False,
+                                       "q_recent_rev": int(r["q_recent_rev"]), "q_redline": int(r["q_redline"]),
+                                       "q_recent_profit": int(r["q_recent_profit"]), "q_prior_profit": int(r["q_prior_profit"]),
+                                       "qoy_pct": round((float(r["q_recent_profit"]) / pp - 1) * 100)})
 
     # accounts to watch = silent accounts in this rep's book (touched in the trailing window)
     book_cut = period_end - pd.Timedelta(weeks=s["window_weeks"])

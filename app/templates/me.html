@@ -89,16 +89,18 @@
 <div class="card">
   <h2>{{ 'Growth not counted this period' if lang=='en' else '这个周期不计入增长的客户' }}</h2>
   {% if lang=='en' %}
-  <p class="hint">These accounts beat their 4‑week bar, but their <b>last‑3‑months profit is down vs last year</b> — so the
-    growth doesn't count (a one‑off order doesn't pay while the account's profit is shrinking). The <b>redline</b> is the
-    revenue you'd need <i>at today's cost</i> to hold last year's profit; get back above it and growth counts again.</p>
+  <p class="hint">These accounts beat their 4‑week bar, but growth doesn't count because the account isn't really growing:
+    either its <b>last‑3‑months profit is down vs last year</b> (a one‑off order doesn't pay while profit is shrinking —
+    the <b>bar</b> is the revenue you'd need <i>at today's cost</i> to hold last year's profit), or the account is
+    <b>flat/down over the whole year</b> (marked <i>year</i>). Get back above the bar and growth counts again.</p>
   {% else %}
-  <p class="hint">这些客户虽然超过了 4 周门槛，但它们的 <b>最近 3 个月利润比去年同期在下滑</b> —— 所以这部分增长先不算
-    （客户利润还在下滑时，偶尔一单先不计增长）。<b>红线</b>是<i>按今天的成本</i>要守住去年利润所需的营收；重新回到红线之上，增长就会重新计入。</p>
+  <p class="hint">这些客户虽然超过了 4 周门槛，但增长不计入，因为客户其实没有真正增长：要么它的
+    <b>最近 3 个月利润比去年同期在下滑</b>（利润下滑时偶尔一单先不计；<b>门槛</b>是按今天成本守住去年利润所需的营收），
+    要么它<b>整年都持平或下滑</b>（标记 <i>year</i>）。重新回到门槛之上，增长就会重新计入。</p>
   {% endif %}
-  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th class="num">{{ 'Last 3mo revenue' if lang=='en' else '最近 3 个月营收' }}</th><th class="num">{{ 'Redline' if lang=='en' else '红线' }}</th><th class="num">{{ 'Profit vs last year' if lang=='en' else '利润对比去年' }}</th></tr></thead><tbody>
+  <table><thead><tr><th>{{ 'Customer' if lang=='en' else '客户' }}</th><th class="num">{{ 'Recent revenue' if lang=='en' else '近期营收' }}</th><th class="num">{{ 'Bar' if lang=='en' else '门槛' }}</th><th class="num">{{ 'vs last year' if lang=='en' else '对比去年' }}</th></tr></thead><tbody>
     {% for n in g.gated_accounts %}<tr>
-      <td>{{ n.customer }}</td>
+      <td>{{ n.customer }}{% if n.annual %} <span class="badge" style="background:var(--red-bg);color:var(--red)">{{ 'year' if lang=='en' else '整年' }}</span>{% endif %}</td>
       <td class="num">${{ '{:,}'.format(n.q_recent_rev) }}</td>
       <td class="num">${{ '{:,}'.format(n.q_redline) }}</td>
       <td class="num neg">{{ '%+d'|format(n.qoy_pct) }}%</td></tr>{% endfor %}

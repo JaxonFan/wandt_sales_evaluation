@@ -23,7 +23,7 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count",
                   "growth_payout_rate", "cost_inflation_weeks", "glide_alpha", "min_baseline_ratio", "jump_multiple",
                   "mature_smooth_weeks", "sporadic_gap_weeks", "growth_quarter_floor", "growth_quarter_min_prior",
-                  "growth_quarter_min_profit",
+                  "growth_quarter_min_profit", "growth_annual_floor", "growth_annual_min_prior",
                   "new_product_weeks", "new_product_attribution",
                   "acq_tier_small_max", "acq_tier_medium_max", "acq_flat_small", "acq_flat_medium", "acq_flat_large",
                   "acq_ramp_periods", "fine_amount"]
@@ -233,7 +233,8 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
                              timing=bool(r["timing"]), q_recent=int(r["q_recent"]), q_prior=int(r["q_prior"]),
                              q_recent_rev=int(r["q_recent_rev"]), q_redline=int(r["q_redline"]),
                              q_recent_profit=int(r["q_recent_profit"]), q_prior_profit=int(r["q_prior_profit"]),
-                             gated=bool(r["gated"]), new_account=bool(r["new_account"])))
+                             ann_recent_rev=int(r["ann_recent_rev"]), ann_prior_rev=int(r["ann_prior_rev"]),
+                             gated=bool(r["gated"]), gate_reason=r["gate_reason"], new_account=bool(r["new_account"])))
         rows.sort(key=lambda x: (not x["capped"], x["status"] != "mature", -(x["sales"] or 0)))
     card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == name), None)
     actions = {a.account: a for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id)}

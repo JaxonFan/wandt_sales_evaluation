@@ -98,6 +98,16 @@ margin). Recent revenue below the redline means profit is down. You'll see those
 with their revenue vs redline. This stops us rewarding **unprofitable** revenue spikes (big low-margin orders).
 The 5% floor and the minimum prior-year quarter profit are Settings dials.
 
+**Annual reality check (on revenue).** A second, complementary gate: growth only counts if the account is
+**genuinely up over the whole year**. If an account's **trailing 12 months of revenue are more than 5% below
+the prior 12 months** (cost-adjusted), a 4-week pop **doesn't** earn growth — the account carries a
+**"flat year-over-year — no growth"** badge. This closes a subtle leak: growth is *paid* on a 4-week window,
+so without this a big **lumpy** account that's actually flat or shrinking over the year could still collect on
+its up-swings (the quarter gate only catches shrinking *quarters*). It's a **general safeguard for
+year-flat accounts — not aimed at any one rep** — and it's self-correcting: the moment an account genuinely
+grows year-over-year again, its growth counts. New accounts (no prior year) and small accounts are never
+annual-gated. The 5% floor and the minimum prior-year revenue are Settings dials.
+
 **How the target chases a spike (glide).** For a newer or level-shifted account (no reliable year-ago window),
 the bar isn't last year — it's the account's **own recent run-rate**, and it *chases* the account upward. Each
 period the bar closes about **30%** of the gap to the new level (the "glide catch-up speed" dial). So an account
