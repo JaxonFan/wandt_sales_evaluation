@@ -1,0 +1,2 @@
+# Dev/test dependencies (not needed at runtime). Install: python -m pip install -r requirements-dev.txt
+pytest>=7,<9
