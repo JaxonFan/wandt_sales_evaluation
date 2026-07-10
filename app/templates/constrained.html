@@ -1,14 +1,21 @@
 {% extends "base.html" %}{% block body %}
 <div class="card">
   <div class="pbar">
+    {% if nav.prev_idx is not none %}<a class="pnav" href="/constrained?p={{ nav.prev_idx }}">◀ prev</a>
+    {% else %}<span class="pnav dis">◀ prev</span>{% endif %}
     <div class="mid"><div class="ttl">Limited-stock items · Period {{ nav.n }} · {{ nav.start }} ~ {{ nav.end }}</div>
-      <div class="hint" style="margin:3px 0">{% if nav.is_current %}<span class="badge b-ok">current</span>{% else %}<span class="badge b-ramp">locked</span>{% endif %}</div></div>
+      <div class="hint" style="margin:3px 0">{% if nav.is_current %}<span class="badge b-ok">current</span>{% else %}<span class="badge b-ramp">past period · editable (what-if)</span>{% endif %}</div></div>
+    {% if nav.next_idx is not none %}<a class="pnav" href="/constrained?p={{ nav.next_idx }}">next ▶</a>
+    {% else %}<span class="pnav dis">next ▶</span>{% endif %}
   </div>
 </div>
 <div class="card">
   <h2>Constrained items this period</h2>
   <p class="hint">Items you couldn't fully supply this period. They're removed from <b>both</b> the current and the
-    baseline window (apples-to-apples), so a drop caused by "couldn't ship it" isn't charged to the rep.</p>
+    baseline window (apples-to-apples), so a drop caused by "couldn't ship it" isn't charged to the rep.
+    {% if not nav.is_current %}<br><b>Past period:</b> use <b>◀ prev / next ▶</b> to pick a period; adding here recomputes
+    <i>that</i> period's numbers and <b>stays until you remove it</b> — handy for seeing how a past shortage would have
+    changed things.{% endif %}</p>
   <table>
     <thead><tr><th>Item #</th><th>Description</th><th>Note</th><th></th></tr></thead>
     <tbody>

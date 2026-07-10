@@ -355,6 +355,7 @@ def run_period_bonus(db, idx=None):
                                self_acquired=self_acquired_set(db),
                                exempt_accounts=exempt_set(db, period.period_id),
                                jump_released=jump_released_set(db, period.period_id),
+                               constrained_item_numbers=get_constrained_items(db, period.period_id),
                                featured_new_products=featured_new_product_set(db), **_dials(s))
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of

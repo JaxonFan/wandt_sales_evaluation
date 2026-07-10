@@ -338,7 +338,7 @@ def _cost_adjusted_baseline(df, lo, hi, cost_factor, scale=1.0):
 
 def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None,
                          self_acquired=frozenset(), exempt_accounts=frozenset(),
-                         jump_released=frozenset(),
+                         jump_released=frozenset(), constrained_item_numbers=frozenset(),
                          period_days=28, holiday_weight=0.0, item_rate=0.10,
                          growth_window_weeks=13, size_band_count=5,
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
@@ -368,7 +368,10 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     if not len(df):
         return dict(scorecards=pd.DataFrame(), accounts=pd.DataFrame())
 
-    # --- current period (Contribution items + Acquisition) ---
+    # --- current period (Contribution items + Acquisition) — keep the FULL data here: supply-constrained
+    # items still count for line-item contribution & acquisition sizing (the rep did ship those lines).
+    # Only GROWTH excludes constrained items (below), so a shortage isn't charged against the rep. ---
+    full_df = df
     current = df[(df["document_date"] > period_start) & (df["document_date"] <= as_of)]
     first_seen = df.groupby("account")["document_date"].min()
 
@@ -382,6 +385,13 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                     return "landing" if seen > period_start else "ramp"
                 return "assigned"
         return "scored"
+
+    # GROWTH only: drop manager-flagged supply-constrained items so they're removed from BOTH the recent and
+    # the baseline/year-ago windows symmetrically — a drop the rep "couldn't ship" isn't charged against them.
+    # (Contribution & acquisition above keep the full data.)
+    df = exclude_constrained_items(df, constrained_item_numbers)
+    if not len(df):
+        return dict(scorecards=pd.DataFrame(), accounts=pd.DataFrame())
 
     # --- GROWTH value: a confirmed-NEW product's revenue counts at new_product_attribution (e.g. 20%) toward
     # growth for its first new_product_weeks (the company made the product; the rep is credited but discounted).
@@ -488,7 +498,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
         seen = first_seen.get(acc)
         if seen is None or not (pay_lo <= (period_end - seen).days < pay_hi):
             continue                                # only the one period at its quarter mark
-        q = df[(df["account"] == acc) & (df["document_date"] > period_end - qwin) & (df["document_date"] <= period_end)]
+        q = full_df[(full_df["account"] == acc) & (full_df["document_date"] > period_end - qwin) & (full_df["document_date"] <= period_end)]
         qt = q[q["associate"].isin(sales_team)]
         if not len(qt):
             continue
