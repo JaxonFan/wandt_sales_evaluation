@@ -285,13 +285,17 @@ def set_award(request: Request, associate: str = Form(...), award_amount: float 
 
 # ---------- per-period constrained items ----------
 @app.get("/constrained", response_class=HTMLResponse)
-def constrained_page(request: Request, db: Session = Depends(get_db), p: int = None):
+def constrained_page(request: Request, db: Session = Depends(get_db)):
     user = current_user(request, db)
     if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
-    _res, period, _s, nav, _as_of = service.run_period_bonus(db, p)
-    current = db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period.period_id).all()
-    num_to_desc = {i: d for i, d in db.query(M.SalesLine.item_number, M.SalesLine.item_description).distinct()}
+    _res, period, _s, _nav, _as_of = service.run_period_bonus(db)      # current period (candidate window)
+    # GLOBAL list of constrained items — one entry per item # (limited stock applies to every period)
+    seen, current = set(), []
+    for c in db.query(M.ConstrainedItem).order_by(M.ConstrainedItem.created_at.desc()):
+        if c.item_number not in seen:
+            seen.add(c.item_number); current.append(c)
+    num_to_desc = service.item_descriptions(db)
     df = service.load_lines_df(db)
     candidates = []
     if len(df):
@@ -303,35 +307,32 @@ def constrained_page(request: Request, db: Session = Depends(get_db), p: int = N
                            "revenue": round(row.revenue), "share": round(row.revenue / total * 100, 1)}
                           for i, row in summary.iterrows()]
     return templates.TemplateResponse("constrained.html", {
-        "request": request, "user": user, "period": period, "nav": nav, "current": current,
+        "request": request, "user": user, "period": period, "current": current,
         "candidates": candidates, "desc_by_item": num_to_desc})
 
 
 @app.post("/constrained/add")
 def constrained_add(request: Request, item_number: str = Form(...), note: str = Form(""),
-                    p: int = Form(None), db: Session = Depends(get_db)):
+                    db: Session = Depends(get_db)):
     user = current_user(request, db)
     if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
-    period, idx, _ = resolve_p(db, p)
-    if not db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period.period_id,
-                                              M.ConstrainedItem.item_number == item_number.strip()).first():
-        db.add(M.ConstrainedItem(period_id=period.period_id, item_number=item_number.strip(),
+    item = item_number.strip()
+    if item and not db.query(M.ConstrainedItem).filter(M.ConstrainedItem.item_number == item).first():
+        period, _, _ = resolve_p(db, None)        # any valid period for the FK; the flag itself is global
+        db.add(M.ConstrainedItem(period_id=period.period_id, item_number=item,
                                  note=note, user_id=user.user_id)); db.commit()
-    return RedirectResponse(f"/constrained?p={idx}", status_code=303)
+    return RedirectResponse("/constrained", status_code=303)
 
 
 @app.post("/constrained/remove")
-def constrained_remove(request: Request, item_number: str = Form(...), p: int = Form(None),
-                       db: Session = Depends(get_db)):
+def constrained_remove(request: Request, item_number: str = Form(...), db: Session = Depends(get_db)):
     user = current_user(request, db)
     if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
-    period, idx, _ = resolve_p(db, p)
-    db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period.period_id,
-                                       M.ConstrainedItem.item_number == item_number.strip()).delete()
+    db.query(M.ConstrainedItem).filter(M.ConstrainedItem.item_number == item_number.strip()).delete()
     db.commit()
-    return RedirectResponse(f"/constrained?p={idx}", status_code=303)
+    return RedirectResponse("/constrained", status_code=303)
 
 
 # ---------- closure candidates ----------

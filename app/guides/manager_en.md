@@ -145,11 +145,11 @@ book. The ramp is time-based on the product's age, so there's no sudden jump whe
 ## Limited stock — keep comparisons fair
 
 **Limited stock** page. If a product was supply-constrained (you couldn't sell what you didn't have), add it as
-a **constrained item** for the period. It's then removed from **both** the current window and the year-ago
-baseline of the **growth** calc, so a shortage doesn't unfairly lower a rep's growth. (Line-item
-contribution is untouched — reps still earn for what they did ship.) The page also auto-suggests candidates;
-you confirm them. You can step to a **previous period** (◀ prev / next ▶) and add a constrained item there to
-see how a past shortage would have changed that period — it applies to that period until you remove it.
+a **constrained item**. It's then removed from **both** the current window and the year-ago baseline of the
+**growth** calc, so a shortage doesn't unfairly lower a rep's growth. (Line-item contribution is untouched —
+reps still earn for what they did ship.) A constrained item is **permanent — it applies to every period until
+you remove it here** (limited stock is an ongoing fact, not a one-period event). The page also auto-suggests
+candidates by recent revenue; you confirm the ones that were truly constrained.
 
 ---
 

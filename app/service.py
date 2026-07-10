@@ -141,9 +141,25 @@ def period_nav(idx, idx_min, idx_cur, period, is_current, anchor=None):
             "options": period_options(anchor, idx_min, idx_cur) if anchor is not None else []}
 
 
-# ---------- constrained items ----------
-def get_constrained_items(db, period_id):
-    return [c.item_number for c in db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period_id).all()]
+# ---------- constrained items (GLOBAL: a limited-stock flag applies to every period) ----------
+def get_constrained_items(db):
+    return [i for (i,) in db.query(M.ConstrainedItem.item_number).distinct()]
+
+
+def item_descriptions(db):
+    """item_number -> its MOST-COMMON description. The source data sometimes carries a few stray/typo
+    descriptions for an item (e.g. 18,372 'MANILA CLAM/REGULAR' lines + 2 'MANILA CLAM/SMALL'); pick the
+    one that appears on the most lines so the label is correct and deterministic."""
+    rows = db.query(M.SalesLine.item_number, M.SalesLine.item_description,
+                    func.count(M.SalesLine.id)).group_by(M.SalesLine.item_number,
+                                                          M.SalesLine.item_description).all()
+    best = {}   # item -> (count, description)
+    for item, desc, cnt in rows:
+        if desc is None:
+            continue
+        if item not in best or cnt > best[item][0]:
+            best[item] = (cnt, desc)
+    return {item: d for item, (c, d) in best.items()}
 
 
 # ---------- engine runner (with caching) ----------
@@ -229,7 +245,7 @@ def new_product_candidates(db, new_product_weeks=26):
     out = []
     for it in new_items.index:
         s = df[df["item"] == it]
-        out.append(dict(item=it, desc=(s["desc"].dropna().iloc[0] if s["desc"].notna().any() else ""),
+        out.append(dict(item=it, desc=(s["desc"].dropna().value_counts().index[0] if s["desc"].notna().any() else ""),
                         first_seen=new_items[it].date(),
                         unit_price=round(float((s["rev"] / s["qty"].replace(0, 1)).median()), 1),
                         rev13=round(float(rec[rec["item"] == it]["rev"].sum())),
@@ -257,7 +273,7 @@ def featured_extra_products(db, existing_items, new_product_weeks=26):
         if len(s):
             first_seen = pd.to_datetime(s["date"]).min()
             within = end is not None and first_seen > end - pd.Timedelta(weeks=new_product_weeks)
-            out.append(dict(item=it, desc=(s["desc"].dropna().iloc[0] if s["desc"].notna().any() else ""),
+            out.append(dict(item=it, desc=(s["desc"].dropna().value_counts().index[0] if s["desc"].notna().any() else ""),
                             first_seen=first_seen.date(),
                             unit_price=round(float((s["rev"] / s["qty"].replace(0, 1)).median()), 1),
                             rev13=round(float(s[pd.to_datetime(s["date"]) > end - pd.Timedelta(weeks=13)]["rev"].sum())),
@@ -310,7 +326,7 @@ def run_period_bonus(db, idx=None):
                                self_acquired=self_acquired_set(db),
                                exempt_accounts=exempt_set(db, period.period_id),
                                jump_released=jump_released_set(db, period.period_id),
-                               constrained_item_numbers=get_constrained_items(db, period.period_id),
+                               constrained_item_numbers=get_constrained_items(db),
                                featured_new_products=featured_new_product_set(db), **_dials(s))
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of

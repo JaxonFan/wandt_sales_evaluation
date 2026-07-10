@@ -83,7 +83,8 @@ class ManagerAction(Base):
 
 
 class ConstrainedItem(Base):
-    """Per-period, manager-supplied supply-constrained items (removed symmetrically)."""
+    """Manager-supplied supply-constrained (limited-stock) items. GLOBAL: an item flagged here is excluded
+    from the GROWTH comparison in EVERY period until removed (period_id is retained only as a legacy FK)."""
     __tablename__ = "constrained_items"
     id = Column(Integer, primary_key=True, autoincrement=True)
     period_id = Column(Integer, ForeignKey("periods.period_id"), index=True)
