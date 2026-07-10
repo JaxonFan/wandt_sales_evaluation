@@ -63,20 +63,7 @@ class Period(Base):
     start_date = Column(Date); end_date = Column(Date)              # the 4-week period scored
     window_start = Column(Date); window_end = Column(Date)          # trailing 13-week window
     baseline_window_start = Column(Date); baseline_window_end = Column(Date)
-    market_drift = Column(Float)
     status = Column(String, default="open")                        # open | closed (locked)
-
-
-class Scorecard(Base):
-    __tablename__ = "scorecards"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    period_id = Column(Integer, ForeignKey("periods.period_id"), index=True)
-    associate = Column(String, index=True)
-    actual_profit = Column(Float); profit_target = Column(Float)
-    profit_perf_pct = Column(Float); profit_vs_market_pct = Column(Float)
-    real_growth_pct = Column(Float)
-    accounts = Column(Integer); new_accounts = Column(Integer)
-    __table_args__ = (UniqueConstraint("period_id", "associate"),)
 
 
 # ---------- manager inputs ----------

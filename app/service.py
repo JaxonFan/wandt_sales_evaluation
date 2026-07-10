@@ -1,7 +1,7 @@
 """Bridge between the DB and the pure engine: load sales lines, settings, overrides; run scorecards."""
 import pandas as pd
 from sqlalchemy import func
-from .engine import compute_period_bonus, compute_annual_review, day_of_week_weights, selling_day_capacity
+from .engine import compute_period_bonus, compute_annual_review
 from . import models as M
 from .config import DEFAULTS, SALES_ROLES
 
@@ -141,12 +141,7 @@ def period_nav(idx, idx_min, idx_cur, period, is_current, anchor=None):
             "options": period_options(anchor, idx_min, idx_cur) if anchor is not None else []}
 
 
-# ---------- overrides & constrained items ----------
-def get_overrides(db, period_id):
-    return {a.account: {"status": a.status, "rebaseline_value": a.rebaseline_value}
-            for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period_id).all()}
-
-
+# ---------- constrained items ----------
 def get_constrained_items(db, period_id):
     return [c.item_number for c in db.query(M.ConstrainedItem).filter(M.ConstrainedItem.period_id == period_id).all()]
 
@@ -199,47 +194,7 @@ def account_quarter_chart(db, account, end, weeks=13, w=300, h=54):
                 cur_total=round(sum(cur)), prev_total=round(sum(prev)))
 
 
-def run_engine(db, idx=None):
-    s = get_settings(db)
-    ww = s["window_weeks"]
-    _, idx_cur0, anchor = period_grid(db, ww)
-    if idx is None:
-        idx = idx_cur0
-    period, as_of, idx, idx_min, idx_cur, is_current = resolve_period(db, idx, ww)
-    ver = _data_version(db)
-    _, _, sales_team = attribution_maps(db)
-    overrides = get_overrides(db, period.period_id)
-    exempt = [acc for acc, ov in overrides.items() if ov["status"] == "exempt"]
-    constrained = get_constrained_items(db, period.period_id)
-    ssig = (ww, s["provisional_min_weeks"], s["defend_pct"], s["acquisition_pct"],
-            s["acquisition_ramp_periods"], s["bonus_pool"], s["familiar_min_weeks"],
-            s["familiar_max_gap_weeks"], s["holiday_weight"], tuple(sorted(exempt)), tuple(sorted(constrained)))
-    key = (idx, ver, ssig, tuple(sales_team))
-    res = _ENGINE_CACHE.get(key)
-    if res is None:
-        df = _lines_cached(db, ver)
-        res = compute_wandt(df, as_of, sales_team, window_weeks=ww,
-                            provisional_min_weeks=s["provisional_min_weeks"], defend_pct=s["defend_pct"],
-                            acquisition_pct=s["acquisition_pct"], acquisition_ramp_periods=s["acquisition_ramp_periods"],
-                            bonus_pool=s["bonus_pool"], constrained_item_numbers=constrained,
-                            familiar_min_weeks=s["familiar_min_weeks"], familiar_max_gap_weeks=s["familiar_max_gap_weeks"],
-                            holiday_weight=s["holiday_weight"], exempt_accounts=exempt)
-        if len(_ENGINE_CACHE) >= _ENGINE_CACHE_MAX:
-            _ENGINE_CACHE.clear()
-        _ENGINE_CACHE[key] = res
-    if period.market_drift != res["market_drift"]:
-        period.market_drift = res["market_drift"]; db.commit()
-    nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
-    return res, period, s, nav
-
-
 # ---------- the direct-formula period bonus (Contribution / Growth / Acquisition) ----------
-def part_time_associates(db):
-    return {a.name for a in db.query(M.Associate).filter(M.Associate.role == "part time sales") if a.name}
-
-
-
-
 def self_acquired_set(db):
     """Accounts the manager confirmed the rep self-acquired -> eligible for the 1% share.
     Default (no review record) = assigned, so a new account earns the 1% only once confirmed."""

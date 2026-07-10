@@ -10,7 +10,7 @@ We want four things at once: reward day-to-day **contribution**, push **growth**
 
 ### 1. Contribution — paid per item placed
 A small set amount for **every line-item the rep writes this period** (a dial the manager sets). This rewards the actual work — and because more items come from both *more orders* and *richer orders*, it quietly encourages **cross-selling** (getting an account to add items). Salary already covers the bulk of "servicing the book," so this piece is intentionally modest.
-*Example: 1,015 items × $0.20 = **$203**.*
+*Example: 1,015 items × $0.10 = **$102**.*
 
 ### 2. Growth — beat a fair target, measured over a trailing quarter
 A rep's target is set per account and shown as **one number** with a plain breakdown:
@@ -32,7 +32,7 @@ contribution, so we don't pay twice. Key properties (each fixes a real failure m
   bar too.) This killed the big period-to-period swings we were seeing.
 - **Glide bar (the primary bar) — rewards *continuing* to grow, never overpays an elevated account.** An
   account's bar **follows its own recent run-rate and slides up as it grows** (a recursive moving average,
-  speed `glide_alpha` ≈ 0.20 / ~a quarter of memory), lifted by a **cross-account, size-banded seasonal
+  speed `glide_alpha` ≈ 0.30 / ~a few periods of memory), lifted by a **cross-account, size-banded seasonal
   factor** (how accounts its size are moving this period vs their own normal — handles holidays/CNY without a
   lumpy per-account last-year window). A rep earns by pushing an account *above* its recent self, so a one-time
   jump pays for a quarter then the bar catches up — you have to **keep growing** to keep earning. `min_baseline_ratio`
@@ -68,12 +68,23 @@ computed **on this cost-adjusted baseline**, which strips cost OUT of the de-tre
 = /1.06), so the de-trend reflects only the *real* market move while cost is handled precisely per account. Net:
 a rep who merely passes higher costs through earns ~0 growth. `growth_payout_rate` is **1%** of every dollar above the bar.
 
-### Quarter-health gate (2026 update)
-A 4-week pop doesn't pay if the account is **shrinking over the bigger picture**. If an account's **trailing 13
-weeks are below 95% of the same 13 weeks last year** (and it has a real prior-year quarter, > $3k), its growth
-**doesn't count** this period — it's dropped automatically (not a manager-review item). The rep sees it on their
-page under *"growth not counted,"* the manager sees a *"qtr down"* badge. So growth only pays when the account
-is genuinely healthy, not when a one-off order lands on a declining account.
+### Quarter-health gate — on PROFIT, shown as a revenue "redline" (2026 update)
+A 4-week pop doesn't pay if the account is **shrinking on profit over the quarter**. If an account's **trailing
+13 weeks of profit are below 95% of the same 13 weeks last year** (and it had a real prior-year quarter), its
+growth **doesn't count** this period — dropped automatically (not a manager-review item). Reps think in revenue,
+so it's shown as a **revenue redline = today's cost + 95% of last year's quarter profit** (the revenue needed,
+at current cost, to hold the margin); recent revenue below the redline means profit is down. The rep sees it
+under *"growth not counted"* with revenue vs redline; the manager sees a *"qtr profit down — no growth"* badge.
+This stops us rewarding **unprofitable** revenue spikes (a big low-margin order).
+
+### Annual reality-check gate (2026 update)
+A second, complementary gate on **revenue**: growth only counts if the account is **genuinely up year-over-year**.
+If an account's **trailing-52-week revenue is below 95% of the prior year** (cost-adjusted; and it has a
+meaningful prior-year book), a 4-week pop **doesn't** earn growth — the account carries a *"flat year-over-year
+— no growth"* badge. This closes a leak: growth is *paid* on a lumpy 4-week window, so without it a big
+oscillating account that's flat/declining over the year could harvest its up-swings (the quarter gate only
+catches shrinking *quarters*). It's a general safeguard — self-correcting (the moment the account genuinely
+grows again, growth counts); new and small accounts are never annual-gated.
 
 ### Annual vs. periodic accounts (2026 update)
 An account whose **median or mean order gap is ≥ 4 weeks** (it orders monthly or sparser on average — including
