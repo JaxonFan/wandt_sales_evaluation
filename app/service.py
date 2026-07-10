@@ -146,6 +146,25 @@ def get_constrained_items(db):
     return [i for (i,) in db.query(M.ConstrainedItem.item_number).distinct()]
 
 
+def decode_desc(s):
+    """Recover Chinese item descriptions that the ERP export stored as Big5/GBK bytes misread as Latin-1
+    (mojibake, e.g. '¤¤ªá¸Ã' -> '中花蜆'). Self-correcting: already-correct unicode or plain ASCII passes
+    through unchanged, and anything undecodable is returned as-is. Works on old and newly-uploaded data
+    alike, since it decodes at display time. Big5 (Traditional) covers most; a few crab items are GBK."""
+    if not s:
+        return s
+    try:
+        b = s.encode("latin-1")            # real (already-decoded) Chinese has code points > 255 -> raises
+    except (UnicodeEncodeError, AttributeError):
+        return s
+    for enc in ("big5", "gbk"):
+        try:
+            return b.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return s
+
+
 def item_descriptions(db):
     """item_number -> its MOST-COMMON description. The source data sometimes carries a few stray/typo
     descriptions for an item (e.g. 18,372 'MANILA CLAM/REGULAR' lines + 2 'MANILA CLAM/SMALL'); pick the
@@ -159,7 +178,7 @@ def item_descriptions(db):
             continue
         if item not in best or cnt > best[item][0]:
             best[item] = (cnt, desc)
-    return {item: d for item, (c, d) in best.items()}
+    return {item: decode_desc(d) for item, (c, d) in best.items()}
 
 
 # ---------- engine runner (with caching) ----------
@@ -245,7 +264,7 @@ def new_product_candidates(db, new_product_weeks=26):
     out = []
     for it in new_items.index:
         s = df[df["item"] == it]
-        out.append(dict(item=it, desc=(s["desc"].dropna().value_counts().index[0] if s["desc"].notna().any() else ""),
+        out.append(dict(item=it, desc=(decode_desc(s["desc"].dropna().value_counts().index[0]) if s["desc"].notna().any() else ""),
                         first_seen=new_items[it].date(),
                         unit_price=round(float((s["rev"] / s["qty"].replace(0, 1)).median()), 1),
                         rev13=round(float(rec[rec["item"] == it]["rev"].sum())),
@@ -273,7 +292,7 @@ def featured_extra_products(db, existing_items, new_product_weeks=26):
         if len(s):
             first_seen = pd.to_datetime(s["date"]).min()
             within = end is not None and first_seen > end - pd.Timedelta(weeks=new_product_weeks)
-            out.append(dict(item=it, desc=(s["desc"].dropna().value_counts().index[0] if s["desc"].notna().any() else ""),
+            out.append(dict(item=it, desc=(decode_desc(s["desc"].dropna().value_counts().index[0]) if s["desc"].notna().any() else ""),
                             first_seen=first_seen.date(),
                             unit_price=round(float((s["rev"] / s["qty"].replace(0, 1)).median()), 1),
                             rev13=round(float(s[pd.to_datetime(s["date"]) > end - pd.Timedelta(weeks=13)]["rev"].sum())),

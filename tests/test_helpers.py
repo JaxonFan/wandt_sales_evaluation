@@ -63,6 +63,18 @@ def test_cost_adjusted_baseline():
     assert out["A"] == pytest.approx(560.0, abs=1e-6)
 
 
+def test_decode_desc_recovers_big5_and_gbk_mojibake():
+    from app import service
+    # Big5-as-Latin-1 (Traditional): Manila clam
+    assert service.decode_desc("¤¤ªá¸Ã") == "中花蜆"
+    # GBK-as-Latin-1 (Simplified): crab meat
+    assert service.decode_desc("Ð·Èâ") == "蟹肉"
+    # self-correcting: plain ASCII, already-correct unicode, and empty/None pass through
+    assert service.decode_desc("KUMAMOTO OYSTER") == "KUMAMOTO OYSTER"
+    assert service.decode_desc("中花蜆") == "中花蜆"
+    assert service.decode_desc("") == "" and service.decode_desc(None) is None
+
+
 def test_size_band_factors_uses_market_not_own_ratio():
     # 12 flat accounts (recent==baseline) + 1 grower at 1.5x. The market factor should be ~1.0, and the
     # grower must NOT get credited its own 1.5 (that's the de-trend's whole point).
