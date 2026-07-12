@@ -106,9 +106,9 @@ You still earn **line items** on these accounts every period as usual.
 
 When you **win a brand-new account yourself**, you earn a **flat bonus based on its size**:
 
-- **$50** for a small account (under ~$15,000/year of sales)
-- **$100** for a medium account (~$15,000–$65,000/year)
-- **$150** for a large account (over ~$65,000/year)
+- **$150** for a small account (under ~$15,000/year of sales)
+- **$250** for a medium account (~$15,000–$65,000/year)
+- **$400** for a large account (over ~$65,000/year)
 
 It's a flat amount — not a percentage — on purpose: landing a small shop and a big one take similar effort, so
 the reward is for **winning** the account, not how big it is. It's paid **once, about a quarter after the
@@ -138,7 +138,7 @@ accounts you actually won.
 - **Sell** → $0.10 a line.
 - **Grow** → 1% of every dollar above a fair bar that already accounts for cost increases, the market, and
   your account sizes — no stretch, no hurdle.
-- **Land new** → a flat $50 / $100 / $150 for each new account you win.
+- **Land new** → a flat $150 / $250 / $400 for each new account you win.
 
 Everything is "you did this, so you earned this" — measured against a fair bar, so your bonus reflects **your**
 performance, not luck or the market.

@@ -19,7 +19,7 @@ Per 4-week period, for each rep:
   year's order + last year's profit*, then moved by *how much accounts that size really grew*. (So passing
   higher costs through, or just riding a market boom, doesn't count as growth. There is **no stretch hurdle** —
   every dollar above the bar earns.)
-- **Acquisition** = a flat **$50 / $100 / $150** when a rep lands a new account they actually won.
+- **Acquisition** = a flat **$150 / $250 / $400** when a rep lands a new account they actually won.
 
 Infrequent accounts are handled separately on the **Annual review** page (once a year), not per period.
 
@@ -55,7 +55,7 @@ target, how it's doing, and its status). Here you can:
 
 **New accounts** page. A new account defaults to **Assigned** (handed to the rep) — which earns **no landing
 bonus**. When the rep genuinely **won** the account, flip it to **Self-acquired**, which releases the flat
-acquisition bonus ($50/$100/$150 by the account's annualized size). This is the gate for acquisition pay:
+acquisition bonus ($150/$250/$400 by the account's annualized size). This is the gate for acquisition pay:
 nothing pays until you confirm it here.
 
 **During the first ~3 periods (the "New" window), the account earns line items and — if self-acquired —
@@ -215,7 +215,7 @@ Only the sales reps' lines are stored.
 **Acquisition**
 
 - **Small / Medium thresholds and the three flat amounts** — the size cutoffs by annualized revenue
-  (**<$15k / $15–65k / >$65k**) and the flat landing bonuses (**$50 / $100 / $150**).
+  (**<$15k / $15–65k / >$65k**) and the flat landing bonuses (**$150 / $250 / $400**).
 - **"New" window (periods)** — how long an account counts as new for acquisition (now **3** ≈ one quarter).
 
 **Other**

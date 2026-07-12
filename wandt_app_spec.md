@@ -22,7 +22,7 @@ these changes:
 | Pay measure | profit$ with a margin floor | **three direct pieces on revenue** (Contribution + Growth + Acquisition); margin handled inside the growth bar, not by scoring profit |
 | YoY fairness | profit vs baseline (+ optional vs-market) | **growth = revenue above a cost-adjusted YoY bar × the size-band "typical move"** (subsumes market tide + inflation); gated by quarter-profit + annual-revenue checks |
 | Limited stock | not modeled | **per-period manager-supplied constrained items**, removed from **Growth only** (both windows) |
-| Acquisition | decision-support only | **in the incentive** — a flat $50/$100/$150 by size, paid once at the quarter mark |
+| Acquisition | decision-support only | **in the incentive** — a flat $150/$250/$400 by size, paid once at the quarter mark |
 | Growth vs contribution | Defend 60% | **no pool** — each piece is its own direct formula |
 | Data grain | order totals | **item-level** (line-item contribution + new-product attribution) |
 | Calendar | 28-day buckets assumed clean | whole-week-aligned windows + CNY alignment for the growth comparison |
@@ -38,7 +38,7 @@ Every 4 weeks, for each of the 5 sales reps, it computes a bonus made of **three
 pieces** (no pool, no peer ranking): **Contribution** = line items placed × $0.10; **Growth** = 1% of every
 revenue dollar above a fair target (the account's cost-adjusted same-weeks-last-year bar, or a glide/
 provisional bar for newer accounts, lifted by the typical move of accounts its size); and **Acquisition** =
-a flat $50/$100/$150 by size, paid once when a self-acquired new account lands. Growth is protected by two
+a flat $150/$250/$400 by size, paid once when a self-acquired new account lands. Growth is protected by two
 gates — a quarter **profit** redline and an **annual** reality-check (must be genuinely up year-over-year) —
 plus a big-jump review that withholds one-time windfalls. It is fair by construction: each account is judged
 against its own history; big accounts aren't punished for natural reversion; passing higher costs through
@@ -64,7 +64,7 @@ Item-level invoice export (daily/period)         Manager inputs (app)
    • Growth: recent revenue vs target (cost-adjusted YoY bar, or glide/provisional for newer accounts,
      × size-band "typical move"); constrained items excluded from GROWTH only; gated by quarter-profit
      redline + annual reality-check; big jumps (≥2×) withheld for /jumps review
-   • Acquisition: flat $50/$100/$150 by size, once, for a self-acquired new account at its ~quarter mark
+   • Acquisition: flat $150/$250/$400 by size, once, for a self-acquired new account at its ~quarter mark
    • baseline ladder by history length: mature (YoY) / provisional (prior quarter) / glide (own run-rate)
    • apply manager flags (Exempt-from-growth / self-acquired / jump-release / constrained)
         ▼
@@ -112,7 +112,7 @@ Target = the account's **cost-adjusted same-weeks-last-year** bar (mature), or i
 | **Annual** | median **or** mean order gap ≥ 4 wks | rolling 12-mo vs prior 12-mo, paid once a year |
 
 ### 3.5 Acquisition
-A self-acquired new account pays a **flat bonus by size — $50/$100/$150** (small/medium/large by annualized
+A self-acquired new account pays a **flat bonus by size — $150/$250/$400** (small/medium/large by annualized
 first-quarter revenue), paid **once at the ~quarter mark**, to the rep with the most of its revenue. Default
 is **Assigned** (no landing bonus) until the manager confirms **Self-acquired** on the New-accounts page.
 
