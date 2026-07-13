@@ -225,9 +225,20 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
             target = r["account_target"]
             sales = float(r["rep_quarter_sales"])               # trailing 4-week sales (regular accounts only)
             perf = ((sales / target - 1) * 100) if (target and pd.notna(target)) else None
+            acct_recent = float(r["account_recent"]) or 0.0
+            share = (sales / acct_recent) if acct_recent else None   # this rep's share of ALL reps on the account, this period
+            raw = r["baseline_quarter"]                              # rep's slice of the basis = basis x share (pre-market-move)
+            has_tgt = (target is not None and pd.notna(target) and raw is not None and pd.notna(raw)
+                       and float(raw) != 0 and share)
+            tgt_basis = (float(raw) / share) if has_tgt else None    # whole-account basis: last-year (mature) / run-rate (glide)
+            tgt_lift = (float(target) / float(raw)) if has_tgt else None   # size-band move (how accounts this size are trending)
             rows.append(dict(account=r["account"], name=names.get(r["account"], r["account"]),
                              sales=round(sales), counted=round(sales - float(r["held_back"])),
                              last_year=int(r["last_year"]),
+                             share=(round(share * 100, 1) if share is not None else None),
+                             tgt_basis=(round(tgt_basis) if tgt_basis is not None else None),
+                             tgt_lift=(round(tgt_lift, 2) if tgt_lift is not None else None),
+                             tgt_kind=r["status"],
                              target=(round(float(target)) if (target and pd.notna(target)) else None),
                              perf=(round(perf, 0) if perf is not None else None),
                              status=r["status"], capped=bool(r["capped"]), held_back=int(r["held_back"]),

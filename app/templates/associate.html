@@ -50,8 +50,9 @@
     <a href="/jumps" style="color:var(--blue)">review</a>.</p>
   <table>
     <thead><tr><th>Customer</th><th class="num">Recent (4 wk)</th>
-      <th class="num" title="Same 4 weeks a year ago — the raw prior-year sales the target is built from">Last year</th>
-      <th class="num" title="The bar: last year's sales, cost-adjusted and moved by how accounts this size are trending. 'vs target' can look big when last year was low, even if the account is just at its normal recent level (so not a big jump).">Target</th><th class="num">vs target</th><th>Status</th><th>Manager</th></tr></thead>
+      <th class="num" title="THIS rep's own sales on this account in the same 4 weeks last year. Note: the target is NOT built from this number — it uses your CURRENT share of the whole account's last year. Click a target to see the formula.">Last year</th>
+      <th class="num" title="Your share of everything sold to this customer this period = your sales ÷ all reps' sales on the account. This is what the target is split by.">Share</th>
+      <th class="num" title="The bar: (whole account's last year, cost-adjusted) × your current share × how accounts this size are trending. Click it to see the exact numbers. 'vs target' can look big when the bar is low, even if the account is just at its normal recent level (so not a big jump).">Target</th><th class="num">vs target</th><th>Status</th><th>Manager</th></tr></thead>
     <tbody>
     {% for r in rows %}
       {% set a = actions.get(r.account) %}
@@ -59,7 +60,8 @@
         <td>{{ r.name }}{% if r.capped %} <span class="badge" style="background:var(--amber-bg);color:var(--amber)" title="counted ${{ '{:,}'.format(r.counted) }}, ${{ '{:,}'.format(r.held_back) }} windfall withheld pending review">big jump: counted ${{ '{:,}'.format(r.counted) }} · ${{ '{:,}'.format(r.held_back) }} withheld</span>{% endif %}{% if r.new_account %} <span class="badge" style="background:#eef2f6;color:#55606e" title="Less than a year of history — no prior-year figure to compare to yet (new account).">new (&lt;1 yr)</span>{% endif %}{% if r.timing %} <span class="badge" style="background:var(--blue-bg);color:var(--blue)" title="This period's number is distorted by order timing — the account's last 3 months (${{ '{:,}'.format(r.q_recent) }}) are flat vs the prior 3 (${{ '{:,}'.format(r.q_prior) }}). The swing is likely a recurring order on a different week, not real growth or decline.">timing?</span>{% endif %}{% if r.gated and r.gate_reason=='annual_flat' %} <span class="badge" style="background:var(--red-bg);color:var(--red)" title="Growth not counted — the account's trailing 12 months of revenue (${{ '{:,}'.format(r.ann_recent_rev) }}) are below the prior year (${{ '{:,}'.format(r.ann_prior_rev) }}, cost-adjusted). A 4-week pop doesn't pay while the account is flat or shrinking over the whole year.">flat year-over-year — no growth</span>{% elif r.gated %} <span class="badge" style="background:var(--red-bg);color:var(--red)" title="Growth not counted — the account's last-13-week PROFIT (${{ '{:,}'.format(r.q_recent_profit) }}) is below 95% of the same 13 weeks last year (${{ '{:,}'.format(r.q_prior_profit) }}). Shown as revenue: last 13 wks ${{ '{:,}'.format(r.q_recent_rev) }} vs the ${{ '{:,}'.format(r.q_redline) }} redline needed at today's cost to hold last year's profit. A 4-week pop doesn't pay while the account's profit is shrinking over the quarter.">qtr profit down — no growth</span>{% endif %}</td>
         <td class="num">${{ '{:,}'.format(r.sales) }}</td>
         <td class="num mut">${{ '{:,}'.format(r.last_year) }}</td>
-        <td class="num">{% if r.target is not none %}${{ '{:,}'.format(r.target) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+        <td class="num">{% if r.share is not none %}{{ '%g'|format(r.share) }}%{% else %}<span class="mut">—</span>{% endif %}</td>
+        <td class="num">{% if r.target is not none %}{% if r.tgt_basis is not none %}<a href="#" class="tgt-link" onclick="tf(this);return false" title="click to see how this target was built" style="color:var(--blue);text-decoration:none;border-bottom:1px dotted var(--blue)">${{ '{:,}'.format(r.target) }}</a>{% else %}${{ '{:,}'.format(r.target) }}{% endif %}{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num {{ 'pos' if (r.perf or 0)>=0 else 'neg' }}">{% if r.perf is not none %}{{ '%+.0f'|format(r.perf) }}%{% else %}—{% endif %}</td>
         <td>{% if r.status=='landing' %}<span class="badge b-new">self-acquired</span>
             {% elif r.status=='ramp' %}<span class="badge b-ramp">ramp</span>
@@ -82,8 +84,27 @@
           {% else %}<span class="mut" style="font-size:12px">{{ a.status if a else 'normal' }}</span>{% endif %}
         </td>
       </tr>
+      {% if r.target is not none and r.tgt_basis is not none %}
+      {% set basis_label = 'last-year sales, cost-adjusted' if r.tgt_kind=='mature' else ('recent run-rate (glide level)' if r.tgt_kind=='glide' else 'prior-period sales') %}
+      <tr class="tfrow" style="display:none"><td colspan="8" style="background:#f7f9fb;padding:9px 14px;font-size:12.5px;color:#3a4551">
+        <b>How the ${{ '{:,}'.format(r.target) }} target was built</b>
+        <div style="font-family:ui-monospace,Menlo,monospace;margin:5px 0 4px">
+          ${{ '{:,}'.format(r.tgt_basis) }} <span class="mut">({{ basis_label }} · whole account)</span>
+          &nbsp;×&nbsp; {{ '%g'|format(r.share) }}% <span class="mut">(your share)</span>
+          &nbsp;×&nbsp; {{ '%.2f'|format(r.tgt_lift) }} <span class="mut">(size-band move — how accounts this size are trending)</span>
+          &nbsp;=&nbsp; <b>${{ '{:,}'.format(r.target) }}</b>
+        </div>
+        <span class="mut">Your recent <b>${{ '{:,}'.format(r.sales) }}</b> vs this <b>${{ '{:,}'.format(r.target) }}</b> bar → {{ '%+.0f'|format(r.perf) }}%.
+          The bar is <b>your current share</b> of what this customer did {{ 'last year' if r.tgt_kind=='mature' else 'recently' }}, moved to the market for accounts its size —
+          it is <b>not</b> your own last-year figure (${{ '{:,}'.format(r.last_year) }}).</span>
+      </td></tr>
+      {% endif %}
     {% endfor %}
     </tbody>
   </table>
 </div>
+<script>
+function tf(a){var tr=a.closest('tr');var f=tr.nextElementSibling;
+  if(f&&f.classList.contains('tfrow')){f.style.display=(f.style.display==='none'||!f.style.display)?'table-row':'none';}}
+</script>
 {% endblock %}
