@@ -263,6 +263,9 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     # rep x account trailing growth-value (for growth attribution / work-share) + current items
     team_recent_q = recent_q_df[recent_q_df["associate"].isin(sales_team)]
     rep_account_q = team_recent_q.groupby(["associate", "account"])[GV].sum().reset_index(name="rep_q")
+    # rep x account SAME 4 weeks LAST YEAR (CNY-aligned base window) — the raw prior-year sales, for display
+    prior_year_df = df[(df["document_date"] > base_lo) & (df["document_date"] <= base_hi) & df["associate"].isin(sales_team)]
+    rep_last_year = prior_year_df.groupby(["associate", "account"])["extended_price"].sum()
     # iterate regular (4-week) accounts only; sporadic accounts are scored on the Annual Review track
     iter_rows = rep_account_q[~rep_account_q["account"].isin(sporadic_accounts)]
     items_by_rep_account = (current[current["associate"].isin(sales_team)]
@@ -391,6 +394,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                                  account_target=target_for_rep, capped=jump, held_back=round(held),
                                  windfall=round(windfall if raw_for_rep is not None else 0.0),
                                  released=released, account_recent=round(account_q),
+                                 last_year=round(float(rep_last_year.get((rep, account_id), 0.0))),
                                  period_profit=round(period_profit4), period_margin=round(period_margin4 * 100, 1),
                                  established=round(established),
                                  jump_bar=(round(jump_bar) if jump_bar is not None else None),

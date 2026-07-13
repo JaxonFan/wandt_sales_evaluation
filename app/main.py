@@ -227,6 +227,7 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
             perf = ((sales / target - 1) * 100) if (target and pd.notna(target)) else None
             rows.append(dict(account=r["account"], name=names.get(r["account"], r["account"]),
                              sales=round(sales), counted=round(sales - float(r["held_back"])),
+                             last_year=int(r["last_year"]),
                              target=(round(float(target)) if (target and pd.notna(target)) else None),
                              perf=(round(perf, 0) if perf is not None else None),
                              status=r["status"], capped=bool(r["capped"]), held_back=int(r["held_back"]),

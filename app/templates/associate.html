@@ -49,14 +49,16 @@
     <span class="badge" style="background:var(--amber-bg);color:var(--amber)">big jump</span> = ≥2× its level; windfall withheld for
     <a href="/jumps" style="color:var(--blue)">review</a>.</p>
   <table>
-    <thead><tr><th>Customer</th><th class="num">Sales (4 wk)</th>
-      <th class="num">Target</th><th class="num">vs target</th><th>Status</th><th>Manager</th></tr></thead>
+    <thead><tr><th>Customer</th><th class="num">Recent (4 wk)</th>
+      <th class="num" title="Same 4 weeks a year ago — the raw prior-year sales the target is built from">Last year</th>
+      <th class="num" title="The bar: last year's sales, cost-adjusted and moved by how accounts this size are trending. 'vs target' can look big when last year was low, even if the account is just at its normal recent level (so not a big jump).">Target</th><th class="num">vs target</th><th>Status</th><th>Manager</th></tr></thead>
     <tbody>
     {% for r in rows %}
       {% set a = actions.get(r.account) %}
       <tr>
         <td>{{ r.name }}{% if r.capped %} <span class="badge" style="background:var(--amber-bg);color:var(--amber)" title="counted ${{ '{:,}'.format(r.counted) }}, ${{ '{:,}'.format(r.held_back) }} windfall withheld pending review">big jump: counted ${{ '{:,}'.format(r.counted) }} · ${{ '{:,}'.format(r.held_back) }} withheld</span>{% endif %}{% if r.new_account %} <span class="badge" style="background:#eef2f6;color:#55606e" title="Less than a year of history — no prior-year figure to compare to yet (new account).">new (&lt;1 yr)</span>{% endif %}{% if r.timing %} <span class="badge" style="background:var(--blue-bg);color:var(--blue)" title="This period's number is distorted by order timing — the account's last 3 months (${{ '{:,}'.format(r.q_recent) }}) are flat vs the prior 3 (${{ '{:,}'.format(r.q_prior) }}). The swing is likely a recurring order on a different week, not real growth or decline.">timing?</span>{% endif %}{% if r.gated and r.gate_reason=='annual_flat' %} <span class="badge" style="background:var(--red-bg);color:var(--red)" title="Growth not counted — the account's trailing 12 months of revenue (${{ '{:,}'.format(r.ann_recent_rev) }}) are below the prior year (${{ '{:,}'.format(r.ann_prior_rev) }}, cost-adjusted). A 4-week pop doesn't pay while the account is flat or shrinking over the whole year.">flat year-over-year — no growth</span>{% elif r.gated %} <span class="badge" style="background:var(--red-bg);color:var(--red)" title="Growth not counted — the account's last-13-week PROFIT (${{ '{:,}'.format(r.q_recent_profit) }}) is below 95% of the same 13 weeks last year (${{ '{:,}'.format(r.q_prior_profit) }}). Shown as revenue: last 13 wks ${{ '{:,}'.format(r.q_recent_rev) }} vs the ${{ '{:,}'.format(r.q_redline) }} redline needed at today's cost to hold last year's profit. A 4-week pop doesn't pay while the account's profit is shrinking over the quarter.">qtr profit down — no growth</span>{% endif %}</td>
         <td class="num">${{ '{:,}'.format(r.sales) }}</td>
+        <td class="num mut">${{ '{:,}'.format(r.last_year) }}</td>
         <td class="num">{% if r.target is not none %}${{ '{:,}'.format(r.target) }}{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num {{ 'pos' if (r.perf or 0)>=0 else 'neg' }}">{% if r.perf is not none %}{{ '%+.0f'|format(r.perf) }}%{% else %}—{% endif %}</td>
         <td>{% if r.status=='landing' %}<span class="badge b-new">self-acquired</span>
