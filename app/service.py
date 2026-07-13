@@ -63,8 +63,17 @@ def get_settings(db):
 
 
 def customer_names(db):
-    return {r.customer_number: r.customer_name
-            for r in db.query(M.SalesLine.customer_number, M.SalesLine.customer_name).distinct()}
+    """customer_number -> its most-common name, with Big5/GBK mojibake decoded (same fix as item names)."""
+    rows = db.query(M.SalesLine.customer_number, M.SalesLine.customer_name,
+                    func.count(M.SalesLine.id)).group_by(M.SalesLine.customer_number,
+                                                         M.SalesLine.customer_name).all()
+    best = {}   # customer_number -> (count, name)
+    for num, name, cnt in rows:
+        if name is None:
+            continue
+        if num not in best or cnt > best[num][0]:
+            best[num] = (cnt, name)
+    return {num: decode_desc(nm) for num, (c, nm) in best.items()}
 
 
 # ---------- period grid (fixed 4-week buckets anchored to the latest data) ----------
@@ -146,23 +155,44 @@ def get_constrained_items(db):
     return [i for (i,) in db.query(M.ConstrainedItem.item_number).distinct()]
 
 
+# The most common Chinese characters (Simplified + Traditional), used only to pick between two candidate
+# decodings — a byte string can be valid as BOTH Big5 and GBK but mean different things (e.g. Ocean Bay's
+# "³ÉÐË³¬ÊÐ" is 成兴超市 in GBK but garbage 傖倓閉庈 in Big5). The correct reading has far more common chars.
+_COMMON_HANZI = set(
+    "的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对可她里后"
+    "小么心多天而能好都然没日于起还发成事只作当想看文无开手十用主行方又如前所本见经头面公同三已老从动两长"
+    "知民样现分将外但身些与高意进把法此实回二理美点月命色向题目何等果么怎给取城市场超记兴隆丰源海鲜肉菜龙"
+    "华亚东西南北记食品司龍華亞東發記興隆豐運來好金銀鑫達發達順旺祥福鴻源興隆盛豐盈昌隆記行號店超市場農贸"
+    "貿易水果蔬菜魚肉禽蛋副食百货百貨批发批發鮮活鲜活")
+
+
+def _score_common(s):
+    return sum(1 for c in s if c in _COMMON_HANZI)
+
+
 def decode_desc(s):
-    """Recover Chinese item descriptions that the ERP export stored as Big5/GBK bytes misread as Latin-1
-    (mojibake, e.g. '¤¤ªá¸Ã' -> '中花蜆'). Self-correcting: already-correct unicode or plain ASCII passes
-    through unchanged, and anything undecodable is returned as-is. Works on old and newly-uploaded data
-    alike, since it decodes at display time. Big5 (Traditional) covers most; a few crab items are GBK."""
+    """Recover Chinese item/customer names the ERP export stored as Big5/GBK bytes misread as Latin-1
+    (mojibake, e.g. '¤¤ªá¸Ã' -> '中花蜆', '³ÉÐË³¬ÊÐ' -> '成兴超市'). The data is a mix of Big5 (Traditional)
+    and GBK (Simplified), and a byte string can be valid as BOTH with different meanings — so we try both and,
+    when both succeed, keep the reading with more COMMON Chinese characters (the wrong decode yields rare
+    glyphs). Self-correcting: already-correct unicode / plain ASCII / undecodable text passes through as-is,
+    so it works on old and newly-uploaded data at display time."""
     if not s:
         return s
     try:
         b = s.encode("latin-1")            # real (already-decoded) Chinese has code points > 255 -> raises
     except (UnicodeEncodeError, AttributeError):
         return s
+    best = None
     for enc in ("big5", "gbk"):
         try:
-            return b.decode(enc)
+            cand = b.decode(enc)
         except UnicodeDecodeError:
             continue
-    return s
+        sc = _score_common(cand)
+        if best is None or sc > best[0]:
+            best = (sc, cand)
+    return best[1] if best is not None else s
 
 
 def item_descriptions(db):

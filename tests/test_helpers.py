@@ -69,6 +69,8 @@ def test_decode_desc_recovers_big5_and_gbk_mojibake():
     assert service.decode_desc("¤¤ªá¸Ã") == "中花蜆"
     # GBK-as-Latin-1 (Simplified): crab meat
     assert service.decode_desc("Ð·Èâ") == "蟹肉"
+    # Ambiguous: valid as BOTH Big5 and GBK — pick the reading with more common chars (Ocean Bay = 成兴超市)
+    assert service.decode_desc("³ÉÐË³¬ÊÐ") == "成兴超市"
     # self-correcting: plain ASCII, already-correct unicode, and empty/None pass through
     assert service.decode_desc("KUMAMOTO OYSTER") == "KUMAMOTO OYSTER"
     assert service.decode_desc("中花蜆") == "中花蜆"
