@@ -148,8 +148,9 @@ book. The ramp is time-based on the product's age, so there's no sudden jump whe
 a **constrained item**. It's then removed from **both** the current window and the year-ago baseline of the
 **growth** calc, so a shortage doesn't unfairly lower a rep's growth. (Line-item contribution is untouched —
 reps still earn for what they did ship.) A constrained item is **permanent — it applies to every period until
-you remove it here** (limited stock is an ongoing fact, not a one-period event). The page also auto-suggests
-candidates by recent revenue; you confirm the ones that were truly constrained.
+you remove it here** (limited stock is an ongoing fact, not a one-period event). To add items, use the
+**Search &amp; add** box — type a name in English or Chinese (e.g. "geo" shows every geoduck) and click **add**;
+no need to type item #s one by one. The page also auto-suggests candidates by recent revenue.
 
 ---
 

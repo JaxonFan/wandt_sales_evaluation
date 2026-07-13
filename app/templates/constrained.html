@@ -31,6 +31,14 @@
   </form>
 </div>
 <div class="card">
+  <h2>Search &amp; add by name</h2>
+  <p class="hint">Type a name (English or 中文) or item # — e.g. <b>geo</b> shows every geoduck (象拔蚌).
+    Click <b>add</b> to constrain it; the search stays put so you can add several.</p>
+  <input id="stk-search" placeholder="Search items…" autocomplete="off" style="width:340px;padding:7px 10px">
+  <div id="stk-count" class="hint" style="margin:6px 0"></div>
+  <table><tbody id="stk-results"></tbody></table>
+</div>
+<div class="card">
   <h2>Auto-detected candidates (confirm only)</h2>
   <p class="hint">Suggestions by recent revenue concentration — not auto-excluded. Add the ones that were truly supply-constrained.</p>
   <table>
@@ -46,4 +54,47 @@
     </tbody>
   </table>
 </div>
+<script type="application/json" id="stk-catalog">{{ all_items|tojson }}</script>
+<script type="application/json" id="stk-constrained">{{ constrained_set|tojson }}</script>
+<script>
+(function(){
+  var catalog = JSON.parse(document.getElementById('stk-catalog').textContent);
+  var added   = new Set(JSON.parse(document.getElementById('stk-constrained').textContent));
+  var box = document.getElementById('stk-search');
+  var out = document.getElementById('stk-results');
+  var cnt = document.getElementById('stk-count');
+  var LIMIT = 40;
+  function markAdded(td){ td.innerHTML=''; var s=document.createElement('span'); s.className='mut'; s.textContent='✓ added'; td.appendChild(s); }
+  function render(){
+    var q = box.value.trim().toLowerCase();
+    out.innerHTML = '';
+    if(!q){ cnt.textContent=''; return; }
+    var matches = catalog.filter(function(r){
+      return r.item.toLowerCase().indexOf(q) >= 0 || (r.desc||'').toLowerCase().indexOf(q) >= 0;
+    });
+    cnt.textContent = matches.length + ' match' + (matches.length===1?'':'es') + (matches.length>LIMIT?' (showing '+LIMIT+')':'');
+    matches.slice(0, LIMIT).forEach(function(r){
+      var tr = document.createElement('tr');
+      var tdI = document.createElement('td'); tdI.textContent = r.item; tdI.className='mut'; tdI.style.width='150px';
+      var tdD = document.createElement('td'); tdD.textContent = r.desc || '';
+      var tdB = document.createElement('td'); tdB.style.width='90px';
+      if(added.has(r.item)){ markAdded(tdB); }
+      else {
+        var b = document.createElement('button'); b.className='ghost'; b.type='button'; b.textContent='add';
+        b.onclick = function(){
+          b.disabled = true; b.textContent = '…';
+          fetch('/constrained/add', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+            body: new URLSearchParams({item_number:r.item, ajax:'1'})})
+          .then(function(res){ return res.ok ? res.json() : {ok:false}; })
+          .then(function(j){ if(j && j.ok){ added.add(r.item); markAdded(tdB); } else { b.disabled=false; b.textContent='add'; } })
+          .catch(function(){ b.disabled=false; b.textContent='retry'; });
+        };
+        tdB.appendChild(b);
+      }
+      tr.appendChild(tdI); tr.appendChild(tdD); tr.appendChild(tdB); out.appendChild(tr);
+    });
+  }
+  box.addEventListener('input', render);
+})();
+</script>
 {% endblock %}

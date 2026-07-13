@@ -3,7 +3,7 @@ closures / upload / settings / export) and a rep-facing goal dashboard (/me)."""
 import io, datetime as dt
 import pandas as pd
 from fastapi import FastAPI, Request, Depends, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
@@ -296,6 +296,9 @@ def constrained_page(request: Request, db: Session = Depends(get_db)):
         if c.item_number not in seen:
             seen.add(c.item_number); current.append(c)
     num_to_desc = service.item_descriptions(db)
+    # full catalog for the name-search (search by English/Chinese/item #, click to add)
+    all_items = sorted(({"item": k, "desc": v or ""} for k, v in num_to_desc.items()),
+                       key=lambda r: r["desc"] or r["item"])
     df = service.load_lines_df(db)
     candidates = []
     if len(df):
@@ -308,20 +311,23 @@ def constrained_page(request: Request, db: Session = Depends(get_db)):
                           for i, row in summary.iterrows()]
     return templates.TemplateResponse("constrained.html", {
         "request": request, "user": user, "period": period, "current": current,
-        "candidates": candidates, "desc_by_item": num_to_desc})
+        "candidates": candidates, "desc_by_item": num_to_desc,
+        "all_items": all_items, "constrained_set": sorted(seen)})
 
 
 @app.post("/constrained/add")
 def constrained_add(request: Request, item_number: str = Form(...), note: str = Form(""),
-                    db: Session = Depends(get_db)):
+                    ajax: str = Form(""), db: Session = Depends(get_db)):
     user = current_user(request, db)
     if not user or user.role == "rep":
-        return RedirectResponse("/login", status_code=303)
+        return JSONResponse({"ok": False}, status_code=403) if ajax else RedirectResponse("/login", status_code=303)
     item = item_number.strip()
     if item and not db.query(M.ConstrainedItem).filter(M.ConstrainedItem.item_number == item).first():
         period, _, _ = resolve_p(db, None)        # any valid period for the FK; the flag itself is global
         db.add(M.ConstrainedItem(period_id=period.period_id, item_number=item,
                                  note=note, user_id=user.user_id)); db.commit()
+    if ajax:                                       # search "click-to-add" uses fetch, no page reload
+        return JSONResponse({"ok": True, "item": item})
     return RedirectResponse("/constrained", status_code=303)
 
 
