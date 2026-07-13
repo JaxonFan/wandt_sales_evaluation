@@ -345,6 +345,7 @@ def _dials(s):
     return dict(
         item_rate=float(s["item_rate"]),
         growth_window_weeks=int(s["growth_window_weeks"]), size_band_count=int(s["size_band_count"]),
+        size_band_window_weeks=int(s["size_band_window_weeks"]), size_band_floor=float(s["size_band_floor"]),
         growth_payout_rate=float(s["growth_payout_rate"]),
         glide_alpha=float(s["glide_alpha"]), jump_multiple=float(s["jump_multiple"]),
         min_baseline_ratio=float(s["min_baseline_ratio"]), growth_review_min=float(s["growth_review_min"]),

@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from app import engine
-from builders import df_from, mk
+from builders import df_from, mk, run_period, acct_row
 
 
 def test_exclude_constrained_items():
@@ -87,3 +87,44 @@ def test_size_band_factors_uses_market_not_own_ratio():
     factors, overall = engine._size_band_factors(base, recent, n_bands=5)
     assert overall == pytest.approx(1.0, abs=0.1)
     assert factors["GROW"] < 1.5      # de-trended toward the market, not its own ratio
+
+
+def test_size_band_factor_floor_never_discounts_but_lets_upside_through():
+    base = pd.Series({f"A{i}": 4000.0 + 100 * i for i in range(12)})
+    # a whole book DOWN ~30% -> factor well below 1
+    down = engine._size_band_factors(base, base * 0.7, n_bands=5)
+    assert down[1] < 0.8 and min(down[0].values()) < 0.8
+    # floored at 1.0 -> a soft segment can't discount the bar
+    downf = engine._size_band_factors(base, base * 0.7, n_bands=5, floor=1.0)
+    assert downf[1] == pytest.approx(1.0) and min(downf[0].values()) >= 1.0
+    # an UP segment is untouched by the floor
+    upf = engine._size_band_factors(base, base * 1.4, n_bands=5, floor=1.0)
+    assert upf[1] == pytest.approx(1.4, abs=0.05) and min(upf[0].values()) >= 1.0
+
+
+def _up_year_recent_dip(n=12, prefix="U"):
+    """A book UP ~30% over the year but DOWN in the last 4 weeks (a seasonal/noise dip) — the exact case that
+    fooled the old 4-week de-trend into discounting every bar."""
+    specs = []
+    for i in range(n):
+        r = 1000.0 * (1 + 0.05 * i)
+        specs += mk(f"{prefix}{i:02d}", "Rep A", "BG", "2023-06-01", "2024-05-25", 7, r, r * 0.85)          # prior year
+        specs += mk(f"{prefix}{i:02d}", "Rep A", "BG", "2024-06-01", "2025-05-25", 7, 1.3 * r, 1.3 * r * 0.85)  # up-year +30%
+        specs += mk(f"{prefix}{i:02d}", "Rep A", "BG", "2025-06-01", "2025-06-29", 7, 0.8 * r, 0.8 * r * 0.85)  # last 4 wks: dip
+    return specs
+
+
+def test_long_window_and_floor_ignore_a_recent_4week_dip():
+    df = df_from(_up_year_recent_dip())
+    tgt = "U05"
+    # production dials (13-week de-trend + floor 0.9): the quarter window looks past the 4-week dip, so the bar
+    # stays ~at last year (not discounted) even though the last 4 weeks are soft.
+    r = acct_row(run_period(df), tgt)
+    assert r is not None and r["status"] == "mature" and r["baseline_quarter"] > 0
+    lift = r["account_target"] / r["baseline_quarter"]
+    assert lift >= 0.95                      # a soft 4-week window barely moves the quarter-based bar
+    # old behavior (noisy 4-week de-trend, no floor): the same dip wrongly discounts the bar hard
+    r0 = acct_row(run_period(df, size_band_window_weeks=4, size_band_floor=0.0), tgt)
+    lift0 = r0["account_target"] / r0["baseline_quarter"]
+    assert lift0 < 0.8                       # discounted by the single noisy 4-week slice
+    assert lift > lift0 + 0.15               # the quarter window + floor clearly protect the bar

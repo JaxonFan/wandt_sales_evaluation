@@ -43,8 +43,10 @@ cost + last year's profit*.
 
 If the whole market is up and you just ride the wave, that's not **you** outperforming. So we sort every
 account into **5 size groups** (smallest to largest by how much they buy) and move your bar by the **typical
-change for accounts your size** this year. You earn for **beating accounts like yours**, not for a rising
-tide. (And if the market is *down*, your bar comes down too — you're not punished for a slump everyone's in.)
+change for accounts your size over the past quarter** (a full quarter, not a noisy single month). You earn
+for **beating accounts like yours**, not for a rising tide. If accounts your size are *up*, your bar goes up.
+And a soft stretch **won't discount your bar by more than 10%** below last year — a slow month doesn't hand
+you an easy target; you're still expected to roughly hold last year (at today's cost + profit).
 
 > **There is no "stretch" or extra hurdle.** Once you're above the bar (today's cost + last year's profit,
 > adjusted for your size group), **every single dollar above it earns** — at 1%.

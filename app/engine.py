@@ -52,18 +52,21 @@ def cny_aligned_offset_days(period_start, period_end, default_days=364, window_d
     return default_days
 
 
-def _size_band_factors(baseline_q, recent_q, n_bands):
+def _size_band_factors(baseline_q, recent_q, n_bands, floor=0.0):
     """Median (recent/baseline) per size band of baseline_q — the 'typical move for accounts your size'.
-    Captures the market tide + inflation, so it subsumes both. Returns dict account -> band factor."""
+    Captures the market tide + inflation, so it subsumes both. Clamped to >= `floor`: floor=1.0 means the
+    bar is never DISCOUNTED below cost-adjusted last year (a soft segment can't lower it), while up-segments
+    still lift it. Returns dict account -> band factor."""
     pairs = pd.DataFrame({"base": baseline_q, "recent": recent_q.reindex(baseline_q.index).fillna(0.0)})
     pairs = pairs[pairs["base"] > 300]
     if len(pairs) < n_bands * 2:
         overall = float((pairs["recent"] / pairs["base"]).median()) if len(pairs) else 1.0
+        overall = max(floor, overall)
         return {a: overall for a in pairs.index}, overall
     pairs["ratio"] = pairs["recent"] / pairs["base"]
     band = pd.qcut(pairs["base"], n_bands, labels=False, duplicates="drop")
-    band_median = pairs.groupby(band)["ratio"].transform("median")
-    overall = float(pairs["ratio"].median())
+    band_median = pairs.groupby(band)["ratio"].transform("median").clip(lower=floor)
+    overall = max(floor, float(pairs["ratio"].median()))
     return band_median.to_dict(), overall
 
 
@@ -121,6 +124,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                          jump_released=frozenset(), constrained_item_numbers=frozenset(),
                          period_days=28, holiday_weight=0.0, item_rate=0.10,
                          growth_window_weeks=13, size_band_count=5,
+                         size_band_window_weeks=52, size_band_floor=0.0,
                          growth_payout_rate=0.045, growth_cap_multiple=2.0, growth_review_min=20000,
                          glide_alpha=0.35, jump_multiple=2.0, min_baseline_ratio=0.30,
                          mature_smooth_weeks=4, sporadic_gap_weeks=4, cost_inflation_weeks=13,
@@ -245,8 +249,15 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     company_seasonal_factor = 1.0
     if account_prior_q.sum() and account_recent_q.sum():
         company_seasonal_factor = min(max(account_recent_q.sum() / account_prior_q.sum(), 0.5), 2.0)
-    # size-band de-trend factor per account (typical move for accounts its size) — subsumes market + inflation
-    band_factor, overall_band_factor = _size_band_factors(account_baseline_q, account_recent_q, size_band_count)
+    # size-band de-trend factor per account (typical move for accounts its size) — subsumes market + inflation.
+    # Measured over a LONG window (size_band_window_weeks, default 52) vs the same window one year prior, so it
+    # tracks the real year-over-year trend instead of a noisy 4-week slice (a single 4-week window can read
+    # -16% in a year the book is +24%). Floored (size_band_floor, default 1.0) so a soft segment can never
+    # DISCOUNT the bar below cost-adjusted last year; up-segments still lift it.
+    sbw = pd.Timedelta(weeks=size_band_window_weeks)
+    trend_recent = df[(df["document_date"] > qend - sbw) & (df["document_date"] <= qend)].groupby("account")[GV].sum()
+    trend_base = _cost_adjusted_baseline(df, qend - sbw - ONE_YEAR, qend - ONE_YEAR, cost_factor)
+    band_factor, overall_band_factor = _size_band_factors(trend_base, trend_recent, size_band_count, floor=size_band_floor)
     # glide: each account's own adaptive run-rate level (for activations with no usable year-ago window)
     glide_levels = _glide_levels(df, qend, glide_alpha, step_weeks=growth_window_weeks, value_col=GV)
     # cross-account seasonal lift for glide accounts: how accounts THIS size are moving this period vs their
@@ -255,7 +266,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     # dormant accounts (recent=0) don't drag a band's median ratio to 0.
     glide_level_series = pd.Series({acc: lv for acc, lv in glide_levels.items()
                                     if account_recent_q.get(acc, 0.0) > 0}, dtype="float64")
-    glide_band_factor, glide_overall_factor = _size_band_factors(glide_level_series, account_recent_q, size_band_count)
+    glide_band_factor, glide_overall_factor = _size_band_factors(glide_level_series, account_recent_q, size_band_count, floor=size_band_floor)
 
     BASELINE_MIN = 300.0          # window baseline needed to score growth (else line-items only)
     period_fraction = period_days / (growth_window_weeks * 7.0)   # prorate window outperformance to the period
@@ -431,7 +442,8 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
 
 
 def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
-                          size_band_count=5, growth_payout_rate=0.01,
+                          size_band_count=5, size_band_window_weeks=52, size_band_floor=0.0,
+                          growth_payout_rate=0.01,
                           sporadic_gap_weeks=4, cost_inflation_weeks=13,
                           featured_new_products=frozenset(), new_product_weeks=26,
                           new_product_attribution=0.20, **_ignore):
@@ -476,7 +488,7 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
     cost_factor = _cost_inflation_factor(df, as_of - ci, as_of, as_of - ci - ONE_YEAR, as_of - ONE_YEAR)
     annual_recent = df[(df["document_date"] > as_of - year) & (df["document_date"] <= as_of)].groupby("account")[GV].sum()
     annual_baseline = _cost_adjusted_baseline(df, as_of - 2 * year, as_of - year, cost_factor)
-    band_factor, overall_band = _size_band_factors(annual_baseline, annual_recent, size_band_count)
+    band_factor, overall_band = _size_band_factors(annual_baseline, annual_recent, size_band_count, floor=size_band_floor)
     # raw (un-adjusted) account revenue, trailing 12 months vs the prior 12 months -> shown to reps as plain YoY
     raw_recent = df[(df["document_date"] > as_of - year) & (df["document_date"] <= as_of)].groupby("account")["extended_price"].sum()
     raw_prior = df[(df["document_date"] > as_of - 2 * year) & (df["document_date"] <= as_of - year)].groupby("account")["extended_price"].sum()

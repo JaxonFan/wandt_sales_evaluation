@@ -28,8 +28,13 @@ contribution, so we don't pay twice. Key properties (each fixes a real failure m
 - **De-trended by account size (this replaces hand-set tiers AND the inflation/market adjustments).** We
   group accounts into size bands and use each band's **actual typical year-over-year move** as the bar.
   That number already contains the market tide *and* price inflation, so a rep earns only for **beating
-  what accounts like theirs are doing** — not for riding a company-wide +50% year. (Down markets lower the
-  bar too.) This killed the big period-to-period swings we were seeing.
+  what accounts like theirs are doing** — not for riding a company-wide +50% year. The "typical move" is
+  measured over a **quarter window** (`size_band_window_weeks=13`), not the 4-week pay window — a single
+  4-week slice is noisy (established accounts read −16% in a quarter they were actually +3%, and +24% for the
+  year), which wrongly discounted every bar. Over a quarter the typical established account is ~flat, so the
+  factor lands near ×1.0. And the factor is **floored at 0.9** (`size_band_floor`): an up-segment lifts the
+  bar, but a soft segment can discount it **at most 10%** below cost-adjusted last year — a slump doesn't hand
+  reps an easy target. This killed the big period-to-period swings while keeping the bar honest in a growing book.
 - **Glide bar (the primary bar) — rewards *continuing* to grow, never overpays an elevated account.** An
   account's bar **follows its own recent run-rate and slides up as it grows** (a recursive moving average,
   speed `glide_alpha` ≈ 0.30 / ~a few periods of memory), lifted by a **cross-account, size-banded seasonal

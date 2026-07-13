@@ -53,7 +53,8 @@ def flat_book(associate="Rep A", start=HISTORY_START, end=AS_OF, n=12, weekly=10
 
 
 _DIAL_KEYS = [
-    "item_rate", "growth_window_weeks", "size_band_count", "growth_payout_rate", "glide_alpha",
+    "item_rate", "growth_window_weeks", "size_band_count", "size_band_window_weeks", "size_band_floor",
+    "growth_payout_rate", "glide_alpha",
     "jump_multiple", "min_baseline_ratio", "mature_smooth_weeks", "sporadic_gap_weeks",
     "cost_inflation_weeks", "growth_quarter_floor", "growth_quarter_min_prior", "growth_quarter_min_profit",
     "growth_annual_floor", "growth_annual_min_prior", "new_product_weeks", "new_product_attribution",

@@ -91,7 +91,7 @@
         <div style="font-family:ui-monospace,Menlo,monospace;margin:5px 0 4px">
           ${{ '{:,}'.format(r.tgt_basis) }} <span class="mut">({{ basis_label }} · whole account)</span>
           &nbsp;×&nbsp; {{ '%g'|format(r.share) }}% <span class="mut">(your share)</span>
-          &nbsp;×&nbsp; {{ '%.2f'|format(r.tgt_lift) }} <span class="mut">(size-band move — how accounts this size are trending)</span>
+          &nbsp;×&nbsp; {{ '%.2f'|format(r.tgt_lift) }} <span class="mut">(size-band move — how accounts this size are trending over the past quarter; discounts capped at −10%)</span>
           &nbsp;=&nbsp; <b>${{ '{:,}'.format(r.target) }}</b>
         </div>
         <span class="mut">Your recent <b>${{ '{:,}'.format(r.sales) }}</b> vs this <b>${{ '{:,}'.format(r.target) }}</b> bar → {{ '%+.0f'|format(r.perf) }}%.

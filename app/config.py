@@ -27,6 +27,8 @@ DEFAULTS = {
     # --- Growth (beat what accounts your size are doing, measured over the trailing 4 weeks) ---
     "growth_window_weeks": 4,      # measure growth on the trailing 4 weeks (= the pay period; jumps surface to review)
     "size_band_count": 5,          # group accounts into this many size bands for the "typical move" de-trend
+    "size_band_window_weeks": 13,  # measure the size-band "typical move" over this many trailing weeks vs the same window a year ago (13 = a quarter: de-noises the 4-week window without chasing the full annual trend — over a quarter established accounts are ~flat, so the factor lands near 1.0)
+    "size_band_floor": 0.9,        # de-trend factor clamped >= this; 0.9 = a soft segment may discount the bar at most 10% below cost-adjusted last year (the noisy 4-week window was cutting the smallest band -39%)
     "growth_payout_rate": 0.01,    # $ earned per sales-dollar above target (bar = cost-adjusted last-year x real-market move; no stretch)
     "cost_inflation_weeks": 13,    # window for the company cost-inflation factor (same basket repriced at today's cost); the bar = last-year cost x this factor + last-year profit, so passing cost through isn't "growth"
     "glide_alpha": 0.30,           # how fast a level-shifted account's bar catches up to its new run-rate (0..1); ~0.3 = a few periods of memory

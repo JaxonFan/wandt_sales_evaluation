@@ -199,6 +199,13 @@ Only the sales reps' lines are stored.
 - **Measurement window (weeks)** — how long a window growth is measured over (now **4** = one period).
 - **Payout per $ above the bar** — the growth rate (now **1%**).
 - **Size bands** — how many size groups accounts are split into for the "typical move" comparison (now **5**).
+- **De-trend window (weeks)** — how far back the "typical move for accounts your size" is measured (now **13**
+  = a quarter). Short windows (e.g. 4) are noisy: a single 4-week slice read −16% for established accounts in a
+  quarter they were actually up +3% (and up +24% for the year), which wrongly discounted every bar. Over a
+  quarter the typical established account is ~flat, so the factor lands near ×1.0.
+- **De-trend floor** — the lowest the size-band factor may go (now **0.9** = a soft segment can discount a bar
+  at most 10% below cost-adjusted last year; the 4-week window was cutting the smallest band −39%). Set to 1.0
+  to never discount at all; lower it to allow more down-market cushion.
 - **Cost-inflation window (weeks)** — the window used to re-price last year's basket at today's cost (now 13),
   so passing higher costs through isn't counted as growth.
 - **Glide catch-up speed (0–1)** — how fast a newer/level-shifted account's bar catches up to its own recent
