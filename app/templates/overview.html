@@ -29,7 +29,7 @@
       <th class="num">Line items</th><th class="num">Contribution</th>
       <th class="num">Growth target (4wk)</th><th class="num">Growth actual</th><th class="num">Growth $</th>
       <th class="num">New</th><th class="num">Acquisition</th><th class="num">Review</th>
-      <th class="num">Suggested bonus</th><th class="num">Award</th></tr></thead>
+      <th class="num">Target</th>{% if has_ar %}<th class="num" title="Bonus on money actually collected so far (pay only on collection). Rises to Target as invoices are paid — see Collections.">Collected</th>{% endif %}<th class="num">Award</th></tr></thead>
     <tbody>
     {% for c in cards %}
       <tr class="click" onclick="location='/associate/{{ c.associate }}?p={{ nav.idx }}'">
@@ -43,6 +43,8 @@
         <td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td>
         <td class="num">{% if c.flagged %}<span class="badge b-floor">{{ c.flagged }}</span>{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num"><strong>${{ '{:,.0f}'.format(c.total_bonus) }}</strong></td>
+        {% if has_ar %}<td class="num" title="collected so far">${{ '{:,.0f}'.format(collected.get(c.associate, 0)) }}
+          <span class="mut">({{ (collected.get(c.associate,0)/c.total_bonus*100)|round(0)|int if c.total_bonus else 100 }}%)</span></td>{% endif %}
         <td class="num">{% if c.associate in awards %}${{ '%.0f'|format(awards[c.associate].award_amount) }}{% else %}<span class="mut">—</span>{% endif %}</td>
       </tr>
     {% endfor %}

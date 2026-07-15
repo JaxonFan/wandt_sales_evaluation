@@ -159,3 +159,22 @@ class AuditLog(Base):
     entity = Column(String)
     details = Column(JSON)
     created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class CollectedInvoice(Base):
+    """An invoice (sop_number) whose money has been COLLECTED, per the manager's accounts-receivable upload.
+    Presence == fully collected. Each AR upload REPLACES the whole table (the report is a cumulative snapshot),
+    so an invoice that reverses (bounced check) drops out and its bonus claws back on the next pay-run."""
+    __tablename__ = "collected_invoices"
+    sop_number = Column(String, primary_key=True)
+    reported_at = Column(DateTime, default=dt.datetime.utcnow)   # when this collected set was uploaded
+
+
+class WrittenOffInvoice(Base):
+    """An uncollected invoice the manager has written off (bad debt) — drops from the unpaid/pending panel so
+    a dead receivable doesn't inflate the pending-bonus pipeline forever. Keyed by sop_number."""
+    __tablename__ = "written_off_invoices"
+    sop_number = Column(String, primary_key=True)
+    note = Column(String)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    created_at = Column(DateTime, default=dt.datetime.utcnow)

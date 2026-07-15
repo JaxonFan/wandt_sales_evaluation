@@ -60,11 +60,13 @@
 <div class="card">
   <h2>{{ 'Your bonus this period' if lang=='en' else '我们这个周期的奖金' }}</h2>
   <table>
-    <tr><td>{{ 'Sell line items' if lang=='en' else '卖货（订单行数）' }} <span class="mut">— {{ '{:,}'.format(c.items_placed) }} {{ 'lines' if lang=='en' else '行' }}</span></td><td class="num">${{ '{:,.0f}'.format(c.contribution_bonus) }}</td></tr>
-    <tr><td>{{ 'Grow your book' if lang=='en' else '把客户做大' }} <span class="mut">— {{ 'beating your target' if lang=='en' else '超过我们的目标' }}</span></td><td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td></tr>
-    <tr><td>{{ 'New accounts' if lang=='en' else '新客户' }} <span class="mut">— {{ c.new_accounts }} {{ 'qualified (flat bonus by size)' if lang=='en' else '个符合（按规模的固定奖金）' }}</span></td><td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td></tr>
-    <tr><td><b>{{ 'Total' if lang=='en' else '合计' }}</b></td><td class="num"><b>${{ '{:,.0f}'.format(c.total_bonus) }}</b></td></tr>
+    <thead><tr><th></th><th class="num">{{ 'Target' if lang=='en' else '目标' }}</th>{% if g.collected %}<th class="num">{{ 'Collected' if lang=='en' else '已收款' }}</th>{% endif %}</tr></thead>
+    <tr><td>{{ 'Sell line items' if lang=='en' else '卖货（订单行数）' }} <span class="mut">— {{ '{:,}'.format(c.items_placed) }} {{ 'lines' if lang=='en' else '行' }}</span></td><td class="num">${{ '{:,.0f}'.format(c.contribution_bonus) }}</td>{% if g.collected %}<td class="num">${{ '{:,.0f}'.format(g.collected.contribution_collected) }}</td>{% endif %}</tr>
+    <tr><td>{{ 'Grow your book' if lang=='en' else '把客户做大' }} <span class="mut">— {{ 'beating your target' if lang=='en' else '超过我们的目标' }}</span></td><td class="num">${{ '{:,.0f}'.format(c.growth_bonus) }}</td>{% if g.collected %}<td class="num">${{ '{:,.0f}'.format(g.collected.growth_collected) }}</td>{% endif %}</tr>
+    <tr><td>{{ 'New accounts' if lang=='en' else '新客户' }} <span class="mut">— {{ c.new_accounts }} {{ 'qualified (flat bonus by size)' if lang=='en' else '个符合（按规模的固定奖金）' }}</span></td><td class="num">${{ '{:,.0f}'.format(c.acquisition_bonus) }}</td>{% if g.collected %}<td class="num">${{ '{:,.0f}'.format(g.collected.acquisition_collected) }}</td>{% endif %}</tr>
+    <tr><td><b>{{ 'Total' if lang=='en' else '合计' }}</b></td><td class="num"><b>${{ '{:,.0f}'.format(c.total_bonus) }}</b></td>{% if g.collected %}<td class="num"><b>${{ '{:,.0f}'.format(g.collected.total_collected) }}</b> <span class="mut">({{ g.collected.collected_pct }}%)</span></td>{% endif %}</tr>
   </table>
+  {% if g.collected %}<p class="hint" style="margin:6px 0 0">{{ 'You are paid on money collected. The Collected column rises to Target as your customers pay their invoices.' if lang=='en' else '奖金按已收到的货款发放。客户付清发票后，"已收款"会逐步升到"目标"。' }}</p>{% endif %}
   {% if lang=='en' %}
   <p class="hint" style="margin-top:8px">Every line is "you did this → you earned this." Growth is measured over your last 4 weeks
     vs your bar; a sudden 2×+ jump on one account is checked by your manager first; a new account you win pays a flat bonus by its size once it's been around ~a quarter.</p>

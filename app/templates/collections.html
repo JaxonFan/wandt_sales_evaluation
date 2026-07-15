@@ -1,0 +1,59 @@
+{% extends "base.html" %}{% block body %}
+<div class="card">
+  <h2>Collections &amp; pay-run</h2>
+  <p class="hint" style="margin:0">Reps are paid <b>only on collected money</b>. Each period stays open and its
+    <b>Collected</b> bonus rises as its invoices are paid; you disburse the <b>Payable now</b> (Collected − already
+    Paid). {% if as_of %}Collections as of <b>{{ as_of.strftime('%Y-%m-%d') }}</b> ({{ '{:,}'.format(n_collected) }}
+    invoices).{% else %}<b>No receivables uploaded yet</b> — <a href="/upload" style="color:var(--blue)">import an AR file</a>.{% endif %}</p>
+  <div class="kpi primary" style="margin-top:10px"><div class="label">Total payable this cycle (all reps)</div>
+    <div class="val">${{ '{:,.0f}'.format(cycle_total) }}</div></div>
+</div>
+
+{% for rep, rows in by_rep.items() %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2 style="margin:0"><a href="/associate/{{ rep }}" style="color:var(--blue);text-decoration:none">{{ rep }}</a></h2>
+    <form method="post" action="/collections/pay" style="margin:0">
+      <input type="hidden" name="associate" value="{{ rep }}">
+      <b style="margin-right:10px">Payable now: ${{ '{:,.0f}'.format(totals[rep].payable) }}</b>
+      <button type="submit"{% if totals[rep].payable <= 0 %} disabled{% endif %}>Record pay</button>
+    </form>
+  </div>
+  <table style="margin-top:8px">
+    <thead><tr><th>Period</th><th class="num">Target</th><th class="num">Collected</th><th class="num">Paid</th><th class="num">Payable now</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>Period {{ r.n }} <span class="mut" style="font-size:12px">{{ r.start }} ~ {{ r.end }}</span></td>
+        <td class="num">${{ '{:,}'.format(r.target) }}</td>
+        <td class="num">${{ '{:,}'.format(r.collected) }} <span class="mut">({{ r.collected_pct }}%)</span></td>
+        <td class="num mut">${{ '{:,}'.format(r.paid) }}</td>
+        <td class="num {{ 'pos' if r.payable>0 else ('neg' if r.payable<0 else 'mut') }}">${{ '{:,}'.format(r.payable) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% set up = unpaid[rep][0] %}
+  {% if up %}
+  <h3 style="margin:14px 0 4px;font-size:14px">Unpaid accounts — ${{ '{:,}'.format(unpaid[rep][1]) }} outstanding (bonus pending until collected)</h3>
+  <table>
+    <thead><tr><th>Customer</th><th class="num">Outstanding</th><th class="num">Invoices</th><th>Oldest</th><th></th></tr></thead>
+    <tbody>
+    {% for a in up[:12] %}
+      <tr>
+        <td>{{ a.name }}</td>
+        <td class="num">${{ '{:,}'.format(a.outstanding) }}</td>
+        <td class="num">{{ a.invoices }}</td>
+        <td><span class="badge" style="background:{{ '#fdeaea;color:#b23' if a.bucket=='90+' else ('var(--amber-bg);color:var(--amber)' if a.bucket in ('61-90','31-60') else '#eef2f6;color:#55606e') }}">{{ a.oldest_days }}d ({{ a.bucket }})</span></td>
+        <td><form method="post" action="/collections/writeoff" style="margin:0" onsubmit="return confirm('Write off {{ a.name }} as bad debt? Its bonus will never pay.')">
+          <input type="hidden" name="account" value="{{ a.account }}"><input type="hidden" name="associate" value="{{ rep }}">
+          <button type="submit" class="ghost">write off</button></form></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

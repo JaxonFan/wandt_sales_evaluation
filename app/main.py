@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import os
 
 from .db import get_db, engine, Base
@@ -203,10 +204,12 @@ def overview(request: Request, db: Session = Depends(get_db), p: int = None):
     res, period, settings, nav, as_of = service.run_period_bonus(db, p)
     cards = res["scorecards"].sort_values("total_bonus", ascending=False).to_dict("records") if len(res["scorecards"]) else []
     awards = {a.associate: a for a in db.query(M.Award).filter(M.Award.period_id == period.period_id)}
+    collected = {rep: c["total_collected"] for rep, c in service.collected_scorecard(db, p)[0].items()}
+    has_ar = db.query(M.CollectedInvoice).count() > 0
     last_import = db.query(M.SalesLine).order_by(M.SalesLine.imported_at.desc()).first()
     return templates.TemplateResponse("overview.html", {
         "request": request, "user": user, "cards": cards, "period": period, "nav": nav,
-        "awards": awards, "data_through": as_of,
+        "awards": awards, "data_through": as_of, "collected": collected, "has_ar": has_ar,
         "imported_at": last_import.imported_at if last_import else None})
 
 
@@ -252,8 +255,9 @@ def associate(name: str, request: Request, db: Session = Depends(get_db), p: int
     card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == name), None)
     actions = {a.account: a for a in db.query(M.ManagerAction).filter(M.ManagerAction.period_id == period.period_id)}
     award = db.query(M.Award).filter(M.Award.period_id == period.period_id, M.Award.associate == name).first()
+    collected = service.collected_scorecard(db, p)[0].get(name) if db.query(M.CollectedInvoice).count() else None
     return templates.TemplateResponse("associate.html", {
-        "request": request, "user": user, "name": name, "card": card, "rows": rows,
+        "request": request, "user": user, "name": name, "card": card, "rows": rows, "collected": collected,
         "actions": actions, "award": award, "period": period, "nav": nav})
 
 
@@ -587,6 +591,86 @@ async def upload(request: Request, sales_file: UploadFile = File(...), db: Sessi
     audit(db, user, "upload", "sales_lines", {"lines": n, "orders": len(sop_numbers)})
     return templates.TemplateResponse("upload.html", {"request": request, "user": user,
         "msg": f"Imported {n:,} rep sales lines across {len(sop_numbers):,} orders."})
+
+
+@app.post("/upload-receivables")
+async def upload_receivables(request: Request, ar_file: UploadFile = File(...), db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    raw = pd.read_excel(io.BytesIO(await ar_file.read()))
+    col = next((c for c in raw.columns if str(c).strip().lower() in ("document number", "invoice number", "sop number")), None)
+    if col is None:
+        return templates.TemplateResponse("upload.html", {"request": request, "user": user,
+            "ar_msg": "No 'Document Number' column found in the receivables file."})
+    collected = {str(v).strip() for v in raw[col].dropna() if str(v).strip()}
+    # snapshot semantics: the latest cumulative report REPLACES the collected set (reversed invoices drop out)
+    db.query(M.CollectedInvoice).delete(synchronize_session=False)
+    now = dt.datetime.utcnow()
+    for sop in collected:
+        db.add(M.CollectedInvoice(sop_number=sop, reported_at=now))
+    db.commit()
+    service._ENGINE_CACHE.clear()
+    audit(db, user, "upload", "collected_invoices", {"collected": len(collected)})
+    return templates.TemplateResponse("upload.html", {"request": request, "user": user,
+        "ar_msg": f"Recorded {len(collected):,} collected invoices (snapshot). Reps now paid on collection."})
+
+
+# ---------- collections / pay-on-collection ----------
+@app.get("/collections", response_class=HTMLResponse)
+def collections(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login" if not user else "/me", status_code=303)
+    by_rep, meta = service.collections_payrun(db)
+    unpaid = {rep: service.unpaid_accounts(db, rep) for rep in by_rep}
+    as_of = db.query(func.max(M.CollectedInvoice.reported_at)).scalar()
+    n_collected = db.query(M.CollectedInvoice).count()
+    totals = {rep: {"payable": sum(r["payable"] for r in rows),
+                    "outstanding": unpaid[rep][1]} for rep, rows in by_rep.items()}
+    return templates.TemplateResponse("collections.html", {"request": request, "user": user,
+        "by_rep": by_rep, "unpaid": unpaid, "totals": totals, "as_of": as_of, "n_collected": n_collected,
+        "cycle_total": sum(t["payable"] for t in totals.values())})
+
+
+@app.post("/collections/pay")
+def collections_pay(request: Request, associate: str = Form(...), db: Session = Depends(get_db)):
+    """Record the true-up payment: bump each open period's cumulative paid (Award.award_amount) up to its
+    current Collected bonus. Payable then reads 0 until more money collects (or a bounce claws it back)."""
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    by_rep, _ = service.collections_payrun(db)
+    paid = 0.0
+    for r in by_rep.get(associate, []):
+        aw = db.query(M.Award).filter(M.Award.period_id == r["period_id"], M.Award.associate == associate).first()
+        if not aw:
+            aw = M.Award(period_id=r["period_id"], associate=associate); db.add(aw)
+        paid += r["collected"] - float(aw.award_amount or 0.0)
+        aw.award_amount = r["collected"]
+        aw.user_id, aw.created_at = user.user_id, dt.datetime.utcnow()
+    db.commit()
+    audit(db, user, "collections_pay", f"associate:{associate}", {"disbursed": round(paid)})
+    return RedirectResponse("/collections", status_code=303)
+
+
+@app.post("/collections/writeoff")
+def collections_writeoff(request: Request, account: str = Form(...), associate: str = Form(...),
+                         db: Session = Depends(get_db)):
+    """Write off an account's outstanding (uncollected) invoices as bad debt -> drop from the unpaid panel."""
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    coll = service.collected_set(db)
+    invs = [s for (s,) in db.query(M.SalesLine.sop_number).filter(
+                M.SalesLine.customer_number == account, M.SalesLine.associate == associate).distinct()
+            if str(s) not in coll]
+    for sop in invs:
+        if not db.query(M.WrittenOffInvoice).filter(M.WrittenOffInvoice.sop_number == sop).first():
+            db.add(M.WrittenOffInvoice(sop_number=sop, user_id=user.user_id))
+    db.commit()
+    audit(db, user, "writeoff", f"account:{account}", {"invoices": len(invs)})
+    return RedirectResponse("/collections", status_code=303)
 
 
 # ---------- settings (editable dials) & export ----------

@@ -37,12 +37,19 @@ def resolve_associate(batch_number, prefix_map, variant_map):
 def load_lines_df(db):
     rows = db.query(M.SalesLine.customer_number, M.SalesLine.associate, M.SalesLine.document_date,
                     M.SalesLine.line_profit, M.SalesLine.extended_price, M.SalesLine.extended_cost,
-                    M.SalesLine.qty, M.SalesLine.item_number, M.SalesLine.customer_name).all()
+                    M.SalesLine.qty, M.SalesLine.item_number, M.SalesLine.customer_name,
+                    M.SalesLine.sop_number).all()
     df = pd.DataFrame(rows, columns=["account", "associate", "document_date", "line_profit",
-                                     "extended_price", "extended_cost", "qty", "item_number", "customer_name"])
+                                     "extended_price", "extended_cost", "qty", "item_number", "customer_name",
+                                     "sop_number"])
     if len(df):
         df["document_date"] = pd.to_datetime(df["document_date"])
     return df
+
+
+def collected_set(db):
+    """Invoice numbers (sop_number) whose money has been collected, per the latest AR upload."""
+    return {s for (s,) in db.query(M.CollectedInvoice.sop_number).all()}
 
 
 def get_settings(db):
@@ -382,6 +389,92 @@ def run_period_bonus(db, idx=None):
     return res, period, s, nav, as_of
 
 
+def written_off_set(db):
+    """Invoice numbers the manager wrote off as bad debt -> dropped from the unpaid/pending panel."""
+    return {s for (s,) in db.query(M.WrittenOffInvoice.sop_number).all()}
+
+
+def collected_scorecard(db, idx=None):
+    """The 'Collected (actual)' bonus for a period: the TARGET bonus (fixed bars from the full run) with the
+    realized side gated by collection. Contribution scales by the collected LINE-ITEM fraction (exact);
+    Growth + Acquisition scale by the collected REVENUE fraction of the period. This keeps Collected <= Target
+    and converges to Target as invoices collect (the AR file only covers 2025-06+, so bars must NOT be
+    recomputed on collected-only data or the pre-coverage baseline collapses). Returns (rows_by_rep, period, nav)."""
+    res, period, s, nav, as_of = run_period_bonus(db, idx)
+    sc = res["scorecards"].set_index("associate")
+    df = _lines_cached(db, _data_version(db))
+    coll = collected_set(db)
+    lo, hi = pd.Timestamp(period.start_date), pd.Timestamp(period.end_date)
+    w = df[(df["document_date"] >= lo) & (df["document_date"] <= hi)]
+    w_coll = w[w["sop_number"].astype(str).isin(coll)]
+    out = {}
+    for rep in sc.index:
+        c = sc.loc[rep]
+        g = w[w["associate"] == rep]; gc = w_coll[w_coll["associate"] == rep]
+        tot_rev = float(g["extended_price"].sum()); col_rev = float(gc["extended_price"].sum())
+        tot_items = len(g); col_items = len(gc)
+        fr = (col_rev / tot_rev) if tot_rev else 1.0        # revenue collection fraction (growth/acq)
+        fi = (col_items / tot_items) if tot_items else 1.0  # line-item collection fraction (contribution)
+        contribution = float(c["contribution_bonus"]); growth = float(c["growth_bonus"]); acq = float(c["acquisition_bonus"])
+        col_total = contribution * fi + growth * fr + acq * fr
+        out[rep] = dict(associate=rep,
+                        contribution=contribution, contribution_collected=contribution * fi,
+                        growth=growth, growth_collected=growth * fr,
+                        acquisition=acq, acquisition_collected=acq * fr,
+                        total=float(c["total_bonus"]), total_collected=col_total,
+                        collected_rev=round(col_rev), billed_rev=round(tot_rev),
+                        collected_pct=(round(col_total / float(c["total_bonus"]) * 100) if c["total_bonus"] else 100))
+    return out, period, nav
+
+
+def collections_payrun(db):
+    """Per-rep, per-period Target vs Collected bonus + cumulative Paid (Award) + Payable-now (the progressive
+    true-up). Sum of `payable` across open periods = this cycle's payroll; the per-period rows are the
+    'previous period + this period' breakdown. Returns (rows_by_rep, meta)."""
+    s = get_settings(db)
+    ww = s["window_weeks"]
+    idx_min, idx_cur, anchor = period_grid(db, ww)
+    _, _, team = attribution_maps(db)
+    awards = {(a.period_id, a.associate): float(a.award_amount or 0.0) for a in db.query(M.Award).all()}
+    by_rep = {rep: [] for rep in team}
+    for idx in range(idx_cur, idx_min - 1, -1):
+        cards, period, _ = collected_scorecard(db, idx)
+        for rep in team:
+            c = cards.get(rep)
+            if c is None:
+                continue
+            tb = c["total"]; cb = c["total_collected"]
+            paid = awards.get((period.period_id, rep), 0.0)
+            by_rep[rep].append(dict(idx=idx, n=idx - idx_min + 1, start=period.start_date, end=period.end_date,
+                                    period_id=period.period_id, target=round(tb), collected=round(cb),
+                                    paid=round(paid), payable=round(cb - paid),
+                                    collected_pct=(round(cb / tb * 100) if tb else 100)))
+    return by_rep, dict(idx_min=idx_min, idx_cur=idx_cur)
+
+
+def unpaid_accounts(db, associate):
+    """A rep's OUTSTANDING (billed-but-uncollected, not written-off) invoices grouped by account, with aging
+    buckets. Shows which accounts owe money -> hence the rep's pending (unpaid) bonus."""
+    df = _lines_cached(db, _data_version(db))
+    coll = collected_set(db)
+    woff = written_off_set(db)
+    names = customer_names(db)
+    _, hi = data_bounds(db)
+    d = df[(df["associate"] == associate) & (~df["sop_number"].astype(str).isin(coll))
+           & (~df["sop_number"].astype(str).isin(woff))].copy()
+    # only invoices within AR coverage (before 2025-06 there's no receivables data -> not counted as "unpaid")
+    d = d[d["document_date"] >= pd.Timestamp("2025-06-01")]
+    rows = []
+    for acct, g in d.groupby("account"):
+        oldest = g["document_date"].min()
+        days = (pd.Timestamp(hi) - oldest).days
+        bucket = "0-30" if days <= 30 else ("31-60" if days <= 60 else ("61-90" if days <= 90 else "90+"))
+        rows.append(dict(account=acct, name=names.get(acct, acct), outstanding=round(float(g["extended_price"].sum())),
+                         invoices=int(g["sop_number"].nunique()), oldest_days=days, bucket=bucket))
+    rows.sort(key=lambda r: -r["outstanding"])
+    return rows, round(sum(r["outstanding"] for r in rows))
+
+
 def annual_exempt_set(db):
     """Accounts the manager exempted in ANY period -> removed from the annual growth track (closed/collapsed).
     The annual track is rolling (not per-period), so an exemption applies regardless of when it was set."""
@@ -471,9 +564,10 @@ def compute_rep_goal(db, associate, idx=None):
     rep_book = set(df[(df["associate"] == associate) & (df["document_date"] > book_cut)]["account"]) if len(df) else set()
     watch = [w for w in flag_silent_accounts(db) if w["account"] in rep_book][:6]
 
+    collected = collected_scorecard(db, idx)[0].get(associate) if db.query(M.CollectedInvoice).count() else None
     return {"associate": associate, "card": card, "period": period, "nav": nav,
             "actual": actual, "target": target, "pct": (actual / target * 100) if target else 0.0,
-            "last_year": last_year, "lift_pct": lift_pct,
+            "last_year": last_year, "lift_pct": lift_pct, "collected": collected,
             "new_accounts": new_accounts, "gated_accounts": gated_accounts, "watch": watch}
 
 

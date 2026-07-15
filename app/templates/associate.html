@@ -19,8 +19,10 @@
   <div class="kpi"><div class="label">Contribution ({{ '{:,}'.format(card.items_placed) }} line items)</div><div class="val">${{ '{:,.0f}'.format(card.contribution_bonus) }}</div></div>
   <div class="kpi"><div class="label">Growth (${{ '{:,.0f}'.format(card.growth_actual) }} vs ${{ '{:,.0f}'.format(card.growth_target) }})</div><div class="val">${{ '{:,.0f}'.format(card.growth_bonus) }}</div></div>
   <div class="kpi"><div class="label">Acquisition ({{ card.new_accounts }} new)</div><div class="val">${{ '{:,.0f}'.format(card.acquisition_bonus) }}</div></div>
-  <div class="kpi primary"><div class="label">Suggested total</div><div class="val">${{ '{:,.0f}'.format(card.total_bonus) }}</div></div>
+  <div class="kpi primary"><div class="label">Target total</div><div class="val">${{ '{:,.0f}'.format(card.total_bonus) }}</div></div>
+  {% if collected %}<div class="kpi primary" style="background:#eef6ee"><div class="label">Collected ({{ collected.collected_pct }}% — paid on collection)</div><div class="val">${{ '{:,.0f}'.format(collected.total_collected) }}</div></div>{% endif %}
 </div>
+{% if collected %}<p class="hint" style="margin:-6px 0 10px">Collected = Contribution ${{ '{:,.0f}'.format(collected.contribution_collected) }} + Growth ${{ '{:,.0f}'.format(collected.growth_collected) }} + Acquisition ${{ '{:,.0f}'.format(collected.acquisition_collected) }}. Rises to Target as invoices are paid — pay it out on the <a href="/collections" style="color:var(--blue)">Collections</a> page.</p>{% endif %}
 {% endif %}
 
 <div class="card">
@@ -28,7 +30,8 @@
   {% if nav.is_current %}
   <form method="post" action="/award" class="ov-form">
     <input type="hidden" name="associate" value="{{ name }}"><input type="hidden" name="p" value="{{ nav.idx }}">
-    Award $<input name="award_amount" type="number" step="50" value="{{ award.award_amount|round(0)|int if award else (card.total_bonus|round(0)|int if card else 0) }}" style="width:100px">
+    Award $<input name="award_amount" type="number" step="50" value="{{ award.award_amount|round(0)|int if award else (collected.total_collected|round(0)|int if collected else (card.total_bonus|round(0)|int if card else 0)) }}" style="width:100px">
+    <span class="mut" style="font-size:12px">{% if collected %}(defaults to Collected; pay-runs are on <a href="/collections">Collections</a>){% endif %}</span>
     &nbsp; Behavior-churn fine $<input name="fine_amount" type="number" step="50" value="{{ award.fine_amount|round(0)|int if award else 0 }}" style="width:80px">
     &nbsp; Note <input name="note" value="{{ award.note or '' if award else '' }}" style="width:200px">
     <button type="submit">Save</button>
