@@ -52,6 +52,18 @@ def collected_set(db):
     return {s for (s,) in db.query(M.CollectedInvoice.sop_number).all()}
 
 
+def parse_ar_collected(raw):
+    """From a receivables DataFrame, the DEDUPED set of collected invoice numbers — stripped of whitespace,
+    blanks dropped, so duplicate rows / padded variants collapse to one. Returns None if the file has no
+    recognizable invoice-number column. (Storage also dedups: sop_number is the PK and each upload replaces
+    the whole set.)"""
+    col = next((c for c in raw.columns
+                if str(c).strip().lower() in ("document number", "invoice number", "sop number")), None)
+    if col is None:
+        return None
+    return {str(v).strip() for v in raw[col].dropna() if str(v).strip()}
+
+
 def get_settings(db):
     s = dict(DEFAULTS)
     for row in db.query(M.Setting).all():

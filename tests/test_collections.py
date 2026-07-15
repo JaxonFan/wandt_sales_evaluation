@@ -63,6 +63,27 @@ def test_bounced_invoice_claws_back():
     assert service.collected_scorecard(db)[0]["Rep A"]["total_collected"] < full
 
 
+def test_ar_parse_dedups_and_strips():
+    # duplicate rows, whitespace-padded variants, and blanks all collapse to the unique set
+    raw = pd.DataFrame({"Document Number": ["INV0001", "INV0001", "  INV0001  ", "INV0002", None, "", "INV0003"]})
+    assert service.parse_ar_collected(raw) == {"INV0001", "INV0002", "INV0003"}
+    # a case-variant/alternate header still works; missing column -> None
+    assert service.parse_ar_collected(pd.DataFrame({"Invoice Number": ["INV9"]})) == {"INV9"}
+    assert service.parse_ar_collected(pd.DataFrame({"Something Else": [1, 2]})) is None
+
+
+def test_collected_set_cannot_double_count(tmp_path):
+    # sop_number is the PK, so the same invoice can only ever be stored once (no duplication in the DB)
+    db = _fresh_db()
+    db.add(M.CollectedInvoice(sop_number="INV0000")); db.commit()
+    from sqlalchemy.exc import IntegrityError
+    db.add(M.CollectedInvoice(sop_number="INV0000"))
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+    assert db.query(M.CollectedInvoice).count() == 1
+
+
 def test_payrun_payable_is_collected_minus_paid():
     db = _fresh_db()
     _set_collected(db, [f"INV{i:04d}" for i in range(6)])    # 60% collected

@@ -599,11 +599,10 @@ async def upload_receivables(request: Request, ar_file: UploadFile = File(...), 
     if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     raw = pd.read_excel(io.BytesIO(await ar_file.read()))
-    col = next((c for c in raw.columns if str(c).strip().lower() in ("document number", "invoice number", "sop number")), None)
-    if col is None:
+    collected = service.parse_ar_collected(raw)   # deduped set (strips whitespace, drops blanks/dup rows)
+    if collected is None:
         return templates.TemplateResponse("upload.html", {"request": request, "user": user,
             "ar_msg": "No 'Document Number' column found in the receivables file."})
-    collected = {str(v).strip() for v in raw[col].dropna() if str(v).strip()}
     # snapshot semantics: the latest cumulative report REPLACES the collected set (reversed invoices drop out)
     db.query(M.CollectedInvoice).delete(synchronize_session=False)
     now = dt.datetime.utcnow()
