@@ -64,13 +64,32 @@ def test_bounced_invoice_claws_back():
     assert service.collected_scorecard(db)[0]["Rep A"]["total_collected"] < full
 
 
-def test_ar_parse_dedups_and_strips():
-    # duplicate rows, whitespace-padded variants, and blanks all collapse to the unique set
+def test_parse_collected_dedups_and_strips():
+    # PAID file: every row collected; duplicate rows / whitespace-padded variants / blanks collapse to the set
     raw = pd.DataFrame({"Document Number": ["INV0001", "INV0001", "  INV0001  ", "INV0002", None, "", "INV0003"]})
-    assert service.parse_ar_collected(raw) == {"INV0001", "INV0002", "INV0003"}
-    # a case-variant/alternate header still works; missing column -> None
-    assert service.parse_ar_collected(pd.DataFrame({"Invoice Number": ["INV9"]})) == {"INV9"}
-    assert service.parse_ar_collected(pd.DataFrame({"Something Else": [1, 2]})) is None
+    assert service.parse_collected(raw) == {"INV0001", "INV0002", "INV0003"}
+    assert service.parse_collected(pd.DataFrame({"Invoice Number": ["INV9"]})) == {"INV9"}   # alt header
+    assert service.parse_collected(pd.DataFrame({"Something Else": [1, 2]})) is None          # no invoice col
+
+
+def test_parse_voided_uses_void_status_or_whole_list():
+    # a combined 'invoices: normal + voided' file with a Void Status column -> only the Voided rows
+    raw = pd.DataFrame({"SOP Number": ["INVA", "INVB", "INVC"], "Void Status": ["Voided", "", "Voided"]})
+    assert service.parse_voided(raw) == {"INVA", "INVC"}
+    # a voided-only list (no Void Status column) -> every row is voided
+    assert service.parse_voided(pd.DataFrame({"SOP Number": ["INVX", "  INVX ", "INVY"]})) == {"INVX", "INVY"}
+    assert service.parse_voided(pd.DataFrame({"Nope": [1]})) is None
+
+
+def test_voided_invoice_excluded_from_every_bonus_and_unpaid():
+    db = _fresh_db()                                            # 10 invoices, 1 line each -> 10 line items
+    assert int(service.run_period_bonus(db)[0]["scorecards"].set_index("associate").loc["Rep A", "items_placed"]) == 10
+    db.add(M.VoidedInvoice(sop_number="INV0000")); db.commit()  # void one invoice
+    sc = service.run_period_bonus(db)[0]["scorecards"].set_index("associate")   # cache auto-invalidates
+    assert int(sc.loc["Rep A", "items_placed"]) == 9           # its line is gone from contribution/growth/acq
+    assert "INV0000" not in service.active_lines(db)["sop_number"].astype(str).values
+    unpaid_inv = {iv["sop_number"] for a in service.unpaid_accounts(db, "Rep A")[0] for iv in a["invoice_list"]}
+    assert "INV0000" not in unpaid_inv                         # voided never shows as unpaid
 
 
 def test_collected_set_cannot_double_count(tmp_path):

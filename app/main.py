@@ -599,10 +599,10 @@ async def upload_receivables(request: Request, ar_file: UploadFile = File(...), 
     if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     raw = pd.read_excel(io.BytesIO(await ar_file.read()))
-    collected = service.parse_ar_collected(raw)   # deduped set (strips whitespace, drops blanks/dup rows)
+    collected = service.parse_collected(raw)      # deduped set (strips whitespace, drops blanks/dup rows)
     if collected is None:
         return templates.TemplateResponse("upload.html", {"request": request, "user": user,
-            "ar_msg": "No 'Document Number' column found in the receivables file."})
+            "ar_msg": "No invoice-number column (Document / Invoice / SOP Number) found in the paid file."})
     # snapshot semantics: the latest cumulative report REPLACES the collected set (reversed invoices drop out)
     db.query(M.CollectedInvoice).delete(synchronize_session=False)
     now = dt.datetime.utcnow()
@@ -612,7 +612,29 @@ async def upload_receivables(request: Request, ar_file: UploadFile = File(...), 
     service._ENGINE_CACHE.clear()
     audit(db, user, "upload", "collected_invoices", {"collected": len(collected)})
     return templates.TemplateResponse("upload.html", {"request": request, "user": user,
-        "ar_msg": f"Recorded {len(collected):,} collected invoices (snapshot). Reps now paid on collection."})
+        "ar_msg": f"Recorded {len(collected):,} paid invoices (snapshot). Reps now paid on collection."})
+
+
+@app.post("/upload-voided")
+async def upload_voided(request: Request, voided_file: UploadFile = File(...), db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    raw = pd.read_excel(io.BytesIO(await voided_file.read()))
+    voided = service.parse_voided(raw)            # voided rows (Void Status), or all rows if a voided-only list
+    if voided is None:
+        return templates.TemplateResponse("upload.html", {"request": request, "user": user,
+            "void_msg": "No invoice-number column (Document / Invoice / SOP Number) found in the file."})
+    # snapshot: the latest export REPLACES the voided set (an un-voided invoice drops back into the numbers)
+    db.query(M.VoidedInvoice).delete(synchronize_session=False)
+    now = dt.datetime.utcnow()
+    for sop in voided:
+        db.add(M.VoidedInvoice(sop_number=sop, reported_at=now))
+    db.commit()
+    service._ENGINE_CACHE.clear()
+    audit(db, user, "upload", "voided_invoices", {"voided": len(voided)})
+    return templates.TemplateResponse("upload.html", {"request": request, "user": user,
+        "void_msg": f"Recorded {len(voided):,} voided invoices (snapshot). They're now excluded from all bonuses."})
 
 
 # ---------- collections / pay-on-collection ----------

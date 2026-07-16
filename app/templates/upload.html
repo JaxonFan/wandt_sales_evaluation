@@ -11,15 +11,27 @@
   </form>
 </div>
 <div class="card" style="max-width:560px">
-  <h2>Import accounts receivable (collected invoices)</h2>
-  <p class="hint">Upload the receivables export (needs a <b>Document Number</b> column of invoice #s that have been
-    <b>collected</b>). Reps are paid only on collected money. This is a <b>cumulative snapshot</b> — each upload
-    <b>replaces</b> the collected set, so a reversed/bounced invoice that drops off will claw its bonus back.
-    Invoices are matched to reps by invoice number (the file's own salesperson column is ignored).</p>
+  <h2>Import <b>paid</b> invoices (accounts receivable)</h2>
+  <p class="hint">Upload the receivables / paid export (any <b>Document / Invoice / SOP Number</b> column of invoice #s
+    that have been <b>collected</b> — should <b>not</b> include voided ones). Reps are paid only on collected money.
+    <b>Cumulative snapshot</b> — each upload <b>replaces</b> the paid set, so a reversed/bounced invoice that drops
+    off claws its bonus back. Matched to reps by invoice number (the file's salesperson column is ignored).</p>
   {% if ar_msg %}<p class="pos" style="font-size:13px">{{ ar_msg }}</p>{% endif %}
   <form method="post" action="/upload-receivables" enctype="multipart/form-data">
-    <p>Receivables file: <input name="ar_file" type="file" accept=".xlsx,.xls" required></p>
-    <button type="submit">Import receivables</button>
+    <p>Paid file: <input name="ar_file" type="file" accept=".xlsx,.xls" required></p>
+    <button type="submit">Import paid</button>
+  </form>
+</div>
+<div class="card" style="max-width:560px">
+  <h2>Import <b>voided</b> invoices</h2>
+  <p class="hint">Upload the voided export — either a voided-only list, or a full <b>invoices (normal + voided)</b>
+    file with a <b>Void Status</b> column (rows marked "Voided" are taken). A voided invoice is <b>deleted</b>: it's
+    removed from <b>everything</b> — contribution, growth, acquisition, and collected. <b>Cumulative snapshot</b> —
+    each upload <b>replaces</b> the voided set (so an un-voided invoice drops back into the numbers).</p>
+  {% if void_msg %}<p class="pos" style="font-size:13px">{{ void_msg }}</p>{% endif %}
+  <form method="post" action="/upload-voided" enctype="multipart/form-data">
+    <p>Voided / invoices file: <input name="voided_file" type="file" accept=".xlsx,.xls" required></p>
+    <button type="submit">Import voided</button>
   </form>
 </div>
 {% endblock %}

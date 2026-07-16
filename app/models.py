@@ -170,6 +170,15 @@ class CollectedInvoice(Base):
     reported_at = Column(DateTime, default=dt.datetime.utcnow)   # when this collected set was uploaded
 
 
+class VoidedInvoice(Base):
+    """An invoice that was VOIDED (deleted) per the manager's transaction upload. Voided invoices are removed
+    from the sales data entirely — they count toward NOTHING (contribution, growth, acquisition, or collected).
+    Snapshot-replaced on each upload that carries void info."""
+    __tablename__ = "voided_invoices"
+    sop_number = Column(String, primary_key=True)
+    reported_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class WrittenOffInvoice(Base):
     """An uncollected invoice the manager has written off (bad debt) — drops from the unpaid/pending panel so
     a dead receivable doesn't inflate the pending-bonus pipeline forever. Keyed by sop_number."""

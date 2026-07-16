@@ -48,20 +48,44 @@ def load_lines_df(db):
 
 
 def collected_set(db):
-    """Invoice numbers (sop_number) whose money has been collected, per the latest AR upload."""
+    """Invoice numbers (sop_number) whose money has been collected, per the latest transaction upload."""
     return {s for (s,) in db.query(M.CollectedInvoice.sop_number).all()}
 
 
-def parse_ar_collected(raw):
-    """From a receivables DataFrame, the DEDUPED set of collected invoice numbers — stripped of whitespace,
-    blanks dropped, so duplicate rows / padded variants collapse to one. Returns None if the file has no
-    recognizable invoice-number column. (Storage also dedups: sop_number is the PK and each upload replaces
-    the whole set.)"""
-    col = next((c for c in raw.columns
-                if str(c).strip().lower() in ("document number", "invoice number", "sop number")), None)
+def voided_set(db):
+    """Invoice numbers (sop_number) that were VOIDED (deleted) -> removed from every bonus component."""
+    return {s for (s,) in db.query(M.VoidedInvoice.sop_number).all()}
+
+
+def _invoice_col(raw):
+    return next((c for c in raw.columns
+                 if str(c).strip().lower() in ("document number", "invoice number", "sop number")), None)
+
+
+def _clean_invoices(series):
+    """Deduped, whitespace-stripped invoice numbers (duplicate rows / padded variants collapse to one)."""
+    return {str(v).strip() for v in series.dropna() if str(v).strip()}
+
+
+def parse_collected(raw):
+    """PAID / receivables file -> the set of collected invoice numbers (every row; the paid file excludes
+    voided). Returns None if the file has no invoice-number column."""
+    col = _invoice_col(raw)
+    return None if col is None else _clean_invoices(raw[col])
+
+
+def parse_voided(raw):
+    """VOIDED file (either a voided-only list, or a full 'invoices: normal + voided' export) -> the set of
+    VOIDED invoice numbers: rows flagged in a 'Void Status' column, or ALL rows if there is no such column
+    (a voided-only list). Returns None if the file has no invoice-number column."""
+    col = _invoice_col(raw)
     if col is None:
         return None
-    return {str(v).strip() for v in raw[col].dropna() if str(v).strip()}
+    vcol = next((c for c in raw.columns if "void" in str(c).strip().lower()), None)
+    if vcol is None:
+        return _clean_invoices(raw[col])
+    is_void = raw[vcol].astype(str).str.strip().str.lower().str.contains("void", na=False)
+    return _clean_invoices(raw.loc[is_void, col])
 
 
 def get_settings(db):
@@ -245,6 +269,18 @@ def _lines_cached(db, ver):
     return df
 
 
+def active_lines(db):
+    """The sales dataframe with VOIDED invoices removed — they're deleted, so they count toward NOTHING
+    (contribution, growth, acquisition, collected, unpaid). Every bonus path uses this instead of the raw
+    lines. Cached by (data_version, voided set)."""
+    voided = frozenset(voided_set(db))
+
+    def _filter():
+        df = _lines_cached(db, _data_version(db))
+        return df[~df["sop_number"].astype(str).isin(voided)] if voided else df
+    return _memo(("active_lines", _data_version(db), voided), _filter)
+
+
 def _engine_version(db):
     """Cheap signature of every input the ENGINE / collected numbers depend on (data, dials, overrides,
     receivables) — but NOT awards. Memo key that auto-invalidates the expensive engine runs only when
@@ -259,6 +295,7 @@ def _engine_version(db):
         frozenset(featured_new_product_set(db)),
         frozenset(get_constrained_items(db)),
         frozenset(written_off_set(db)),
+        frozenset(voided_set(db)),
         db.query(func.count(M.CollectedInvoice.sop_number), func.max(M.CollectedInvoice.reported_at)).one(),
     )
 
@@ -287,7 +324,7 @@ def account_quarter_chart(db, account, end, weeks=13, w=300, h=54):
     Weekly (7-day) bins, oldest->newest, over the last `weeks` weeks ending `end`, and the same span a year
     earlier (364 days). Returns polyline point strings + geometry for the template. Display-only."""
     end = pd.Timestamp(end).normalize()
-    df = _lines_cached(db, _data_version(db))
+    df = active_lines(db)
     d = df[df["account"] == account]
 
     def weekly(anchor):
@@ -428,7 +465,7 @@ def run_period_bonus(db, idx=None):
     period, as_of, idx, idx_min, idx_cur, is_current = resolve_period(db, idx, ww)
 
     def _run():
-        df = _lines_cached(db, _data_version(db))
+        df = active_lines(db)
         _, _, team = attribution_maps(db)
         return compute_period_bonus(df, period.start_date, period.end_date, team, as_of=as_of,
                                     self_acquired=self_acquired_set(db),
@@ -456,7 +493,7 @@ def collected_scorecard(db, idx=None):
 
     def _out():
         sc = res["scorecards"].set_index("associate")
-        df = _lines_cached(db, _data_version(db))
+        df = active_lines(db)
         coll = collected_set(db)
         lo, hi = pd.Timestamp(period.start_date), pd.Timestamp(period.end_date)
         w = df[(df["document_date"] >= lo) & (df["document_date"] <= hi)]
@@ -513,7 +550,7 @@ def unpaid_accounts(db, associate):
     """A rep's OUTSTANDING (billed-but-uncollected, not written-off) invoices grouped by account, with aging
     buckets + per-invoice detail. Shows which accounts owe money -> hence the rep's pending (unpaid) bonus."""
     def _compute():
-        df = _lines_cached(db, _data_version(db))
+        df = active_lines(db)
         coll = collected_set(db)
         woff = written_off_set(db)
         names = customer_names(db)
@@ -555,7 +592,7 @@ def run_annual_review(db):
     s = get_settings(db)
     _, idx_cur0, _ = period_grid(db, s["window_weeks"])
     period, as_of, *_ = resolve_period(db, idx_cur0, s["window_weeks"])
-    df = _lines_cached(db, _data_version(db))
+    df = active_lines(db)
     _, _, team = attribution_maps(db)
     res = compute_annual_review(df, as_of, team,
                                 exempt_accounts=annual_exempt_set(db),
@@ -593,7 +630,7 @@ def compute_rep_goal(db, associate, idx=None):
     run-rate to finish, the three bonus pieces, new accounts, and accounts-to-watch."""
     res, period, s, nav, as_of = run_period_bonus(db, idx)
     card = next((c for c in res["scorecards"].to_dict("records") if c["associate"] == associate), None)
-    df = _lines_cached(db, _data_version(db))
+    df = active_lines(db)
     names = customer_names(db)
     period_end = pd.Timestamp(period.end_date)
 
