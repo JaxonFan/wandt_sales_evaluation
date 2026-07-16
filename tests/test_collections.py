@@ -140,6 +140,21 @@ def _db_aged():
     return db
 
 
+def test_unpaid_invoice_list_is_chronological_and_sums():
+    db = _fresh_db()                          # 10 invoices spread across ACCT0/1/2 on various dates
+    _set_collected(db, [])                    # nothing collected -> all unpaid
+    rows, _ = service.unpaid_accounts(db, "Rep A")
+    a0 = next(r for r in rows if r["account"] == "ACCT0")
+    il = a0["invoice_list"]
+    assert len(il) == a0["invoices"] >= 2
+    assert [iv["date"] for iv in il] == sorted(iv["date"] for iv in il)      # oldest-first
+    assert sum(iv["amount"] for iv in il) == a0["outstanding"]               # per-invoice sums to the account total
+    # a collected invoice drops out of the account's unpaid list
+    _set_collected(db, [il[0]["sop_number"]])
+    a0b = next(r for r in service.unpaid_accounts(db, "Rep A")[0] if r["account"] == "ACCT0")
+    assert all(iv["sop_number"] != il[0]["sop_number"] for iv in a0b["invoice_list"])
+
+
 def test_unpaid_aging_buckets_and_writeoff():
     db = _db_aged()                                          # nothing collected -> all 3 outstanding
     rows, total = service.unpaid_accounts(db, "Rep A")

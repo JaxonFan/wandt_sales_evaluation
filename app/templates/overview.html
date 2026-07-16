@@ -7,10 +7,10 @@
       <div class="ttl">Period {{ nav.n }} · {{ nav.start }} ~ {{ nav.end }}</div>
       <div class="hint" style="margin:3px 0 4px">
         {% if nav.is_current %}<span class="badge b-ok">current</span>{% else %}<span class="badge b-ramp">locked · read-only</span>{% endif %}
-        {{ nav.total }} periods · {{ nav.rel }}</div>
+        {{ nav.total }} periods{% if not nav.is_current %} · {{ nav.rel }}{% endif %}</div>
       <select class="psel" onchange="if(this.value!=='')location.href='/?p='+this.value">
         {% for o in nav.options %}
-        <option value="{{ o.idx }}" {{ 'selected' if o.idx==nav.idx }}>Period {{ o.n }} · {{ o.start }} ~ {{ o.end }}{% if o.is_current %} (current){% endif %}</option>
+        <option value="{{ o.idx }}" {{ 'selected' if o.idx==nav.idx }}>Period {{ o.n }} · {{ o.start }} ~ {{ o.end }}</option>
         {% endfor %}
       </select>
     </div>

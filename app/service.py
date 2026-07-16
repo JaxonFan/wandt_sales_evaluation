@@ -476,13 +476,22 @@ def unpaid_accounts(db, associate):
            & (~df["sop_number"].astype(str).isin(woff))].copy()
     # only invoices within AR coverage (before 2025-06 there's no receivables data -> not counted as "unpaid")
     d = d[d["document_date"] >= pd.Timestamp("2025-06-01")]
+    def _bucket(days):
+        return "0-30" if days <= 30 else ("31-60" if days <= 60 else ("61-90" if days <= 90 else "90+"))
     rows = []
     for acct, g in d.groupby("account"):
         oldest = g["document_date"].min()
         days = (pd.Timestamp(hi) - oldest).days
-        bucket = "0-30" if days <= 30 else ("31-60" if days <= 60 else ("61-90" if days <= 90 else "90+"))
+        # per-invoice detail (group the account's lines on the invoice #), oldest-first
+        inv = (g.groupby("sop_number").agg(date=("document_date", "min"), amount=("extended_price", "sum"),
+                                           lines=("item_number", "size")).reset_index().sort_values("date"))
+        invoice_list = [dict(sop_number=r.sop_number, date=r.date.date().isoformat(),
+                             amount=round(float(r.amount)), lines=int(r.lines),
+                             days=(pd.Timestamp(hi) - r.date).days, bucket=_bucket((pd.Timestamp(hi) - r.date).days))
+                        for r in inv.itertuples()]
         rows.append(dict(account=acct, name=names.get(acct, acct), outstanding=round(float(g["extended_price"].sum())),
-                         invoices=int(g["sop_number"].nunique()), oldest_days=days, bucket=bucket))
+                         invoices=int(g["sop_number"].nunique()), oldest_days=days, bucket=_bucket(days),
+                         invoice_list=invoice_list))
     rows.sort(key=lambda r: -r["outstanding"])
     return rows, round(sum(r["outstanding"] for r in rows))
 
