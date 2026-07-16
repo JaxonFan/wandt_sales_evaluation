@@ -568,9 +568,18 @@ async def upload(request: Request, sales_file: UploadFile = File(...), db: Sessi
     sales["Document Date"] = pd.to_datetime(sales["Document Date"], errors="coerce")
     sales["associate"] = sales["Batch Number"].apply(lambda b: service.resolve_associate(b, prefix_map, variant_map))
     sales = sales[sales["associate"].isin(sales_team)].dropna(subset=["Document Date"])
+    # if the invoices file carries a Void Status column, voided invoices are DELETED: don't import their lines,
+    # and record them as voided so they're excluded from every bonus (and any already-imported copy is dropped).
+    vcol = next((c for c in raw.columns if "void" in str(c).strip().lower()), None)
+    voided_in_file = set()
+    if vcol is not None:
+        is_void = raw[vcol].astype(str).str.strip().str.lower().str.contains("void", na=False)
+        voided_in_file = {str(s).strip() for s in raw.loc[is_void, "SOP Number"].dropna() if str(s).strip()}
+        sales = sales[~sales["SOP Number"].astype(str).str.strip().isin(voided_in_file)]
     sop_numbers = {str(s).strip() for s in sales["SOP Number"]}
-    if sop_numbers:
-        db.query(M.SalesLine).filter(M.SalesLine.sop_number.in_(sop_numbers)).delete(synchronize_session=False)
+    dedup_sops = sop_numbers | voided_in_file          # re-import replaces normal lines AND clears voided ones
+    if dedup_sops:
+        db.query(M.SalesLine).filter(M.SalesLine.sop_number.in_(dedup_sops)).delete(synchronize_session=False)
     n = 0
     for r in sales.to_dict("records"):
         ext_price = float(r["Extended Price"]) if pd.notna(r["Extended Price"]) else None
@@ -587,10 +596,17 @@ async def upload(request: Request, sales_file: UploadFile = File(...), db: Sessi
             document_date=r["Document Date"].date(), batch_number=str(r["Batch Number"]).strip().upper(),
             associate=r["associate"], imported_at=dt.datetime.utcnow()))
         n += 1
+    # reconcile the voided set for the invoices in THIS file: normal ones un-void, voided ones get recorded
+    if vcol is not None and dedup_sops:
+        db.query(M.VoidedInvoice).filter(M.VoidedInvoice.sop_number.in_(dedup_sops)).delete(synchronize_session=False)
+        for sop in voided_in_file:
+            db.add(M.VoidedInvoice(sop_number=sop, reported_at=dt.datetime.utcnow()))
     db.commit()
-    audit(db, user, "upload", "sales_lines", {"lines": n, "orders": len(sop_numbers)})
+    service._ENGINE_CACHE.clear()
+    audit(db, user, "upload", "sales_lines", {"lines": n, "orders": len(sop_numbers), "voided": len(voided_in_file)})
+    extra = f"; excluded {len(voided_in_file):,} voided invoices" if vcol is not None else ""
     return templates.TemplateResponse("upload.html", {"request": request, "user": user,
-        "msg": f"Imported {n:,} rep sales lines across {len(sop_numbers):,} orders."})
+        "msg": f"Imported {n:,} rep sales lines across {len(sop_numbers):,} orders{extra}."})
 
 
 @app.post("/upload-receivables")
@@ -621,10 +637,15 @@ async def upload_voided(request: Request, voided_file: UploadFile = File(...), d
     if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     raw = pd.read_excel(io.BytesIO(await voided_file.read()))
-    voided = service.parse_voided(raw)            # voided rows (Void Status), or all rows if a voided-only list
-    if voided is None:
+    if service._invoice_col(raw) is None:
         return templates.TemplateResponse("upload.html", {"request": request, "user": user,
             "void_msg": "No invoice-number column (Document / Invoice / SOP Number) found in the file."})
+    # GUARD: an all-invoices file must flag voided rows with a Void Status column, else we'd void EVERYTHING.
+    if not any("void" in str(c).strip().lower() for c in raw.columns):
+        return templates.TemplateResponse("upload.html", {"request": request, "user": user,
+            "void_msg": "Rejected: this file has no 'Void Status' column, so I can't tell which invoices are "
+                        "voided — refusing to void the whole list. A voided upload must include a Void Status column."})
+    voided = service.parse_voided(raw)            # only the rows flagged Voided
     # snapshot: the latest export REPLACES the voided set (an un-voided invoice drops back into the numbers)
     db.query(M.VoidedInvoice).delete(synchronize_session=False)
     now = dt.datetime.utcnow()
