@@ -124,6 +124,22 @@ def test_progressive_true_up_across_cycles_and_clawback():
     assert service.collections_payrun(db)[0]["Rep A"][0]["payable"] < 0               # clawback
 
 
+def test_payrun_is_cached_and_invalidates_correctly():
+    db = _fresh_db()
+    service.collections_payrun(db)                                  # warm (creates period_anchor -> stable version)
+    r1 = service.collections_payrun(db)
+    assert service.collections_payrun(db) is r1                     # repeat call = cache hit (same object)
+    idx, pid = r1[0]["Rep A"][0]["idx"], r1[0]["Rep A"][0]["period_id"]
+    eng_before = service.run_period_bonus(db, idx)[0]
+    # recording a pay (Award) must refresh the pay-run but NOT re-run the engine
+    db.add(M.Award(period_id=pid, associate="Rep A", award_amount=5.0)); db.commit()
+    assert service.collections_payrun(db) is not r1                 # pay-run recomputed
+    assert service.run_period_bonus(db, idx)[0] is eng_before       # engine result reused
+    # an engine input change (a collected invoice) DOES bust the engine cache
+    db.add(M.CollectedInvoice(sop_number="INV0000")); db.commit()
+    assert service.run_period_bonus(db, idx)[0] is not eng_before
+
+
 def _db_aged():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
