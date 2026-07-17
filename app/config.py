@@ -42,7 +42,8 @@ DEFAULTS = {
     "growth_annual_floor": 0.95,   # annual reality check: an account earns growth only if its trailing-52-week revenue is >= this x the cost-adjusted prior 52 weeks (0.95 = allow 5% YoY slack, matching the quarter gate; blocks growth-harvesting on flat/declining accounts)
     "growth_annual_min_prior": 50000,  # only apply the annual gate to accounts with at least this much prior-year revenue (small accounts' YoY is too noisy to gate)
     "new_product_weeks": 13,       # a SKU is "new" for this many weeks after its company-wide first sale; its credit ramps over this window
-    "new_product_attribution": 0.20,  # a featured-new product's growth credit STARTS here and ramps smoothly to 100% by new_product_weeks (no cliff)
+    "new_product_attribution": 0.40,  # a featured-new product's growth credit STARTS here and ramps smoothly to 100% by new_product_weeks (no cliff)
+    "substitute_attribution": 0.60,   # a 'cheaper substitute' SKU starts higher than a new product (more credit — but not all — for finding a cheaper alternative), same ramp to 100%
     "growth_cap_multiple": 2.0,    # (legacy alias; superseded by jump_multiple)
     "growth_review_min": 10000,    # (deprecated — jumps now flag on the doubling alone, no dollar floor)
 

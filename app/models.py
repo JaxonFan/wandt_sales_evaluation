@@ -118,6 +118,18 @@ class NewProductReview(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
+class SubstituteProduct(Base):
+    """A 'cheaper substitute' SKU the manager flagged — the rep found a cheaper alternative to an existing product.
+    Its revenue counts at `substitute_attribution` (higher than a brand-new product: some credit, not all), ramping
+    to 100% over the same new_product_weeks window. Kept in its own table (not a column on new_product_reviews) so
+    it creates cleanly on prod via create_all without an ALTER. Keyed by item_number."""
+    __tablename__ = "substitute_products"
+    item_number = Column(String, primary_key=True)
+    note = Column(String)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class Award(Base):
     __tablename__ = "awards"
     id = Column(Integer, primary_key=True, autoincrement=True)

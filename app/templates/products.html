@@ -1,15 +1,17 @@
 {% extends "base.html" %}{% block body %}
 <div class="card">
-  <h2>New products · review</h2>
+  <h2>New products &amp; cheaper substitutes · review</h2>
   <p class="hint">SKUs first sold in the last <b>{{ weeks }} weeks</b> (auto-detected). Most are size/brand
-    re-codes of the same product (catalog churn) — those should stay <b>Not featured</b>. Mark the genuinely
-    <b>new</b> products as <b>Featured</b>: a featured product's growth credit <b>ramps from
-    {{ '%.0f'|format(attribution*100) }}% up to 100%</b> over its first <b>{{ weeks }} weeks</b> (discounted early
-    since the company created the product, full credit as it becomes the rep's own book). Default = Not featured
-    (pays nothing). Missing one? <b>Add it by item #</b> below.</p>
+    re-codes of the same product (catalog churn) — leave those <b>Not featured</b>. For the real ones, pick a category
+    (credit ramps up to 100% over the first <b>{{ weeks }} weeks</b>, discounted early since it isn't yet the rep's
+    own book):
+    <b>New product</b> = starts at <b>{{ '%.0f'|format(attribution*100) }}%</b>;
+    <b>Cheaper substitute</b> = a rep-found cheaper alternative to an existing product, starts higher at
+    <b>{{ '%.0f'|format(sub_attribution*100) }}%</b> (some credit, not all). Default = Not featured (pays nothing).
+    Missing one? <b>Add it by item #</b> below.</p>
   <table>
     <thead><tr><th>Item</th><th>Description</th><th class="num">First sold</th><th class="num">$/unit</th>
-      <th class="num">Rev (13wk)</th><th>Featured?</th></tr></thead>
+      <th class="num">Rev (13wk)</th><th>Category</th></tr></thead>
     <tbody>
     {% for r in rows %}
       <tr>
@@ -21,9 +23,10 @@
         <td>
           <form method="post" action="/products/flag" class="ov-form" style="margin:0">
             <input type="hidden" name="item" value="{{ r.item }}">
-            <select name="featured" onchange="this.form.submit()">
-              <option value="no" {{ 'selected' if not r.featured }}>Not featured — pays nothing</option>
-              <option value="yes" {{ 'selected' if r.featured }}>Featured — counts {{ '%.0f'|format(attribution*100) }}% to growth</option>
+            <select name="kind" onchange="this.form.submit()">
+              <option value="no" {{ 'selected' if r.category=='no' }}>Not featured — pays nothing</option>
+              <option value="new" {{ 'selected' if r.category=='new' }}>New product — {{ '%.0f'|format(attribution*100) }}% → 100%</option>
+              <option value="substitute" {{ 'selected' if r.category=='substitute' }}>Cheaper substitute — {{ '%.0f'|format(sub_attribution*100) }}% → 100%</option>
             </select>
           </form>
         </td>
@@ -34,9 +37,12 @@
     </tbody>
   </table>
   <form method="post" action="/products/flag" class="ov-form" style="margin-top:12px">
-    <input type="hidden" name="featured" value="yes">
-    Add product by item # <input name="item" required style="width:200px">
-    <button type="submit">Add &amp; feature</button>
+    Add by item # <input name="item" required style="width:180px">
+    as <select name="kind">
+      <option value="new">New product ({{ '%.0f'|format(attribution*100) }}%)</option>
+      <option value="substitute">Cheaper substitute ({{ '%.0f'|format(sub_attribution*100) }}%)</option>
+    </select>
+    <button type="submit">Add</button>
   </form>
 </div>
 {% endblock %}

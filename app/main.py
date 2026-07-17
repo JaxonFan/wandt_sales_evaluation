@@ -26,7 +26,7 @@ EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count",
                   "growth_payout_rate", "cost_inflation_weeks", "glide_alpha", "min_baseline_ratio", "jump_multiple",
                   "mature_smooth_weeks", "sporadic_gap_weeks", "growth_quarter_floor", "growth_quarter_min_prior",
                   "growth_quarter_min_profit", "growth_annual_floor", "growth_annual_min_prior",
-                  "new_product_weeks", "new_product_attribution",
+                  "new_product_weeks", "new_product_attribution", "substitute_attribution",
                   "acq_tier_small_max", "acq_tier_medium_max", "acq_flat_small", "acq_flat_medium", "acq_flat_large",
                   "acq_ramp_periods", "fine_amount"]
 
@@ -493,24 +493,39 @@ def products_page(request: Request, db: Session = Depends(get_db)):
     user = current_user(request, db)
     if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
-    weeks = int(service.get_settings(db)["new_product_weeks"])
-    attribution = float(service.get_settings(db)["new_product_attribution"])
+    s = service.get_settings(db)
+    weeks = int(s["new_product_weeks"])
+    attribution = float(s["new_product_attribution"]); sub_attribution = float(s["substitute_attribution"])
     rows = service.new_product_candidates(db, weeks)
     rows = rows + service.featured_extra_products(db, [r["item"] for r in rows], weeks)
+    feat, subs = service.featured_new_product_set(db), service.substitute_product_set(db)
+    for r in rows:   # current flag state -> preselects the dropdown
+        r["category"] = "substitute" if r["item"] in subs else ("new" if r["item"] in feat else "no")
     return templates.TemplateResponse("products.html", {
-        "request": request, "user": user, "rows": rows, "weeks": weeks, "attribution": attribution})
+        "request": request, "user": user, "rows": rows, "weeks": weeks,
+        "attribution": attribution, "sub_attribution": sub_attribution})
 
 
 @app.post("/products/flag")
-def products_flag(request: Request, item: str = Form(...), featured: str = Form(...),
+def products_flag(request: Request, item: str = Form(...), kind: str = Form(...),
                   db: Session = Depends(get_db)):
     user = current_user(request, db)
     if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
+    item = item.strip()
+    # new-product review: featured only when it's a plain new product
     rev = db.get(M.NewProductReview, item) or M.NewProductReview(item_number=item)
-    rev.featured = (featured == "yes"); rev.user_id = user.user_id; rev.created_at = dt.datetime.utcnow()
-    db.merge(rev); db.commit()
-    audit(db, user, "product_review", f"item:{item}", {"featured": rev.featured})
+    rev.featured = (kind == "new"); rev.user_id = user.user_id; rev.created_at = dt.datetime.utcnow()
+    db.merge(rev)
+    # cheaper-substitute table (mutually exclusive with new-product)
+    sub = db.get(M.SubstituteProduct, item)
+    if kind == "substitute" and not sub:
+        db.add(M.SubstituteProduct(item_number=item, user_id=user.user_id))
+    elif kind != "substitute" and sub:
+        db.delete(sub)
+    db.commit()
+    service._ENGINE_CACHE.clear()
+    audit(db, user, "product_review", f"item:{item}", {"kind": kind})
     return RedirectResponse("/products", status_code=303)
 
 

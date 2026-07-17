@@ -105,6 +105,18 @@ def test_new_product_ramp_discounts_young_items_only():
     assert g_old_featured == pytest.approx(g_plain, abs=1e-6)
 
 
+# --- 13b. Cheaper substitute counts MORE than a new product, less than full ------------------------
+def test_cheaper_substitute_credited_higher_than_new_product():
+    base = mk("NP", "Rep A", "OLD_BASE", HISTORY_START, AS_OF, 7, 1000, 850)
+    new = mk("NP", "Rep A", "NEW", AS_OF - 4 * WK + DAY, AS_OF, 7, 300, 255)   # young item, ~4 wks old
+    df = df_from(_flats(), base, new)
+    g_plain = card(run_period(df))["growth_bonus"]                              # 100% credit
+    g_new = card(run_period(df, featured_new_products=["NEW"]))["growth_bonus"]           # starts 40%
+    g_sub = card(run_period(df, substitute_products=["NEW"]))["growth_bonus"]             # starts 60%
+    # more credit than a brand-new product, but still discounted vs a fully-established item
+    assert g_new < g_sub < g_plain
+
+
 # --- 14. Constrained items are excluded from GROWTH only (not contribution) ------------------------
 def test_constrained_is_growth_only():
     base = mk("NP", "Rep A", "OLD_BASE", HISTORY_START, AS_OF, 7, 1000, 850)

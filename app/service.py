@@ -293,6 +293,7 @@ def _engine_version(db):
         frozenset((a.account, a.period_id, a.status) for a in db.query(M.ManagerAction).all()),
         frozenset(self_acquired_set(db)),
         frozenset(featured_new_product_set(db)),
+        frozenset(substitute_product_set(db)),
         frozenset(get_constrained_items(db)),
         frozenset(written_off_set(db)),
         frozenset(voided_set(db)),
@@ -367,8 +368,15 @@ def exempt_set(db, period_id):
 
 def featured_new_product_set(db):
     """SKUs the manager confirmed are genuinely new -> their revenue counts at new_product_attribution
-    toward growth. Default-absent = not featured (catalog churn pays nothing)."""
-    return {r.item_number for r in db.query(M.NewProductReview).filter(M.NewProductReview.featured == True)}
+    toward growth. Default-absent = not featured (catalog churn pays nothing). Substitutes are separate."""
+    subs = substitute_product_set(db)
+    return {r.item_number for r in db.query(M.NewProductReview).filter(M.NewProductReview.featured == True)} - subs
+
+
+def substitute_product_set(db):
+    """SKUs flagged as a 'cheaper substitute' -> revenue counts at substitute_attribution (higher than a new
+    product) toward growth, same ramp."""
+    return {r.item_number for r in db.query(M.SubstituteProduct).all()}
 
 
 def new_product_candidates(db, new_product_weeks=26):
@@ -400,8 +408,8 @@ def featured_extra_products(db, existing_items, new_product_weeks=26):
     first sold longer ago than new_product_weeks). Returned in the same row shape as new_product_candidates
     so they render in the same table, tagged manual=True (and unknown=True if the item# isn't in sales yet)."""
     existing = set(existing_items)
-    featured_items = [r.item_number for r in db.query(M.NewProductReview).filter(M.NewProductReview.featured == True)
-                      if r.item_number not in existing]
+    flagged = featured_new_product_set(db) | substitute_product_set(db)   # new products AND cheaper substitutes
+    featured_items = [it for it in flagged if it not in existing]
     if not featured_items:
         return []
     rows = db.query(M.SalesLine.item_number, M.SalesLine.item_description, M.SalesLine.document_date,
@@ -448,6 +456,7 @@ def _dials(s):
         growth_quarter_min_profit=float(s["growth_quarter_min_profit"]),
         growth_annual_floor=float(s["growth_annual_floor"]), growth_annual_min_prior=float(s["growth_annual_min_prior"]),
         new_product_weeks=int(s["new_product_weeks"]), new_product_attribution=float(s["new_product_attribution"]),
+        substitute_attribution=float(s["substitute_attribution"]),
         acq_tier_small_max=float(s["acq_tier_small_max"]), acq_tier_medium_max=float(s["acq_tier_medium_max"]),
         acq_flat_small=float(s["acq_flat_small"]), acq_flat_medium=float(s["acq_flat_medium"]),
         acq_flat_large=float(s["acq_flat_large"]), acq_ramp_periods=int(s["acq_ramp_periods"]),
@@ -472,7 +481,8 @@ def run_period_bonus(db, idx=None):
                                     exempt_accounts=exempt_set(db, period.period_id),
                                     jump_released=jump_released_set(db, period.period_id),
                                     constrained_item_numbers=get_constrained_items(db),
-                                    featured_new_products=featured_new_product_set(db), **_dials(s))
+                                    featured_new_products=featured_new_product_set(db),
+                                    substitute_products=substitute_product_set(db), **_dials(s))
     res = _memo(("engine", idx, _engine_version(db)), _run)      # cache the expensive engine run (auto-invalidated)
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of
@@ -596,7 +606,8 @@ def run_annual_review(db):
     _, _, team = attribution_maps(db)
     res = compute_annual_review(df, as_of, team,
                                 exempt_accounts=annual_exempt_set(db),
-                                featured_new_products=featured_new_product_set(db), **_dials(s))
+                                featured_new_products=featured_new_product_set(db),
+                                    substitute_products=substitute_product_set(db), **_dials(s))
     return res, as_of, s
 
 

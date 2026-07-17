@@ -131,6 +131,7 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
                          growth_quarter_floor=0.0, growth_quarter_min_prior=3000, growth_quarter_min_profit=600,
                          growth_annual_floor=1.0, growth_annual_min_prior=50000,
                          featured_new_products=frozenset(), new_product_weeks=26, new_product_attribution=0.20,
+                         substitute_products=frozenset(), substitute_attribution=0.60,
                          acq_tier_small_max=15000, acq_tier_medium_max=65000,
                          acq_flat_small=100, acq_flat_medium=200, acq_flat_large=300,
                          acq_revenue_pct=0.01, acq_ramp_periods=3):
@@ -184,16 +185,20 @@ def compute_period_bonus(df, period_start, period_end, sales_team, *, as_of=None
     # growth for its first new_product_weeks (the company made the product; the rep is credited but discounted).
     # Line-item contribution & acquisition still use full extended_price.
     featured_new_products = set(featured_new_products)
+    substitute_products = set(substitute_products)
     GV = "extended_price"
-    if featured_new_products:
+    if featured_new_products or substitute_products:
         item_first = df.groupby("item_number")["document_date"].min()
-        # A featured new product's growth credit RAMPS smoothly from new_product_attribution (e.g. 20%) at
-        # first sale up to 100% by new_product_weeks of age, then stays 100% — no cliff at graduation. The
-        # ramp is time-based on the product's age (weeks since its company-wide first sale).
+        # A featured product's growth credit RAMPS smoothly from its STARTING attribution at first sale up to 100%
+        # by new_product_weeks of age (no cliff). The start differs by kind: a cheaper substitute starts higher
+        # (substitute_attribution, e.g. 60%) than a brand-new product (new_product_attribution, e.g. 40%);
+        # everything else starts at 100% (no discount). Ramp is time-based on the product's age.
+        start_by_item = {**{it: new_product_attribution for it in featured_new_products},
+                         **{it: substitute_attribution for it in substitute_products}}   # substitute wins on overlap
+        start = df["item_number"].map(start_by_item).fillna(1.0)
         age_weeks = (period_end - df["item_number"].map(item_first)).dt.days / 7.0
-        ramp = new_product_attribution + (1.0 - new_product_attribution) * (age_weeks / new_product_weeks).clip(0.0, 1.0)
-        factor = np.where(df["item_number"].isin(featured_new_products), ramp, 1.0)
-        df = df.assign(growth_value=df["extended_price"] * factor)
+        ramp = start + (1.0 - start) * (age_weeks / new_product_weeks).clip(0.0, 1.0)
+        df = df.assign(growth_value=df["extended_price"] * ramp)
         GV = "growth_value"
 
     # --- trailing windows for GROWTH ---
@@ -446,7 +451,8 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
                           growth_payout_rate=0.01,
                           sporadic_gap_weeks=4, cost_inflation_weeks=13,
                           featured_new_products=frozenset(), new_product_weeks=26,
-                          new_product_attribution=0.20, **_ignore):
+                          new_product_attribution=0.20, substitute_products=frozenset(),
+                          substitute_attribution=0.60, **_ignore):
     """Annual Review track. Sporadic accounts (median order-gap longer than the 4-week window — they order
     too infrequently for a per-period measure) are scored on a ROLLING trailing 12 months vs the prior 12
     months, cost-adjusted and de-trended by the typical move of accounts their size. Growth here is paid
@@ -465,13 +471,15 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
     # growth value: a featured-new product's revenue counts at new_product_attribution (same rule as the
     # period engine), so the annual measure doesn't over-credit company-launched products.
     featured_new_products = set(featured_new_products)
+    substitute_products = set(substitute_products)
     GV = "extended_price"
-    if featured_new_products:
+    if featured_new_products or substitute_products:
         item_first = df.groupby("item_number")["document_date"].min()
-        is_new = (df["item_number"].isin(featured_new_products) &
-                  ((as_of - df["item_number"].map(item_first)) <= pd.Timedelta(weeks=new_product_weeks)))
-        df = df.assign(growth_value=np.where(is_new, df["extended_price"] * new_product_attribution,
-                                             df["extended_price"]))
+        within = (as_of - df["item_number"].map(item_first)) <= pd.Timedelta(weeks=new_product_weeks)
+        attr_by_item = {**{it: new_product_attribution for it in featured_new_products},
+                        **{it: substitute_attribution for it in substitute_products}}   # substitute wins on overlap
+        attr = df["item_number"].map(attr_by_item).fillna(1.0)
+        df = df.assign(growth_value=np.where(within, df["extended_price"] * attr, df["extended_price"]))
         GV = "growth_value"
 
     # sporadic = median order-gap longer than the 4-week measurement window

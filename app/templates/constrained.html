@@ -40,16 +40,19 @@
 </div>
 <div class="card">
   <h2>Auto-detected candidates (confirm only)</h2>
-  <p class="hint">Suggestions by recent revenue concentration — not auto-excluded. Add the ones that were truly supply-constrained.</p>
+  <p class="hint">Suggestions by recent revenue concentration — not auto-excluded. Add the ones that were truly
+    supply-constrained. Items <b>already in your list above</b> are marked <b>✓ already added</b> (no duplicate).</p>
   <table>
     <thead><tr><th>Item #</th><th>Description</th><th class="num">Revenue</th><th class="num">Share</th><th></th></tr></thead>
     <tbody>
     {% for c in candidates %}
-      <tr><td>{{ c.item_number }}</td><td>{{ c.description }}</td>
+      <tr{% if c.item_number in constrained_set %} style="opacity:.6"{% endif %}>
+        <td>{{ c.item_number }}</td><td>{{ c.description }}</td>
         <td class="num">${{ '{:,}'.format(c.revenue) }}</td><td class="num">{{ c.share }}%</td>
-        <td><form method="post" action="/constrained/add" style="margin:0">
+        <td>{% if c.item_number in constrained_set %}<span class="badge b-ok" title="Already in your constrained list above — no need to add again.">✓ already added</span>
+          {% else %}<form method="post" action="/constrained/add" style="margin:0">
           <input type="hidden" name="item_number" value="{{ c.item_number }}">
-          <button type="submit" class="ghost">add</button></form></td></tr>
+          <button type="submit" class="ghost">add</button></form>{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>

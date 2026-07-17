@@ -58,6 +58,7 @@ _DIAL_KEYS = [
     "jump_multiple", "min_baseline_ratio", "mature_smooth_weeks", "sporadic_gap_weeks",
     "cost_inflation_weeks", "growth_quarter_floor", "growth_quarter_min_prior", "growth_quarter_min_profit",
     "growth_annual_floor", "growth_annual_min_prior", "new_product_weeks", "new_product_attribution",
+    "substitute_attribution",
     "acq_tier_small_max", "acq_tier_medium_max", "acq_flat_small", "acq_flat_medium", "acq_flat_large",
     "acq_ramp_periods", "holiday_weight",
 ]
@@ -72,7 +73,8 @@ def dials(**overrides):
 
 
 def run_period(df, self_acquired=(), exempt_accounts=(), jump_released=(),
-               constrained_item_numbers=(), featured_new_products=(), team=None, **dial_overrides):
+               constrained_item_numbers=(), featured_new_products=(), substitute_products=(),
+               team=None, **dial_overrides):
     """Run the live period engine on `df` for the standard test period."""
     return compute_period_bonus(
         df, PERIOD_START, PERIOD_END, team or TEAM, as_of=AS_OF,
@@ -80,6 +82,7 @@ def run_period(df, self_acquired=(), exempt_accounts=(), jump_released=(),
         jump_released=frozenset(jump_released),
         constrained_item_numbers=frozenset(constrained_item_numbers),
         featured_new_products=frozenset(featured_new_products),
+        substitute_products=frozenset(substitute_products),
         **dials(**dial_overrides),
     )
 
