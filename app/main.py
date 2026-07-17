@@ -27,6 +27,7 @@ EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count",
                   "mature_smooth_weeks", "sporadic_gap_weeks", "growth_quarter_floor", "growth_quarter_min_prior",
                   "growth_quarter_min_profit", "growth_annual_floor", "growth_annual_min_prior",
                   "new_product_weeks", "new_product_attribution", "substitute_attribution",
+                  "cumulative_rate",
                   "acq_tier_small_max", "acq_tier_medium_max", "acq_flat_small", "acq_flat_medium", "acq_flat_large",
                   "acq_ramp_periods", "fine_amount"]
 
@@ -400,6 +401,35 @@ def closures_exempt(request: Request, account: str = Form(...), note: str = Form
     a.status = "exempt"; a.note = note or "confirmed closed"; a.user_id = user.user_id
     a.created_at = dt.datetime.utcnow(); db.commit()
     return RedirectResponse(f"/closures?p={idx}", status_code=303)
+
+
+# ---------- what-if: cumulative profit-growth model (read-only preview, pays nothing) ----------
+@app.get("/whatif/growth", response_class=HTMLResponse)
+def whatif_growth(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user or user.role == "rep":
+        return RedirectResponse("/login", status_code=303)
+    r = service.run_cumulative_growth(db)
+    names = service.customer_names(db)
+    cur = r["current_growth"]
+    reps = (r["reps"].sort_values("cum_growth", ascending=False).to_dict("records") if len(r["reps"]) else [])
+    for x in reps:
+        x["today"] = cur.get(x["associate"], 0.0)
+        x["payable"] = max(0.0, x["earned"])
+    accts = r["accounts"]
+    detail = []
+    if len(accts):
+        accts = accts.sort_values("growth", ascending=False)
+        for a in accts.itertuples(index=False):
+            detail.append(dict(account=a.account, name=names.get(a.account, a.account), holder=a.holder,
+                               ty_profit=a.ty_profit, ly_profit=a.ly_profit, growth=a.growth, is_young=a.is_young))
+    ctx = dict(
+        fiscal_start=r["fiscal_start"], as_of=r["as_of"], rate=r["cumulative_rate"], months=r["months"],
+        reps=reps, trajectory=r["trajectory"], detail=detail,
+        team_cum=float(r["reps"]["cum_growth"].sum()) if len(r["reps"]) else 0.0,
+        team_earned=float(r["reps"]["earned"].clip(lower=0).sum()) if len(r["reps"]) else 0.0,
+        team_today=sum(cur.values()))
+    return templates.TemplateResponse("whatif_growth.html", {"request": request, "user": user, **ctx})
 
 
 # ---------- new-account review (confirm self-acquired vs assigned) ----------

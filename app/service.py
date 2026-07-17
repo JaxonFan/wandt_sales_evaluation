@@ -1,7 +1,7 @@
 """Bridge between the DB and the pure engine: load sales lines, settings, overrides; run scorecards."""
 import pandas as pd
 from sqlalchemy import func
-from .engine import compute_period_bonus, compute_annual_review
+from .engine import compute_period_bonus, compute_annual_review, compute_cumulative_growth
 from . import models as M
 from .config import DEFAULTS, SALES_ROLES
 
@@ -486,6 +486,50 @@ def run_period_bonus(db, idx=None):
     res = _memo(("engine", idx, _engine_version(db)), _run)      # cache the expensive engine run (auto-invalidated)
     nav = period_nav(idx, idx_min, idx_cur, period, is_current, anchor)
     return res, period, s, nav, as_of
+
+
+def _current_growth_by_rep(db, lo, hi):
+    """What today's (live) growth piece pays each rep over [lo, hi] — the side-by-side baseline for the
+    what-if page. Sums growth_bonus across the grid periods ending in the window (engine runs are cached)."""
+    ww = get_settings(db)["window_weeks"]
+    idx_min, idx_cur, _anchor = period_grid(db, ww)
+    out, idx = {}, idx_cur
+    while idx >= idx_min:
+        period, _as_of, *_ = resolve_period(db, idx, ww)
+        end = pd.Timestamp(period.end_date)
+        if end < pd.Timestamp(lo):
+            break
+        if end <= pd.Timestamp(hi):
+            res, *_ = run_period_bonus(db, idx)
+            for _, r in res["scorecards"].iterrows():
+                out[r["associate"]] = out.get(r["associate"], 0.0) + float(r["growth_bonus"])
+        idx -= 1
+    return out
+
+
+def run_cumulative_growth(db):
+    """Read-only 'what-if': the cumulative account-level profit-growth model (see engine.compute_cumulative_growth)
+    on the current August fiscal cycle, plus today's growth number per rep for contrast. Memoized by
+    _engine_version; NEVER touches Awards / live pay."""
+    s = get_settings(db)
+    rate = float(s.get("cumulative_rate", 0.0017))
+    young_pct = float(s.get("young_account_pct", 0.01))
+    young_months = int(s.get("young_account_months", 12))
+    fmonth = int(s.get("fiscal_start_month", 8))
+
+    def _run():
+        df = active_lines(db)
+        _, _, team = attribution_maps(db)
+        _lo, hi = data_bounds(db)
+        as_of = hi
+        yr = as_of.year if as_of.month >= fmonth else as_of.year - 1
+        fiscal_start = pd.Timestamp(year=yr, month=fmonth, day=1)
+        res = compute_cumulative_growth(df, fiscal_start, as_of, team, cumulative_rate=rate,
+                                        young_account_pct=young_pct, young_account_months=young_months)
+        res["current_growth"] = _current_growth_by_rep(db, fiscal_start, as_of)
+        return res
+
+    return _memo(("cumulative", _engine_version(db)), _run)
 
 
 def written_off_set(db):

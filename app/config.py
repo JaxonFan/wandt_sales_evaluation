@@ -56,6 +56,12 @@ DEFAULTS = {
     "acq_revenue_pct": 0.01,       # (deprecated — acquisition is now a size-tiered flat amount, not a % of revenue)
     "acq_ramp_periods": 3,         # an account counts as "new" for ~1 quarter (3 periods), then graduates
 
+    # --- Cumulative profit-growth (the 'what-if' growth model — /whatif/growth, pays nothing yet) ---
+    "cumulative_rate": 0.0017,     # $ earned per $ of cumulative YoY PROFIT growth (0.17% ~ today's ~$1,127/yr growth+annual pool; raise as reps start managing to it)
+    "young_account_pct": 0.01,     # an account with < young_account_months of history earns 1% of its profit as growth (no year-ago to compare); acquisition landing bonus is separate
+    "young_account_months": 12,    # months of history before an account flips from the 1%-of-profit rule to the cumulative YoY track
+    "fiscal_start_month": 8,       # cumulative cycle starts in August (month 1 = this-Aug vs last-Aug), then accumulates through July and resets each August
+
     # --- closure decision-support ---
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)
 }

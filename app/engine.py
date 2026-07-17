@@ -540,3 +540,95 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
                           annual_actual=t["actual"], annual_target=t["target"],
                           annual_growth_bonus=bonus))
     return dict(scorecards=pd.DataFrame(cards), accounts=pd.DataFrame(account_rows))
+
+
+def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative_rate,
+                              young_account_pct, young_account_months=12):
+    """Cumulative profit-growth model (the 'what-if' replacement for the Growth piece).
+
+    Measured PER ACCOUNT against the SAME account a year ago (not per-rep totals — 35% of the book
+    changes hands YoY, so a rep-level compare just pays for reshuffled accounts). Each account's
+    cumulative YoY profit growth is credited to its CURRENT primary holder.
+
+      cycle window  = [fiscal_start .. as_of]   (fiscal_start = the program's August 1; resets each August)
+      account (mature, >= young_account_months of history):
+          growth = Sum_over_months( this-year profit(m) - last-year profit(m-12mo) )
+      account (young, < young_account_months of history — no year-ago to compare):
+          growth = young_account_pct x its profit in the window   (the landing quarter's acquisition
+                   bonus is separate; this is the growth-track credit until it laps a full year)
+      rep:  cum_growth = Sum(account growth for accounts they now hold)
+            earned      = cumulative_rate x cum_growth      (a true-up; pay = max(0, earned - already_paid))
+
+    Pure/read-only: pays nothing, writes nothing. Returns dict(reps, trajectory, accounts, months, ...).
+    """
+    fiscal_start = pd.Timestamp(fiscal_start).normalize()
+    as_of = pd.Timestamp(as_of).normalize()
+    team = set(sales_team)
+    empty = dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=cumulative_rate,
+                 months=[], reps=pd.DataFrame(), trajectory={}, accounts=pd.DataFrame())
+    if not len(df):
+        return empty
+
+    d = df[df["document_date"] <= as_of].copy()
+    d["ym"] = d["document_date"].dt.to_period("M")
+    months = list(pd.period_range(fiscal_start.to_period("M"), as_of.to_period("M"), freq="M"))
+    if not months:
+        return empty
+
+    # account x month profit (fast lookups), and each account's very first sale (over ALL history)
+    amp = d.groupby(["account", "ym"])["line_profit"].sum().to_dict()
+
+    def aprof(acct, per):
+        return float(amp.get((acct, per), 0.0))
+
+    first_sale = d.groupby("account")["document_date"].min()
+    young_cut = as_of - pd.DateOffset(months=young_account_months)
+
+    # current primary holder = the team rep with the most profit on the account THIS cycle
+    ty = d[d["ym"].isin(months) & d["associate"].isin(team)]
+    if not len(ty):
+        return empty
+    holder = (ty.groupby(["account", "associate"])["line_profit"].sum().reset_index()
+                .sort_values("line_profit").groupby("account").tail(1).set_index("account")["associate"])
+
+    ly_months = [m - 12 for m in months]
+    acc_rows = []
+    for acct, rep in holder.items():
+        is_young = bool(first_sale.get(acct, as_of) > young_cut)
+        ty_prof = sum(aprof(acct, m) for m in months)
+        ly_prof = sum(aprof(acct, m) for m in ly_months)
+        growth = young_account_pct * ty_prof if is_young else (ty_prof - ly_prof)
+        acc_rows.append(dict(account=acct, holder=rep, ty_profit=ty_prof, ly_profit=ly_prof,
+                             growth=growth, is_young=is_young))
+    accounts = pd.DataFrame(acc_rows)
+
+    reps, trajectory = [], {}
+    for rep in sorted(team):
+        held = accounts[accounts["holder"] == rep] if len(accounts) else accounts
+        cum = float(held["growth"].sum()) if len(held) else 0.0
+        reps.append(dict(associate=rep, n_accounts=int(len(held)),
+                         n_young=int(held["is_young"].sum()) if len(held) else 0,
+                         cum_growth=cum, earned=cumulative_rate * cum))
+        # month-by-month cumulative + true-up pay (shows August alone, then the running build + down-month pause)
+        held_acc = list(held.itertuples(index=False)) if len(held) else []
+        rows, paid = [], 0.0
+        for i, m in enumerate(months):
+            cutoff = months[:i + 1]
+            cutoff_ly = ly_months[:i + 1]
+            cum_m = 0.0
+            for a in held_acc:
+                if a.is_young:
+                    cum_m += young_account_pct * sum(aprof(a.account, mm) for mm in cutoff)
+                else:
+                    cum_m += (sum(aprof(a.account, mm) for mm in cutoff)
+                              - sum(aprof(a.account, mm) for mm in cutoff_ly))
+            earned_m = cumulative_rate * cum_m
+            pay = max(0.0, earned_m - paid)
+            paid += pay
+            mo_growth = cum_m - (rows[-1]["cum_growth"] if rows else 0.0)
+            rows.append(dict(month=str(m), mo_growth=mo_growth, cum_growth=cum_m, earned=earned_m, pay=pay))
+        trajectory[rep] = rows
+
+    return dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=cumulative_rate,
+                months=[str(m) for m in months], reps=pd.DataFrame(reps),
+                trajectory=trajectory, accounts=accounts)
