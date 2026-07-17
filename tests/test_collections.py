@@ -175,6 +175,40 @@ def _db_aged():
     return db
 
 
+def test_silence_detector_unpaid_and_risky_first():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    db = sessionmaker(bind=create_engine("sqlite:///:memory:"))()
+    Base.metadata.create_all(db.get_bind())
+    db.add(M.Associate(name="Rep A", batch_initial="RA", role="full time sales", status="Active"))
+
+    def orders(acct, start, n, prefix):
+        for i in range(n):
+            d = (pd.Timestamp(start) + pd.Timedelta(days=7 * i)).date()
+            db.add(M.SalesLine(sop_type="Invoice", sop_number=f"{prefix}{i}", item_number="IT", qty=1.0,
+                               unit_price=100.0, extended_price=100.0, unit_cost=60.0, extended_cost=60.0,
+                               line_profit=40.0, customer_number=acct, customer_name=acct, document_date=d,
+                               batch_number="RA", associate="Rep A", imported_at=dt.datetime(2025, 12, 2)))
+    orders("ACTIVE", "2025-10-06", 9, "A")      # weekly through ~Dec 1 -> anchors as_of; NOT silent
+    orders("SILOWE", "2025-09-01", 6, "O")      # last order ~Oct 6 -> silent ~56d (> 3x its 7d gap)
+    orders("SILPAID", "2025-09-01", 6, "P")
+    db.commit()
+    service._LINES_CACHE.clear(); service._ENGINE_CACHE.clear()
+    for i in range(6):
+        db.add(M.CollectedInvoice(sop_number=f"P{i}"))     # SILPAID fully collected -> $0 owed
+    for i in range(5):
+        db.add(M.CollectedInvoice(sop_number=f"O{i}"))     # SILOWE: O5 left unpaid -> $100 owed
+    db.commit()
+
+    sil = service.flag_silent_accounts(db, associate="Rep A")
+    accts = [s["account"] for s in sil]
+    assert "SILOWE" in accts and "SILPAID" in accts and "ACTIVE" not in accts     # recent account isn't silent
+    assert next(s for s in sil if s["account"] == "SILOWE")["unpaid"] == 100
+    assert next(s for s in sil if s["account"] == "SILPAID")["unpaid"] == 0
+    assert accts.index("SILOWE") < accts.index("SILPAID")                          # risky-first: owing above paid
+    assert all(s["rep"] == "Rep A" and "last_order" in s for s in sil)
+
+
 def test_unpaid_invoice_list_is_chronological_and_sums():
     db = _fresh_db()                          # 10 invoices spread across ACCT0/1/2 on various dates
     _set_collected(db, [])                    # nothing collected -> all unpaid

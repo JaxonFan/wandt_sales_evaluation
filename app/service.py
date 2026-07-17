@@ -676,24 +676,36 @@ def compute_rep_goal(db, associate, idx=None):
             "new_accounts": new_accounts, "gated_accounts": gated_accounts, "watch": watch}
 
 
-def flag_silent_accounts(db, gap_multiple=3.0, min_orders=5):
-    """Accounts silent > gap_multiple x their own median inter-order gap — closure candidates."""
-    df = load_lines_df(db)
+def flag_silent_accounts(db, gap_multiple=3.0, min_orders=5, associate=None):
+    """Accounts silent > gap_multiple x their own median inter-order gap — closure/at-risk candidates. Each record
+    carries the UNPAID AR still owed (an account that's gone quiet AND owes money is the real loss risk, vs clean
+    churn that owes $0), and is sorted RISKY-FIRST (most owed, then longest silent). `associate` filters to one rep
+    (for the rep-facing tab). Voided invoices are excluded; collected/written-off don't count as outstanding."""
+    df = active_lines(db)
     if not len(df):
         return []
     as_of = df["document_date"].max().normalize()
     names = customer_names(db)
+    coll = collected_set(db)
+    woff = written_off_set(db)
     records = []
     for account_id, group in df.groupby("account"):
         order_dates = pd.Series(sorted(group["document_date"].dt.normalize().unique()))
         if len(order_dates) < min_orders:
             continue
         median_gap_days = order_dates.diff().dt.days.median()
-        days_silent = (as_of - order_dates.iloc[-1]).days
-        if median_gap_days and days_silent > gap_multiple * median_gap_days:
-            rep_rev = group.dropna(subset=["associate"]).groupby("associate")["extended_price"].sum()
-            rep = rep_rev.idxmax() if len(rep_rev) else ""
-            records.append({"account": account_id, "customer": names.get(account_id, account_id),
-                            "rep": rep, "median_gap_days": round(float(median_gap_days), 1),
-                            "days_silent": int(days_silent)})
-    return sorted(records, key=lambda r: -r["days_silent"])
+        last_order = order_dates.iloc[-1]
+        days_silent = (as_of - last_order).days
+        if not (median_gap_days and days_silent > gap_multiple * median_gap_days):
+            continue
+        rep_rev = group.dropna(subset=["associate"]).groupby("associate")["extended_price"].sum()
+        rep = rep_rev.idxmax() if len(rep_rev) else ""
+        if associate is not None and rep != associate:
+            continue
+        outstanding = group[(~group["sop_number"].astype(str).isin(coll)) & (~group["sop_number"].astype(str).isin(woff))
+                            & (group["document_date"] >= pd.Timestamp("2025-06-01"))]["extended_price"].sum()
+        records.append({"account": account_id, "customer": names.get(account_id, account_id),
+                        "rep": rep, "median_gap_days": round(float(median_gap_days), 1),
+                        "days_silent": int(days_silent), "last_order": last_order.date().isoformat(),
+                        "unpaid": round(float(outstanding))})
+    return sorted(records, key=lambda r: (-r["unpaid"], -r["days_silent"]))   # risky-first: owing, then longest silent

@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block body %}
+<div style="text-align:right;margin-bottom:8px">
+  <a class="pnav {{ 'dis' if lang=='en' }}" href="/me/silent?lang=en">EN</a>
+  <a class="pnav {{ 'dis' if lang=='zh' }}" href="/me/silent?lang=zh">中文</a>
+</div>
+<div class="card">
+  <h2>{{ 'Silent accounts — customers who went quiet' if lang=='en' else '静默客户 —— 很久没下单的客户' }}</h2>
+  <p class="hint">{% if lang=='en' %}Customers you haven't heard from in more than <b>3×</b> their normal order gap.
+    The ones that <b>owe money</b> (Unpaid &gt; 0) are at the top — win them back or chase the payment, and tell your
+    manager if a store has really closed, before it turns into a loss. Quiet customers that owe $0 are just churn.
+    {% else %}这些客户已经超过平时下单间隔的 <b>3 倍</b> 没有下单。还<b>欠款</b>（未收款 &gt; 0）的排在最上面 ——
+    优先把他们做回来或催款，并及时告诉经理是否真的关店，以免变成坏账。欠款为 $0 的只是自然流失。{% endif %}</p>
+  <table>
+    <thead><tr>
+      <th>{{ 'Customer' if lang=='en' else '客户' }}</th>
+      <th class="num">{{ 'Days silent' if lang=='en' else '静默天数' }}</th>
+      <th class="num">{{ 'Normal gap' if lang=='en' else '平时间隔' }}</th>
+      <th>{{ 'Last order' if lang=='en' else '最后下单' }}</th>
+      <th class="num">{{ 'Unpaid' if lang=='en' else '未收款' }}</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.customer }}</td>
+        <td class="num">{{ r.days_silent }}</td>
+        <td class="num mut">{{ r.median_gap_days }}d</td>
+        <td class="mut">{{ r.last_order }}</td>
+        <td class="num">{% if r.unpaid>0 %}<b class="neg">${{ '{:,}'.format(r.unpaid) }}</b>{% else %}<span class="mut">$0</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="mut">{{ 'No silent accounts — your book is active.' if lang=='en' else '没有静默客户 —— 客户都很活跃。' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

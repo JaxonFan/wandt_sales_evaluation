@@ -27,9 +27,8 @@
     <div style="width:{{ pct }}%;height:100%;background:{{ 'var(--green)' if g.actual>=g.target else 'var(--amber)' }}"></div>
   </div>
   <div style="margin-top:8px">
-    {{ '%.0f'|format(g.pct) }}% {{ 'of target' if lang=='en' else '（占目标）' }} ·
-    {% if g.actual>=g.target %}<span class="pos">{{ 'above target — earning growth bonus on the excess' if lang=='en' else '已超过目标 —— 超出的部分开始拿增长奖金' }}</span>
-    {% else %}<span class="neg">{{ 'below target — keep going' if lang=='en' else '还没到目标 —— 继续加油' }}</span>{% endif %}
+    {{ '%.0f'|format(g.pct) }}% {{ 'of target' if lang=='en' else '（占目标）' }}{% if g.actual>=g.target %} ·
+    <span class="pos">{{ 'above target — earning growth bonus on the excess' if lang=='en' else '已超过目标 —— 超出的部分开始拿增长奖金' }}</span>{% endif %}
   </div>
   {% if lang=='en' %}
   <p class="hint" style="margin-top:8px">Your <b>${{ '{:,.0f}'.format(g.target) }}</b> target =

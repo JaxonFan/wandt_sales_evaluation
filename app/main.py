@@ -124,6 +124,20 @@ def my_goal(request: Request, db: Session = Depends(get_db), p: int = None, lang
                                                   "lang": (lang or "zh"), "big": True, "toggle_base": "/me"})
 
 
+@app.get("/me/silent", response_class=HTMLResponse)
+def my_silent(request: Request, db: Session = Depends(get_db), lang: str = None):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    name = user.associate_name if user.role == "rep" else None
+    if not name:  # a manager hitting /me/silent -> the team-wide closure/silent tab
+        return RedirectResponse("/closures", status_code=303)
+    rows = service.flag_silent_accounts(db, associate=name)
+    return templates.TemplateResponse("me_silent.html", {"request": request, "user": user, "rows": rows,
+                                                         "name": name, "lang": (lang or "zh"), "big": True,
+                                                         "toggle_base": "/me/silent"})
+
+
 @app.get("/rep/{name}", response_class=HTMLResponse)
 def rep_goal_view(name: str, request: Request, db: Session = Depends(get_db), p: int = None, lang: str = None):
     user = current_user(request, db)
