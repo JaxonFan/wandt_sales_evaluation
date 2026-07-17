@@ -4,8 +4,9 @@
   <p class="hint">A read-only sandbox for the proposed replacement of the Growth piece. Nothing here is paid or
     recorded — it just shows how the model would score the current cycle on live data, beside today's number.
     <b>The rule:</b> each account is measured against <b>what that same account did a year ago</b> (profit), and
-    the growth is credited to whoever holds it now — so inheriting a flat account pays ~$0; you earn by actually
-    growing it. Cumulative from an <b>August</b> start (month 1 = this Aug vs last Aug), trued-up each period; a
+    that growth is <b>split among the reps working it</b> by their share of the account (work-share) — so
+    inheriting a flat account pays ~$0; you earn by actually growing it. Cumulative from an <b>August</b> start
+    (month 1 = this Aug vs last Aug), trued-up each period; a
     down month just pauses pay (self-correcting, no clawback). New accounts (&lt; 12 months old) earn <b>1% of
     their profit</b> instead — the landing/acquisition bonus is separate.</p>
   <div>
@@ -19,8 +20,8 @@
 
 <div class="card">
   <h2>Per rep</h2>
-  <p class="hint">Cumulative profit growth = Σ (each held account this cycle − the same account a year ago), young
-    accounts at 1% of profit. <b>Payable</b> = rate × growth (floored at $0). A negative cumulative means the
+  <p class="hint">Cumulative profit growth = Σ (each account this cycle − the same account a year ago) × your
+    work-share of it, young accounts at 1% of profit. <b>Payable</b> = rate × growth (floored at $0). A negative cumulative means the
     rep's book is behind last year — pay stays $0 until it recovers.</p>
   <table>
     <thead><tr><th>Rep</th><th class="num">Accounts</th><th class="num">New (&lt;1yr)</th><th class="num">Cumulative growth</th><th class="num">What-if payable</th><th class="num">Today's growth</th></tr></thead>

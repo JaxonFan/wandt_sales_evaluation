@@ -548,7 +548,9 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
 
     Measured PER ACCOUNT against the SAME account a year ago (not per-rep totals — 35% of the book
     changes hands YoY, so a rep-level compare just pays for reshuffled accounts). Each account's
-    cumulative YoY profit growth is credited to its CURRENT primary holder.
+    cumulative YoY profit growth is split among the reps working it this cycle by WORK-SHARE (their
+    share of the account's profit) — so whoever is actually selling it gets paid, proportionally, and
+    a genuinely co-owned account is divided rather than handed 100% to one rep.
 
       cycle window  = [fiscal_start .. as_of]   (fiscal_start = the program's August 1; resets each August)
       account (mature, >= young_account_months of history):
@@ -556,7 +558,8 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
       account (young, < young_account_months of history — no year-ago to compare):
           growth = young_account_pct x its profit in the window   (the landing quarter's acquisition
                    bonus is separate; this is the growth-track credit until it laps a full year)
-      rep:  cum_growth = Sum(account growth for accounts they now hold)
+      rep credit on an account = account growth x (rep's share of the account's profit this cycle)
+      rep:  cum_growth = Sum over accounts( account growth x rep work-share )
             earned      = cumulative_rate x cum_growth      (a true-up; pay = max(0, earned - already_paid))
 
     Pure/read-only: pays nothing, writes nothing. Returns dict(reps, trajectory, accounts, months, ...).
@@ -574,6 +577,7 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
     months = list(pd.period_range(fiscal_start.to_period("M"), as_of.to_period("M"), freq="M"))
     if not months:
         return empty
+    ly_months = [m - 12 for m in months]
 
     # account x month profit (fast lookups), and each account's very first sale (over ALL history)
     amp = d.groupby(["account", "ym"])["line_profit"].sum().to_dict()
@@ -584,44 +588,41 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
     first_sale = d.groupby("account")["document_date"].min()
     young_cut = as_of - pd.DateOffset(months=young_account_months)
 
-    # current primary holder = the team rep with the most profit on the account THIS cycle
+    # this-cycle profit per (account, team rep) -> work-share within each account
     ty = d[d["ym"].isin(months) & d["associate"].isin(team)]
     if not len(ty):
         return empty
-    holder = (ty.groupby(["account", "associate"])["line_profit"].sum().reset_index()
-                .sort_values("line_profit").groupby("account").tail(1).set_index("account")["associate"])
+    rep_prof = ty.groupby(["account", "associate"])["line_profit"].sum()
 
-    ly_months = [m - 12 for m in months]
-    acc_rows = []
-    for acct, rep in holder.items():
+    per_acct = {}
+    for acct in rep_prof.index.get_level_values(0).unique():
+        rp = rep_prof.loc[acct]                                  # Series: rep -> this-cycle profit
+        pos = rp[rp > 0]
+        if pos.sum() > 0:
+            shares = (pos / pos.sum()).to_dict()                 # work-share among reps with positive sales
+        else:
+            shares = {rp.idxmax(): 1.0}                          # loss account -> credit/charge the largest seller
+        primary = max(shares, key=shares.get)
         is_young = bool(first_sale.get(acct, as_of) > young_cut)
-        ty_prof = sum(aprof(acct, m) for m in months)
-        ly_prof = sum(aprof(acct, m) for m in ly_months)
-        growth = young_account_pct * ty_prof if is_young else (ty_prof - ly_prof)
-        acc_rows.append(dict(account=acct, holder=rep, ty_profit=ty_prof, ly_profit=ly_prof,
-                             growth=growth, is_young=is_young))
-    accounts = pd.DataFrame(acc_rows)
+        # cumulative growth trajectory for THIS account (month by month)
+        cum, s_ty, s_ly = [], 0.0, 0.0
+        for i in range(len(months)):
+            s_ty += aprof(acct, months[i]); s_ly += aprof(acct, ly_months[i])
+            cum.append(young_account_pct * s_ty if is_young else (s_ty - s_ly))
+        per_acct[acct] = dict(shares=shares, primary=primary, is_young=is_young, cum=cum,
+                              growth=cum[-1] if cum else 0.0, ty_profit=s_ty, ly_profit=s_ly)
 
     reps, trajectory = [], {}
     for rep in sorted(team):
-        held = accounts[accounts["holder"] == rep] if len(accounts) else accounts
-        cum = float(held["growth"].sum()) if len(held) else 0.0
-        reps.append(dict(associate=rep, n_accounts=int(len(held)),
-                         n_young=int(held["is_young"].sum()) if len(held) else 0,
-                         cum_growth=cum, earned=cumulative_rate * cum))
-        # month-by-month cumulative + true-up pay (shows August alone, then the running build + down-month pause)
-        held_acc = list(held.itertuples(index=False)) if len(held) else []
+        held = [(a, v) for a, v in per_acct.items() if rep in v["shares"]]
+        cum_growth = sum(v["growth"] * v["shares"][rep] for _, v in held)
+        reps.append(dict(associate=rep, n_accounts=len(held),
+                         n_young=sum(1 for _, v in held if v["is_young"]),
+                         cum_growth=cum_growth, earned=cumulative_rate * cum_growth))
+        # month-by-month cumulative + true-up pay (August alone, then the running build + a down-month pause)
         rows, paid = [], 0.0
         for i, m in enumerate(months):
-            cutoff = months[:i + 1]
-            cutoff_ly = ly_months[:i + 1]
-            cum_m = 0.0
-            for a in held_acc:
-                if a.is_young:
-                    cum_m += young_account_pct * sum(aprof(a.account, mm) for mm in cutoff)
-                else:
-                    cum_m += (sum(aprof(a.account, mm) for mm in cutoff)
-                              - sum(aprof(a.account, mm) for mm in cutoff_ly))
+            cum_m = sum(v["cum"][i] * v["shares"][rep] for _, v in held)
             earned_m = cumulative_rate * cum_m
             pay = max(0.0, earned_m - paid)
             paid += pay
@@ -629,6 +630,9 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
             rows.append(dict(month=str(m), mo_growth=mo_growth, cum_growth=cum_m, earned=earned_m, pay=pay))
         trajectory[rep] = rows
 
+    accounts = pd.DataFrame([dict(account=a, holder=v["primary"], ty_profit=v["ty_profit"],
+                                  ly_profit=v["ly_profit"], growth=v["growth"], is_young=v["is_young"])
+                             for a, v in per_acct.items()])
     return dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=cumulative_rate,
                 months=[str(m) for m in months], reps=pd.DataFrame(reps),
                 trajectory=trajectory, accounts=accounts)
