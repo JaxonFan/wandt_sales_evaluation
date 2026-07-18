@@ -2,17 +2,20 @@
 <div class="card" style="border-color:#6b46c1;background:#faf8ff">
   <h2>What-if · cumulative profit-growth <span class="badge b-prov">preview — pays nothing</span></h2>
   <p class="hint">A read-only sandbox for the proposed replacement of the Growth piece. Nothing here is paid or
-    recorded — it just shows how the model would score the current cycle on live data, beside today's number.
-    <b>The rule:</b> each account is measured against <b>what that same account did a year ago</b> (profit), and
-    that growth is <b>split among the reps working it</b> by their share of the account (work-share) — so
-    inheriting a flat account pays ~$0; you earn by actually growing it. Cumulative from an <b>August</b> start
-    (month 1 = this Aug vs last Aug), trued-up each period; a
-    down month just pauses pay (self-correcting, no clawback). New accounts (&lt; 12 months old) earn <b>1% of
-    their profit</b> instead — the landing/acquisition bonus is separate.</p>
+    recorded — it shows how the model would score the cycle on live data, beside today's number.
+    <b>The rule:</b> each account's <b>cumulative profit this cycle</b> is compared to <b>what that same account
+    did a year ago</b>, month by month; you're paid <b>{{ '%.1f'|format(rate*100) }}% of the increment</b>, split
+    among the reps working it by <b>work-share</b>. It's a <b>progressive true-up</b> — each month pays only the
+    new ground above the prior peak, so a down month just pauses pay (<b>never clawed back</b>). A flat account
+    pays ~$0; a brand-new account has no year-ago, so its whole profit counts as the increment.</p>
+  <p class="hint" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 12px">
+    <b>Window:</b> {{ fiscal_start.strftime('%b %Y') }} → {{ as_of.strftime('%b %Y') }} vs the same months a year
+    earlier. This is a <b>retroactive check</b> (anchored to {{ fiscal_start.strftime('%B') }}) until the
+    <b>August 2026</b> launch — at launch the cycle anchors to August (Aug→Jul, reset each August).</p>
   <div>
     <div class="kpi"><div class="label">Cycle</div><div class="val" style="font-size:18px">{{ fiscal_start.strftime('%b %Y') }} → {{ as_of.strftime('%b %Y') }}</div></div>
-    <div class="kpi"><div class="label">Rate (dial)</div><div class="val" style="font-size:22px">{{ '%.2f'|format(rate*100) }}%</div></div>
-    <div class="kpi"><div class="label">Team growth (real)</div><div class="val" style="font-size:22px">${{ '{:,.0f}'.format(team_cum) }}</div></div>
+    <div class="kpi"><div class="label">Rate (dial)</div><div class="val" style="font-size:22px">{{ '%.1f'|format(rate*100) }}%</div></div>
+    <div class="kpi"><div class="label">Team growth</div><div class="val" style="font-size:22px">${{ '{:,.0f}'.format(team_cum) }}</div></div>
     <div class="kpi primary"><div class="label">What-if pool</div><div class="val" style="font-size:22px">${{ '{:,.0f}'.format(team_earned) }}</div></div>
     <div class="kpi"><div class="label">Today's growth pays</div><div class="val" style="font-size:22px">${{ '{:,.0f}'.format(team_today) }}</div></div>
   </div>
@@ -20,9 +23,9 @@
 
 <div class="card">
   <h2>Per rep</h2>
-  <p class="hint">Cumulative profit growth = Σ (each account this cycle − the same account a year ago) × your
-    work-share of it, young accounts at 1% of profit. <b>Payable</b> = rate × growth (floored at $0). A negative cumulative means the
-    rep's book is behind last year — pay stays $0 until it recovers.</p>
+  <p class="hint">Growth credit = Σ over your accounts of <b>{{ '%.1f'|format(rate*100) }}%</b> × each account's
+    peak cumulative gap (this cycle vs a year ago) × your work-share. <b>Payable</b> is never negative — a
+    shrinking account contributes $0, it doesn't drag down your growers.</p>
   <table>
     <thead><tr><th>Rep</th><th class="num">Accounts</th><th class="num">New (&lt;1yr)</th><th class="num">Cumulative growth</th><th class="num">What-if payable</th><th class="num">Today's growth</th></tr></thead>
     <tbody>
@@ -31,7 +34,7 @@
         <td>{{ x.associate }}</td>
         <td class="num">{{ x.n_accounts }}</td>
         <td class="num mut">{{ x.n_young }}</td>
-        <td class="num">{% if x.cum_growth < 0 %}<span class="neg">−${{ '{:,.0f}'.format(-x.cum_growth) }}</span>{% else %}${{ '{:,.0f}'.format(x.cum_growth) }}{% endif %}</td>
+        <td class="num">${{ '{:,.0f}'.format(x.cum_growth) }}</td>
         <td class="num"><b>${{ '{:,.0f}'.format(x.payable) }}</b></td>
         <td class="num mut">${{ '{:,.0f}'.format(x.today) }}</td>
       </tr>
@@ -44,22 +47,22 @@
 
 <div class="card">
   <h2>Month-by-month (the true-up in action)</h2>
-  <p class="hint">Pick a rep. August stands alone (this Aug vs last Aug), then each month adds to the cumulative and
-    pays only the <b>increment</b> above what was already paid. A down month → <b>$0</b> (pay pauses, self-corrects).</p>
+  <p class="hint">Pick a rep. The first month stands alone (vs the same month last year), then each month adds to
+    the cumulative and pays only the <b>increment</b> above what was already paid. A month where none of the rep's
+    accounts reach a new high pays <b>$0</b> (pause, no clawback).</p>
   <select id="traj-rep" class="psel" style="margin-bottom:10px">
     {% for x in reps %}<option value="{{ x.associate }}">{{ x.associate }}</option>{% endfor %}
   </select>
   {% for x in reps %}
   <table class="traj" data-rep="{{ x.associate }}" style="{{ '' if loop.first else 'display:none' }}">
-    <thead><tr><th>Month</th><th class="num">This month growth</th><th class="num">Cumulative</th><th class="num">Earned</th><th class="num">Pay (true-up)</th></tr></thead>
+    <thead><tr><th>Month</th><th class="num">Cumulative growth</th><th class="num">Pay (this month)</th><th class="num">Cumulative pay</th></tr></thead>
     <tbody>
     {% for row in trajectory[x.associate] %}
       <tr>
         <td>{{ row.month }}</td>
-        <td class="num {{ 'neg' if row.mo_growth < 0 else 'mut' }}">{{ '−$' + '{:,.0f}'.format(-row.mo_growth) if row.mo_growth < 0 else '$' + '{:,.0f}'.format(row.mo_growth) }}</td>
-        <td class="num">{% if row.cum_growth < 0 %}<span class="neg">−${{ '{:,.0f}'.format(-row.cum_growth) }}</span>{% else %}${{ '{:,.0f}'.format(row.cum_growth) }}{% endif %}</td>
-        <td class="num mut">${{ '{:,.0f}'.format([row.earned, 0]|max) }}</td>
+        <td class="num mut">${{ '{:,.0f}'.format(row.cum_growth) }}</td>
         <td class="num"><b>${{ '{:,.0f}'.format(row.pay) }}</b></td>
+        <td class="num mut">${{ '{:,.0f}'.format(row.cum_pay) }}</td>
       </tr>
     {% endfor %}
     </tbody>
@@ -69,8 +72,9 @@
 
 <div class="card">
   <h2>Account detail <span class="mut" style="font-weight:400;font-size:12px">— what's driving each rep's number</span></h2>
-  <p class="hint">Sorted by growth. <span class="badge b-new">new</span> = &lt; 12 months old (credited at 1% of
-    profit, not YoY). A near-$0 growth on a big account means it's flat vs last year — inheriting it pays nothing.</p>
+  <p class="hint">Sorted by growth credit (= peak cumulative gap). <span class="badge b-new">new</span> = &lt; 12
+    months old (no full year-ago, so its whole profit is the gap). A near-$0 credit on a big account means it's
+    flat vs last year — you earn by growing it, not holding it.</p>
   <table>
     <thead><tr><th>Customer</th><th>Holder</th><th class="num">Profit this cycle</th><th class="num">Same acct a year ago</th><th class="num">Growth credit</th><th></th></tr></thead>
     <tbody>
@@ -80,8 +84,8 @@
         <td>{{ a.holder }}</td>
         <td class="num">${{ '{:,.0f}'.format(a.ty_profit) }}</td>
         <td class="num mut">{% if a.is_young %}—{% else %}${{ '{:,.0f}'.format(a.ly_profit) }}{% endif %}</td>
-        <td class="num">{% if a.growth < 0 %}<span class="neg">−${{ '{:,.0f}'.format(-a.growth) }}</span>{% else %}${{ '{:,.0f}'.format(a.growth) }}{% endif %}</td>
-        <td>{% if a.is_young %}<span class="badge b-new">new · 1%</span>{% endif %}</td>
+        <td class="num">${{ '{:,.0f}'.format(a.growth) }}</td>
+        <td>{% if a.is_young %}<span class="badge b-new">new</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="6" class="mut">No accounts.</td></tr>

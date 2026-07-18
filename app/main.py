@@ -27,7 +27,7 @@ EDITABLE_DIALS = ["item_rate", "growth_window_weeks", "size_band_count",
                   "mature_smooth_weeks", "sporadic_gap_weeks", "growth_quarter_floor", "growth_quarter_min_prior",
                   "growth_quarter_min_profit", "growth_annual_floor", "growth_annual_min_prior",
                   "new_product_weeks", "new_product_attribution", "substitute_attribution",
-                  "cumulative_rate",
+                  "cumulative_rate", "fiscal_start_month",
                   "acq_tier_small_max", "acq_tier_medium_max", "acq_flat_small", "acq_flat_medium", "acq_flat_large",
                   "acq_ramp_periods", "fine_amount"]
 

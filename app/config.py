@@ -57,10 +57,10 @@ DEFAULTS = {
     "acq_ramp_periods": 3,         # an account counts as "new" for ~1 quarter (3 periods), then graduates
 
     # --- Cumulative profit-growth (the 'what-if' growth model — /whatif/growth, pays nothing yet) ---
-    "cumulative_rate": 0.0017,     # $ earned per $ of cumulative YoY PROFIT growth (0.17% ~ today's ~$1,127/yr growth+annual pool; raise as reps start managing to it)
-    "young_account_pct": 0.01,     # an account with < young_account_months of history earns 1% of its profit as growth (no year-ago to compare); acquisition landing bonus is separate
-    "young_account_months": 12,    # months of history before an account flips from the 1%-of-profit rule to the cumulative YoY track
-    "fiscal_start_month": 8,       # cumulative cycle starts in August (month 1 = this-Aug vs last-Aug), then accumulates through July and resets each August
+    "cumulative_rate": 0.01,       # $ earned per $ of cumulative YoY PROFIT growth (1% on the increment; progressive true-up, no clawback)
+    "young_account_pct": 0.01,     # (display/back-compat) a brand-new account's gap already equals its own profit, so it earns cumulative_rate x profit automatically; this dial is no longer used in the math
+    "young_account_months": 12,    # an account younger than this is flagged "new" on the page (no full year-ago to compare)
+    "fiscal_start_month": 1,       # cumulative cycle anchor month. 1 = January (retroactive check: Jan->present vs Jan->same-last-year). Set to 8 at the Aug-2026 launch so cycles run Aug->Jul and reset each August.
 
     # --- closure decision-support ---
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)
