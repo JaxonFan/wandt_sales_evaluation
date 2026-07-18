@@ -46,28 +46,33 @@
 </div>
 
 <div class="card">
-  <h2>Month-by-month (the true-up in action)</h2>
-  <p class="hint">Pick a rep. The first month stands alone (vs the same month last year), then each month adds to
-    the cumulative and pays only the <b>increment</b> above what was already paid. A month where none of the rep's
-    accounts reach a new high pays <b>$0</b> (pause, no clawback).</p>
-  <select id="traj-rep" class="psel" style="margin-bottom:10px">
-    {% for x in reps %}<option value="{{ x.associate }}">{{ x.associate }}</option>{% endfor %}
-  </select>
-  {% for x in reps %}
-  <table class="traj" data-rep="{{ x.associate }}" style="{{ '' if loop.first else 'display:none' }}">
-    <thead><tr><th>Month</th><th class="num">Cumulative growth</th><th class="num">Pay (this month)</th><th class="num">Cumulative pay</th></tr></thead>
+  <h2>Month-by-month · every rep <span class="mut" style="font-weight:400;font-size:12px">— the breakdown, side by side</span></h2>
+  <p class="hint">Each cell is that rep's number for the month. Toggle between <b>pay</b> (the trued-up increment
+    that month — a month where none of the rep's accounts hit a new high is <b>$0</b>) and <b>cumulative growth</b>
+    (the running profit gap vs a year ago). The <b>Total</b> row is each rep's cycle payable.</p>
+  <div style="margin-bottom:10px">
+    <button type="button" class="mx-tog" data-view="pay">Monthly pay</button>
+    <button type="button" class="mx-tog ghost" data-view="growth">Cumulative growth</button>
+  </div>
+  <table id="mx">
+    <thead><tr><th>Month</th>{% for name in rep_names %}<th class="num">{{ name }}</th>{% endfor %}<th class="num">Team</th></tr></thead>
     <tbody>
-    {% for row in trajectory[x.associate] %}
+    {% for row in matrix %}
       <tr>
         <td>{{ row.month }}</td>
-        <td class="num mut">${{ '{:,.0f}'.format(row.cum_growth) }}</td>
-        <td class="num"><b>${{ '{:,.0f}'.format(row.pay) }}</b></td>
-        <td class="num mut">${{ '{:,.0f}'.format(row.cum_pay) }}</td>
+        {% for name in rep_names %}
+        <td class="num"><span class="v-pay">${{ '{:,.0f}'.format(row.pay[loop.index0]) }}</span><span class="v-growth" style="display:none">${{ '{:,.0f}'.format(row.cum_growth[loop.index0]) }}</span></td>
+        {% endfor %}
+        <td class="num"><b><span class="v-pay">${{ '{:,.0f}'.format(row.team) }}</span><span class="v-growth" style="display:none">${{ '{:,.0f}'.format(row.cum_growth|sum) }}</span></b></td>
       </tr>
     {% endfor %}
     </tbody>
+    <tfoot><tr style="border-top:2px solid var(--line)">
+      <th>Total</th>
+      {% for name in rep_names %}<th class="num"><span class="v-pay">${{ '{:,.0f}'.format(totals.pay[loop.index0]) }}</span><span class="v-growth" style="display:none">${{ '{:,.0f}'.format(reps[loop.index0].cum_growth) }}</span></th>{% endfor %}
+      <th class="num"><span class="v-pay">${{ '{:,.0f}'.format(totals.team) }}</span><span class="v-growth" style="display:none">${{ '{:,.0f}'.format(team_cum) }}</span></th>
+    </tr></tfoot>
   </table>
-  {% endfor %}
 </div>
 
 <div class="card">
@@ -96,13 +101,14 @@
 
 <script>
 (function(){
-  var sel = document.getElementById('traj-rep');
-  if(!sel) return;
-  sel.addEventListener('change', function(){
-    document.querySelectorAll('table.traj').forEach(function(t){
-      t.style.display = (t.getAttribute('data-rep') === sel.value) ? '' : 'none';
-    });
-  });
+  var btns = document.querySelectorAll('.mx-tog');
+  if(!btns.length) return;
+  function show(view){
+    document.querySelectorAll('#mx .v-pay').forEach(function(e){ e.style.display = (view==='pay')?'':'none'; });
+    document.querySelectorAll('#mx .v-growth').forEach(function(e){ e.style.display = (view==='growth')?'':'none'; });
+    btns.forEach(function(b){ b.classList.toggle('ghost', b.getAttribute('data-view')!==view); });
+  }
+  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.getAttribute('data-view')); }); });
 })();
 </script>
 {% endblock %}

@@ -423,9 +423,18 @@ def whatif_growth(request: Request, db: Session = Depends(get_db)):
         for a in accts.itertuples(index=False):
             detail.append(dict(account=a.account, name=names.get(a.account, a.account), holder=a.holder,
                                ty_profit=a.ty_profit, ly_profit=a.ly_profit, growth=a.growth, is_young=a.is_young))
+    # month x rep matrix: every member's monthly pay (trued-up increment) side by side, like the team page
+    rep_names = [x["associate"] for x in reps]
+    traj = r["trajectory"]
+    matrix = []
+    for i, mlabel in enumerate(r["months"]):
+        cells = [float(traj[name][i]["pay"]) for name in rep_names]
+        gcells = [float(traj[name][i]["cum_growth"]) for name in rep_names]
+        matrix.append(dict(month=mlabel, pay=cells, cum_growth=gcells, team=sum(cells)))
+    totals = dict(pay=[x["payable"] for x in reps], team=sum(x["payable"] for x in reps))
     ctx = dict(
         fiscal_start=r["fiscal_start"], as_of=r["as_of"], rate=r["cumulative_rate"], months=r["months"],
-        reps=reps, trajectory=r["trajectory"], detail=detail,
+        reps=reps, trajectory=r["trajectory"], detail=detail, rep_names=rep_names, matrix=matrix, totals=totals,
         team_cum=float(r["reps"]["cum_growth"].sum()) if len(r["reps"]) else 0.0,
         team_earned=float(r["reps"]["earned"].clip(lower=0).sum()) if len(r["reps"]) else 0.0,
         team_today=sum(cur.values()))
