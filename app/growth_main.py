@@ -102,11 +102,11 @@ def login_form(request: Request):
 @app.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     user = db.query(M.User).filter(M.User.username == username.strip().lower()).first()
-    if user and user.role in ("manager", "admin") and verify_password(password, user.password_hash):
+    if user and verify_password(password, user.password_hash):
         request.session["uid"] = user.user_id
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse("/me" if user.role == "rep" else "/", status_code=303)
     return templates.TemplateResponse("backtest_login.html",
-                                      {"request": request, "error": "Wrong username or password (managers only)"})
+                                      {"request": request, "error": "Wrong username or password / 用户名或密码错误"})
 
 
 @app.get("/logout")
@@ -117,6 +117,9 @@ def logout(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if user and user.role == "rep":
+        return RedirectResponse("/me", status_code=303)
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
@@ -277,16 +280,140 @@ async def upload_voided(request: Request, voided_file: UploadFile = File(...), d
         "void_msg": msg, "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
 
 
-# ---------- manager guide ----------
+# ---------- limited stock (constrained items — shared table with the main app) ----------
+def _any_period(db):
+    """Any Period row for the ConstrainedItem legacy FK (the flag itself is global)."""
+    p = db.query(M.Period).first()
+    if p is None:
+        _, hi = service.data_bounds(db)
+        p = M.Period(end_date=hi.date()); db.add(p); db.commit()
+    return p
+
+
+@app.get("/constrained", response_class=HTMLResponse)
+def constrained_page(request: Request, db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    seen, current = set(), []
+    for c in db.query(M.ConstrainedItem).order_by(M.ConstrainedItem.created_at.desc()):
+        if c.item_number not in seen:
+            seen.add(c.item_number); current.append(c)
+    num_to_desc = service.item_descriptions(db)
+    all_items = sorted(({"item": k, "desc": v or ""} for k, v in num_to_desc.items()),
+                       key=lambda r: r["desc"] or r["item"])
+    return templates.TemplateResponse("backtest_constrained.html", {
+        "request": request, "user": user, "page": "stock", "current": current,
+        "desc_by_item": num_to_desc, "all_items": all_items, "constrained_set": sorted(seen)})
+
+
+@app.post("/constrained/add")
+def constrained_add(request: Request, item_number: str = Form(...), note: str = Form(""),
+                    ajax: str = Form(""), db: Session = Depends(get_db)):
+    from fastapi.responses import JSONResponse
+    user = _guard(request, db)
+    if not user:
+        return JSONResponse({"ok": False}, status_code=403) if ajax else RedirectResponse("/login", status_code=303)
+    item = item_number.strip()
+    if item and not db.query(M.ConstrainedItem).filter(M.ConstrainedItem.item_number == item).first():
+        db.add(M.ConstrainedItem(period_id=_any_period(db).period_id, item_number=item,
+                                 note=note, user_id=user.user_id))
+        db.commit()
+        service._ENGINE_CACHE.clear()
+    if ajax:
+        return JSONResponse({"ok": True, "item": item})
+    return RedirectResponse("/constrained", status_code=303)
+
+
+@app.post("/constrained/remove")
+def constrained_remove(request: Request, item_number: str = Form(...), db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    db.query(M.ConstrainedItem).filter(M.ConstrainedItem.item_number == item_number.strip()).delete()
+    db.commit()
+    service._ENGINE_CACHE.clear()
+    return RedirectResponse("/constrained", status_code=303)
+
+
+# ---------- rep dashboard (their own book; pays on collection) ----------
+@app.get("/me", response_class=HTMLResponse)
+def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if user.role != "rep":
+        return RedirectResponse("/", status_code=303)
+    name = user.associate_name
+    r = service.run_cumulative_growth(db)
+    months = r["months"]
+    if not months or name not in r["trajectory"]:
+        return templates.TemplateResponse("backtest_me.html", {
+            "request": request, "user": user, "page": "me", "lang": lang, "name": name,
+            "months": [], "traj": [], "accounts": [], "k": {}})
+    s = service.get_settings(db)
+    _, _, team = service.attribution_maps(db)
+    contrib = contribution_by_rep_month(db, months, team, float(s["item_rate"]))
+    acq_pay, _rev = acquisition_by_rep_month(db, months, team, s)
+    traj = []
+    for i, mm in enumerate(months):
+        t = r["trajectory"][name][i]
+        c = contrib.get((name, mm), dict(n_items=0, bonus=0.0))
+        a_mo = acq_pay.get((name, mm), 0.0)
+        traj.append(dict(month=mm, ty=float(t["ty_book"]), ly=float(t["ly_book"]),
+                         gap=float(t["ty_book"]) - float(t["ly_book"]), cum=float(t["cum_growth"]),
+                         pay=float(t["pay"]), n_items=c["n_items"], contrib=c["bonus"], acq=a_mo,
+                         total=float(t["pay"]) + c["bonus"] + a_mo))
+    growth_cycle = float(r["trajectory"][name][-1]["cum_pay"])
+    contrib_cycle = sum(x["contrib"] for x in traj)
+    acq_cycle = sum(x["acq"] for x in traj)
+    earned = growth_cycle + contrib_cycle + acq_cycle
+    df = service.active_lines(db)
+    win = df[(df["document_date"] >= r["fiscal_start"]) & (df["document_date"] <= r["as_of"])]
+    mine = win[win["associate"] == name]
+    coll = {str(x) for x in service.collected_set(db)}
+    billed = float(mine["extended_price"].sum())
+    collected = float(mine[mine["sop_number"].astype(str).isin(coll)]["extended_price"].sum())
+    frac = min(1.0, collected / billed) if billed > 0 else 0.0
+    names = service.customer_names(db)
+    acc = r["accounts"]
+    accounts = []
+    if len(acc):
+        for a in acc[acc["holder"] == name].sort_values("growth", ascending=False).itertuples(index=False):
+            accounts.append(dict(name=names.get(a.account, a.account), ty=float(a.ty_profit),
+                                 ly=float(a.ly_profit), gap=float(a.growth), is_young=bool(a.is_young)))
+    k = dict(cum_gap=float(r["trajectory"][name][-1]["cum_growth"]), earned=earned,
+             growth_cycle=growth_cycle, contrib_cycle=contrib_cycle, acq_cycle=acq_cycle,
+             collected_pct=frac * 100.0, payable=earned * frac)
+    return templates.TemplateResponse("backtest_me.html", {
+        "request": request, "user": user, "page": "me", "lang": lang, "name": name,
+        "months": months, "traj": traj, "accounts": accounts, "k": k,
+        "rate": r["cumulative_rate"], "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
+
+
+# ---------- guides (manager + rep, EN / 中文) ----------
 @app.get("/guide", response_class=HTMLResponse)
-def guide(request: Request, db: Session = Depends(get_db)):
+def guide(request: Request, lang: str = "en", db: Session = Depends(get_db)):
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
     s = service.get_settings(db)
     return templates.TemplateResponse("backtest_guide.html", {
-        "request": request, "user": user, "page": "guide",
+        "request": request, "user": user, "page": "guide", "lang": lang,
         "rate": float(s.get("cumulative_rate", 0.05)), "item_rate": float(s["item_rate"]),
         "flat_small": int(float(s["acq_flat_small"])), "flat_medium": int(float(s["acq_flat_medium"])),
         "flat_large": int(float(s["acq_flat_large"])),
         "tier_small": int(float(s["acq_tier_small_max"])), "tier_medium": int(float(s["acq_tier_medium_max"]))})
+
+
+@app.get("/me/guide", response_class=HTMLResponse)
+def rep_guide(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    s = service.get_settings(db)
+    return templates.TemplateResponse("backtest_rep_guide.html", {
+        "request": request, "user": user, "page": "repguide", "lang": lang,
+        "rate": float(s.get("cumulative_rate", 0.05)), "item_rate": float(s["item_rate"]),
+        "flat_small": int(float(s["acq_flat_small"])), "flat_medium": int(float(s["acq_flat_medium"])),
+        "flat_large": int(float(s["acq_flat_large"]))})

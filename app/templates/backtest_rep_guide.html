@@ -1,0 +1,86 @@
+{% extends "backtest_base.html" %}{% block body %}
+{% set zh = (lang != 'en') %}
+<div class="card guide-body">
+  <div style="display:flex;align-items:center;gap:10px">
+    <h2 style="margin:0">{{ '奖金怎么算 — 销售指南' if zh else 'How your bonus works — rep guide' }}</h2>
+    <span class="mut" style="margin-left:auto;font-size:12.5px">
+      <a href="/me/guide?lang=zh" {% if zh %}style="font-weight:700"{% endif %}>中文</a> ·
+      <a href="/me/guide?lang=en" {% if not zh %}style="font-weight:700"{% endif %}>EN</a></span>
+  </div>
+
+  {% if zh %}
+  <p class="hint" style="margin-top:6px">一共三项，每一项我们都可以自己算得出来。奖金只按<b>已收回的货款</b>发放。</p>
+
+  <h3>1 · 增长奖 — 净增长的 {{ '%.0f'|format(rate*100) }}%</h3>
+  <p><b>一句话：</b>把我们手上<b>所有客户</b>的利润加在一起，和<b>同样这批客户去年同期</b>比 ——
+  比去年多出来的部分，我们拿 <b>{{ '%.0f'|format(rate*100) }}%</b>；如果整体比去年少，这个月是 $0（不倒扣）。</p>
+  <ul>
+    <li><b>算客户，不算个人。</b>客户换人负责时，它的历史跟着客户走：接手一个平稳的客户不算增长，
+      也不会因为客户被调走而吃亏 —— 调整客户对谁都不加分、不减分。</li>
+    <li><b>全部客户一起算。</b>一个客户涨、另一个跌，看的是<b>加总后的净增长</b>。红色（下滑）的客户
+      值得先去拜访。</li>
+    <li><b>逐月累计、只对新高发放。</b>淡季旺季自然抵消；某个月跌了就是 $0，做回来、超过之前的高点，
+      又继续发。已经发的不会收回。</li>
+    <li><b>新客户</b>没有去年可比，所以它的全部利润都算进我们的净增长。</li>
+    <li><b>限购商品</b>（公司缺货的）两年都剔除 —— 供不上货不算我们的问题。</li>
+  </ul>
+
+  <h3>2 · 开单奖 — 每行 ${{ '%.2f'|format(item_rate) }}</h3>
+  <p>发票上每写一行商品，就有 ${{ '%.2f'|format(item_rate) }}。日常的辛苦每一单都有回报。</p>
+
+  <h3>3 · 新客户奖 — 开发新客户的一次性奖励</h3>
+  <p>我们自己开发的新客户（经理确认后），开单约一个季度、规模看清楚了，一次性发：
+  小客户 <b>${{ flat_small }}</b> · 中客户 <b>${{ flat_medium }}</b> · 大客户 <b>${{ flat_large }}</b>。
+  之后这个客户的利润还会继续算进增长奖。</p>
+
+  <h3>按收款发放</h3>
+  <p>以上算出来的是<b>目标数</b>。实际发放按我们客户货款的回收比例 —— 收到多少货款、就发多少比例，
+  剩下的等款到了自动补上。作废、坏账的发票不算。</p>
+
+  <h3>我们能做什么</h3>
+  <ul>
+    <li>打开「我的奖金」看红色客户 —— 下滑的客户早点回访，比什么都有效。</li>
+    <li>帮客户把货款按时结清 —— 收款比例上去了,「现在可发」马上跟着涨。</li>
+    <li>多开新品、多开新客户 —— 每一行都有开单奖，新客户还有一次性奖励。</li>
+  </ul>
+
+  {% else %}
+  <p class="hint" style="margin-top:6px">Three pieces, each simple enough to check yourself. Paid only on
+  collected money.</p>
+
+  <h3>1 · Growth — {{ '%.0f'|format(rate*100) }}% of your net increase</h3>
+  <p><b>One sentence:</b> add up the profit of <b>all your accounts</b> and compare it to <b>what those same
+  accounts did last year</b> — you earn <b>{{ '%.0f'|format(rate*100) }}%</b> of the increase; if the total is
+  below last year, that month is $0 (never clawed back).</p>
+  <ul>
+    <li><b>Accounts, not people.</b> When an account changes hands its history travels with it — inheriting a
+      flat account isn't growth, and losing an account doesn't hurt you. Reassignments are neutral.</li>
+    <li><b>Whole book together.</b> One account up, another down — the <b>net</b> is what pays. The red
+      (declining) ones are worth visiting first.</li>
+    <li><b>Cumulative, pays on new highs.</b> Slow and strong months cancel out; a down month is $0, recover
+      past your peak and it pays again. Nothing already paid is taken back.</li>
+    <li><b>New accounts</b> have no last year, so all their profit counts toward your net.</li>
+    <li><b>Limited-stock items</b> are removed from both years — supply problems aren't your problem.</li>
+  </ul>
+
+  <h3>2 · Contribution — ${{ '%.2f'|format(item_rate) }} per line</h3>
+  <p>Every line item you write on an invoice earns ${{ '%.2f'|format(item_rate) }}.</p>
+
+  <h3>3 · Acquisition — a one-time bonus for landing a new account</h3>
+  <p>A new account you won yourself (manager-confirmed) pays once its size is clear (~a quarter):
+  small <b>${{ flat_small }}</b> · medium <b>${{ flat_medium }}</b> · large <b>${{ flat_large }}</b>.
+  Its profit keeps counting toward your growth too.</p>
+
+  <h3>Paid on collection</h3>
+  <p>Everything above is a <b>target</b>. What's actually paid follows your customers' payments — collect the
+  money and the rest releases automatically. Voided and written-off invoices never count.</p>
+
+  <h3>What you can do</h3>
+  <ul>
+    <li>Open "My bonus" and look at the red accounts — an early visit to a slipping customer beats everything.</li>
+    <li>Help customers settle invoices on time — your collected % rises and "payable now" follows.</li>
+    <li>Place more lines, land new accounts — every line pays, and a new account pays extra.</li>
+  </ul>
+  {% endif %}
+</div>
+{% endblock %}
