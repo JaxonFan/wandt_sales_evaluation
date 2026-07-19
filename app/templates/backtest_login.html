@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>W&T Growth Backtest · Login</title>
+<title>W&T Sales Scorecard · Login</title>
 <style>
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:#f4f6f9;color:#1f2733;
        display:flex;align-items:center;justify-content:center;min-height:100vh}
@@ -11,8 +11,8 @@
   .err{background:#fceaea;color:#d63b3b;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px}
 </style></head><body>
 <form class="card" method="post" action="/login">
-  <h1>W&T Growth Backtest</h1>
-  <p class="sub">Standalone preview · rep-netted cumulative model · managers only</p>
+  <h1>W&T Sales Scorecard</h1>
+  <p class="sub">Profit-growth model · 销售记分卡</p>
   {% if error %}<div class="err">{{ error }}</div>{% endif %}
   <input name="username" placeholder="username" autocomplete="username" required>
   <input name="password" type="password" placeholder="password" autocomplete="current-password" required>

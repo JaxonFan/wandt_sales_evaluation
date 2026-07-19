@@ -25,7 +25,7 @@ from .config import SECRET_KEY
 from . import service
 
 Base.metadata.create_all(engine)
-app = FastAPI(title="W&T Growth Backtest")
+app = FastAPI(title="W&T Sales Scorecard (growth model)")
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=8 * 3600)
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
@@ -146,6 +146,9 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     billed = win.groupby("associate")["extended_price"].sum()
     collected = win[win["sop_number"].astype(str).isin(coll)].groupby("associate")["extended_price"].sum()
 
+    paid = {p.associate: float(p.paid_cum or 0.0)
+            for p in db.query(M.GrowthPayment).filter(M.GrowthPayment.fiscal_start == r["fiscal_start"].date())}
+
     rows = []
     for _, x in r["reps"].iterrows():
         rep = x["associate"]
@@ -158,6 +161,8 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         earned_cycle = growth_cycle + contrib_cycle + acq_cycle
         b = float(billed.get(rep, 0.0))
         frac = min(1.0, float(collected.get(rep, 0.0)) / b) if b > 0 else 0.0
+        collectable = earned_cycle * frac
+        already = paid.get(rep, 0.0)
         rows.append(dict(
             associate=rep,
             profit_mo=float(t["ty_book"]), profit_mo_ly=float(t["ly_book"]),
@@ -166,12 +171,13 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
             pay_mo=float(t["pay"]), cum_pay=float(t["cum_pay"]),
             n_items=c["n_items"], contrib_mo=c["bonus"], acq_mo=a_mo,
             total_mo=float(t["pay"]) + c["bonus"] + a_mo,
-            earned_cycle=earned_cycle, collected_pct=frac * 100.0, payable_now=earned_cycle * frac,
+            earned_cycle=earned_cycle, collected_pct=frac * 100.0,
+            paid=already, payable_now=max(0.0, collectable - already),
         ))
     rows.sort(key=lambda z: -z["earned_cycle"])
     team_row = {k: sum(z[k] for z in rows) for k in
                 ("profit_mo", "profit_mo_ly", "gap_mo", "cum_gap", "pay_mo", "cum_pay",
-                 "contrib_mo", "acq_mo", "total_mo", "earned_cycle", "payable_now")}
+                 "contrib_mo", "acq_mo", "total_mo", "earned_cycle", "paid", "payable_now")}
     team_row["n_items"] = sum(z["n_items"] for z in rows)
     nav = dict(prev=(months[mi - 1] if mi > 0 else None), next=(months[mi + 1] if mi + 1 < len(months) else None),
                n=mi + 1, total=len(months))
@@ -179,6 +185,60 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
         "rows": rows, "team": team_row, "rate": r["cumulative_rate"], "page": "dash",
         "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
+
+
+# ---------- record pay (progressive true-up: bump paid to the current collectable amount) ----------
+@app.post("/pay")
+def record_pay(request: Request, associate: str = Form(...), amount: float = Form(...),
+               db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    r = service.run_cumulative_growth(db)
+    fs = r["fiscal_start"].date()
+    p = db.query(M.GrowthPayment).filter(M.GrowthPayment.associate == associate,
+                                         M.GrowthPayment.fiscal_start == fs).first()
+    if p is None:
+        p = M.GrowthPayment(associate=associate, fiscal_start=fs, paid_cum=0.0)
+        db.add(p)
+    p.paid_cum = float(p.paid_cum or 0.0) + max(0.0, float(amount))   # cumulative; never decreases
+    p.user_id = user.user_id
+    p.updated_at = dt.datetime.utcnow()
+    db.commit()
+    return RedirectResponse("/", status_code=303)
+
+
+# ---------- per-rep drill-down: which accounts drove the number ----------
+@app.get("/rep/{name}", response_class=HTMLResponse)
+def rep_detail(request: Request, name: str, m: str = None, db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    r = service.run_cumulative_growth(db)
+    months = r["months"]
+    if not months or name not in r["trajectory"]:
+        return RedirectResponse("/", status_code=303)
+    if m not in months:
+        m = months[-1]
+    mi = months.index(m)
+    names = service.customer_names(db)
+    rows = []
+    for acct, v in r["account_monthly"].items():
+        if name not in v["shares"]:
+            continue
+        sh = v["shares"][name]
+        ty_mo, ly_mo = v["mo_ty"][mi] * sh, v["mo_ly"][mi] * sh
+        rows.append(dict(account=acct, customer=names.get(acct, acct), share=sh * 100.0,
+                         ty_mo=ty_mo, ly_mo=ly_mo, gap_mo=ty_mo - ly_mo,
+                         cum_gap=v["cum"][mi] * sh, is_young=bool(v["is_young"])))
+    rows.sort(key=lambda z: -z["gap_mo"])
+    tot = {k: sum(z[k] for z in rows) for k in ("ty_mo", "ly_mo", "gap_mo", "cum_gap")}
+    t = r["trajectory"][name][mi]
+    nav = dict(prev=(months[mi - 1] if mi > 0 else None), next=(months[mi + 1] if mi + 1 < len(months) else None))
+    return templates.TemplateResponse("backtest_rep_detail.html", {
+        "request": request, "user": user, "page": "dash", "name": name, "m": m, "months": months, "nav": nav,
+        "rows": rows, "tot": tot, "pay_mo": float(t["pay"]), "cum_pay": float(t["cum_pay"]),
+        "rate": r["cumulative_rate"]})
 
 
 # ---------- new-account review (assigned vs self-earned -> acquisition eligibility) ----------
@@ -382,9 +442,12 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
         for a in acc[acc["holder"] == name].sort_values("growth", ascending=False).itertuples(index=False):
             accounts.append(dict(name=names.get(a.account, a.account), ty=float(a.ty_profit),
                                  ly=float(a.ly_profit), gap=float(a.growth), is_young=bool(a.is_young)))
+    p = db.query(M.GrowthPayment).filter(M.GrowthPayment.associate == name,
+                                         M.GrowthPayment.fiscal_start == r["fiscal_start"].date()).first()
+    already = float(p.paid_cum or 0.0) if p else 0.0
     k = dict(cum_gap=float(r["trajectory"][name][-1]["cum_growth"]), earned=earned,
              growth_cycle=growth_cycle, contrib_cycle=contrib_cycle, acq_cycle=acq_cycle,
-             collected_pct=frac * 100.0, payable=earned * frac)
+             collected_pct=frac * 100.0, paid=already, payable=max(0.0, earned * frac - already))
     return templates.TemplateResponse("backtest_me.html", {
         "request": request, "user": user, "page": "me", "lang": lang, "name": name,
         "months": months, "traj": traj, "accounts": accounts, "k": k,

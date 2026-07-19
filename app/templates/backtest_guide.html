@@ -29,7 +29,7 @@
       去年卖过的也不抬高基数。</li>
     <li><b>关店：</b>默认计入（真实的利润损失，销售是我们的预警系统）。确认无过失关店可以豁免 ——
       同样是两年都剔除。</li>
-    <li><b>周期每年八月重置</b>（计划启动时间）。本页目前回测 2026 年 1–6 月。</li>
+    <li><b>周期每年八月重置</b>（计划启动时间）。本页目前按 2026 年 1–6 月运行；八月正式启动后周期锚点改为八月。</li>
   </ul>
 
   <h3>2 · 开单奖 — 每行 ${{ '%.2f'|format(item_rate) }}</h3>
@@ -56,7 +56,7 @@
     <li>看<a href="/">Dashboard</a>：每人净增长、当月发放、<b>现在可发</b>。</li>
   </ol>
   <p class="hint">参数（比例、开单单价、新客户档位、限购清单）在主记分卡应用的 Settings 里管理 ——
-  两个应用共用同一个数据库。本预览在正式采用前不产生任何实际发放。</p>
+  两个应用共用同一个数据库。</p>
 
   {% else %}
   <p class="hint" style="margin-top:6px">Three pieces, each a direct formula anyone can check. Paid only on collected money.</p>
@@ -82,7 +82,7 @@
     <li><b>Store closures.</b> By default a closure counts against the book (it's a real loss, and the rep is the
       early-warning system). For a confirmed no-fault closure you can exempt the account — removed from both
       years, same apples-to-apples idea.</li>
-    <li><b>The cycle resets each August</b> (program launch). This page currently backtests Jan–Jun 2026.</li>
+    <li><b>The cycle resets each August</b> (program launch). This page currently runs Jan–Jun 2026; at the August launch the cycle anchor moves to August.</li>
   </ul>
 
   <h3>2 · Contribution — ${{ '%.2f'|format(item_rate) }} per line item</h3>
@@ -112,7 +112,7 @@
     <li>Read the <a href="/">Dashboard</a>: each rep's net gap, the month's pay, and <b>Payable now</b>.</li>
   </ol>
   <p class="hint">Dials (rate, item rate, acquisition tiers, limited-stock list) are managed in the main
-  scorecard app's Settings — both apps read the same database. This preview pays nothing until you adopt it.</p>
+  scorecard app's Settings — both apps read the same database. </p>
   {% endif %}
 </div>
 {% endblock %}

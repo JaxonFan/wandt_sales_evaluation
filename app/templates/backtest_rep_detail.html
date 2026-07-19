@@ -1,0 +1,53 @@
+{% extends "backtest_base.html" %}{% block body %}
+<div class="card">
+  <div class="pbar">
+    {% if nav.prev %}<a class="pnav" href="/rep/{{ name }}?m={{ nav.prev }}">◀ prev</a>{% else %}<span class="pnav dis">◀ prev</span>{% endif %}
+    <div class="mid">
+      <div class="ttl">{{ name }} · {{ m }}</div>
+      <div class="hint" style="margin:4px 0 6px">Which accounts drove the number — <a href="/?m={{ m }}">back to team</a></div>
+      <select class="psel" onchange="location.href='/rep/{{ name }}?m='+this.value">
+        {% for mo in months %}<option value="{{ mo }}" {{ 'selected' if mo==m }}>{{ mo }}</option>{% endfor %}
+      </select>
+    </div>
+    {% if nav.next %}<a class="pnav" href="/rep/{{ name }}?m={{ nav.next }}">next ▶</a>{% else %}<span class="pnav dis">next ▶</span>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>{{ name }} — account by account, {{ m }}</h2>
+  <p class="hint">Each account at {{ name }}'s work-share: profit this month vs the <b>same account, same month
+    last year</b>. Sorted best-first — the top rows are carrying the book, the red rows at the bottom are
+    dragging it. <b>Cycle gap</b> = that account's running net vs last year (cycle to date). This month
+    {{ name }} was paid <b>${{ '{:,.0f}'.format(pay_mo) }}</b> growth (cycle to date ${{ '{:,.0f}'.format(cum_pay) }}).</p>
+  <table>
+    <thead><tr><th>Customer</th><th class="num">Share</th>
+      <th class="num">This month</th><th class="num">Same month last yr</th>
+      <th class="num">Gap this month</th><th class="num">Cycle gap</th><th></th></tr></thead>
+    <tbody>
+    {% for a in rows %}
+      <tr>
+        <td>{{ a.customer }}</td>
+        <td class="num mut">{{ '%.0f'|format(a.share) }}%</td>
+        <td class="num">${{ '{:,.0f}'.format(a.ty_mo) }}</td>
+        <td class="num mut">${{ '{:,.0f}'.format(a.ly_mo) }}</td>
+        <td class="num {{ 'neg' if a.gap_mo < 0 else ('pos' if a.gap_mo > 0 else 'mut') }}">{{ '−$' + '{:,.0f}'.format(-a.gap_mo) if a.gap_mo < 0 else '$' + '{:,.0f}'.format(a.gap_mo) }}</td>
+        <td class="num {{ 'neg' if a.cum_gap < 0 else '' }}">{{ '−$' + '{:,.0f}'.format(-a.cum_gap) if a.cum_gap < 0 else '$' + '{:,.0f}'.format(a.cum_gap) }}</td>
+        <td>{% if a.is_young %}<span class="badge b-new">new</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="mut">No accounts.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot><tr>
+      <th>Total ({{ rows|length }} accounts)</th><th></th>
+      <th class="num">${{ '{:,.0f}'.format(tot.ty_mo) }}</th>
+      <th class="num">${{ '{:,.0f}'.format(tot.ly_mo) }}</th>
+      <th class="num {{ 'neg' if tot.gap_mo < 0 }}">{{ '−$' + '{:,.0f}'.format(-tot.gap_mo) if tot.gap_mo < 0 else '$' + '{:,.0f}'.format(tot.gap_mo) }}</th>
+      <th class="num {{ 'neg' if tot.cum_gap < 0 }}">{{ '−$' + '{:,.0f}'.format(-tot.cum_gap) if tot.cum_gap < 0 else '$' + '{:,.0f}'.format(tot.cum_gap) }}</th>
+      <th></th>
+    </tr></tfoot>
+    {% endif %}
+  </table>
+</div>
+{% endblock %}

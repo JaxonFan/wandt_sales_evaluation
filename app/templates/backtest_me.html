@@ -23,12 +23,14 @@
       <div class="val">${{ '{:,.0f}'.format(k.earned) }}</div></div>
     <div class="kpi"><div class="label">{{ '货款已收' if zh else 'Collected' }}</div>
       <div class="val">{{ '%.0f'|format(k.collected_pct) }}%</div></div>
+    <div class="kpi"><div class="label">{{ '已发放' if zh else 'Paid so far' }}</div>
+      <div class="val">${{ '{:,.0f}'.format(k.paid) }}</div></div>
     <div class="kpi primary"><div class="label">{{ '现在可发' if zh else 'Payable now' }}</div>
       <div class="val">${{ '{:,.0f}'.format(k.payable) }}</div></div>
   </div>
-  <p class="hint">{% if zh %}<b>现在可发</b> = 已赚 × 已收款比例。客户货款收回来，剩下的部分就会发放 ——
-    只有收到钱的生意才算数。{% else %}<b>Payable now</b> = earned × your collected %. As your customers'
-    invoices get paid, the rest releases — only collected business counts.{% endif %}</p>
+  <p class="hint">{% if zh %}<b>现在可发</b> = 已赚 × 已收款比例 − 已发放。客户货款收回来，剩下的部分就会发放 ——
+    只有收到钱的生意才算数。{% else %}<b>Payable now</b> = earned × your collected % − paid so far. As your
+    customers' invoices get paid, the rest releases — only collected business counts.{% endif %}</p>
 </div>
 
 <div class="card">

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>W&T Growth Backtest</title>
+<title>W&T Sales Scorecard</title>
 <style>
   :root{--bg:#f4f6f9;--card:#fff;--ink:#1f2733;--muted:#6b7785;--line:#e6ebf1;
         --green:#1a9e5c;--green-bg:#e7f6ee;--red:#d63b3b;--blue:#2b6cb0;--blue-bg:#e8f1fb;
@@ -50,8 +50,7 @@
   .kpi.primary{background:#2a1d4d;border-color:#2a1d4d} .kpi.primary .label{color:#bfb3e0} .kpi.primary .val{color:#fff}
 </style></head><body class="{{ 'big' if user and user.role == 'rep' else '' }}">
 <header>
-  <span class="brand">W&T Growth Backtest</span>
-  <span class="tag">preview — pays nothing</span>
+  <span class="brand">W&T Sales Scorecard</span>
   <nav>
     {% if user.role == 'rep' %}
     <a href="/me" class="{{ 'on' if page=='me' }}">我的奖金</a>
@@ -68,5 +67,5 @@
   <span class="right">{{ user.username }} · <a href="/logout">log out</a></span>
 </header>
 <div class="wrap">{% block body %}{% endblock %}</div>
-<footer>W&T Growth Backtest · standalone preview on live data · the scorecard app is unaffected</footer>
+<footer>W&T Sales Scorecard · profit-growth model · decision support — the manager sets the final award</footer>
 </body></html>

@@ -199,3 +199,17 @@ class WrittenOffInvoice(Base):
     note = Column(String)
     user_id = Column(Integer, ForeignKey("users.user_id"))
     created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
+class GrowthPayment(Base):
+    """Cumulative bonus PAID per rep per fiscal cycle on the growth-model service (progressive true-up:
+    payable now = earned x collected% - paid_cum, floored at 0; 'Record pay' bumps paid_cum to the current
+    collectable amount). One row per (associate, cycle start)."""
+    __tablename__ = "growth_payments"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    associate = Column(String, index=True)
+    fiscal_start = Column(Date, index=True)
+    paid_cum = Column(Float, default=0.0)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    updated_at = Column(DateTime, default=dt.datetime.utcnow)
+    __table_args__ = (UniqueConstraint("associate", "fiscal_start"),)

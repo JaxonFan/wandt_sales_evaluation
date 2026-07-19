@@ -646,4 +646,5 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
                              for a, v in per_acct.items()])
     return dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=cumulative_rate,
                 months=[str(m) for m in months], reps=pd.DataFrame(reps),
-                trajectory=trajectory, accounts=accounts)
+                trajectory=trajectory, accounts=accounts,
+                account_monthly=per_acct)   # per-account shares + mo_ty/mo_ly/cum arrays (drill-downs)
