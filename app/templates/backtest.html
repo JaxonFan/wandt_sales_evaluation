@@ -30,8 +30,7 @@
       <th class="num" title="Cycle earned (all three pieces) — the target the collection %% applies to">Earned (cycle)</th>
       <th class="num" title="Share of the rep's cycle billing actually collected, per the latest receivables upload">Collected</th>
       <th class="num" title="Cumulative bonus already recorded as paid this cycle">Paid</th>
-      <th class="num" title="Earned × collected %% − already paid; the rest releases as invoices pay">Payable now</th>
-      <th></th></tr></thead>
+      <th class="num" title="Earned × collected %% − already paid; the rest releases as invoices pay">Payable now</th></tr></thead>
     <tbody>
     {% for x in rows %}
       <tr>
@@ -47,16 +46,16 @@
         <td class="num mut">${{ '{:,.0f}'.format(x.earned_cycle) }}</td>
         <td class="num mut">{{ '%.0f'|format(x.collected_pct) }}%</td>
         <td class="num mut">${{ '{:,.0f}'.format(x.paid) }}</td>
-        <td class="num"><strong>${{ '{:,.0f}'.format(x.payable_now) }}</strong></td>
-        <td>{% if x.payable_now >= 0.5 %}
-          <form method="post" action="/pay" style="margin:0" onsubmit="return confirm('Record ${{ '{:,.0f}'.format(x.payable_now) }} as PAID to {{ x.associate }}?')">
+        <td class="num"><strong>${{ '{:,.0f}'.format(x.payable_now) }}</strong>
+          {% if x.payable_now >= 0.5 %}
+          <form method="post" action="/pay" style="margin:0;display:inline" onsubmit="return confirm('Record ${{ '{:,.0f}'.format(x.payable_now) }} as PAID to {{ x.associate }}?')">
             <input type="hidden" name="associate" value="{{ x.associate }}">
             <input type="hidden" name="amount" value="{{ '%.2f'|format(x.payable_now) }}">
-            <button type="submit" class="ghost">record pay</button></form>
+            <button type="submit" class="ghost" style="padding:2px 9px;font-size:11.5px;margin-left:6px">pay</button></form>
           {% endif %}</td>
       </tr>
     {% else %}
-      <tr><td colspan="14" class="mut">No data.</td></tr>
+      <tr><td colspan="13" class="mut">No data.</td></tr>
     {% endfor %}
     </tbody>
     {% if rows %}
@@ -72,7 +71,7 @@
       <th class="num">${{ '{:,.0f}'.format(team.total_mo) }}</th>
       <th class="num">${{ '{:,.0f}'.format(team.earned_cycle) }}</th><th></th>
       <th class="num">${{ '{:,.0f}'.format(team.paid) }}</th>
-      <th class="num">${{ '{:,.0f}'.format(team.payable_now) }}</th><th></th>
+      <th class="num">${{ '{:,.0f}'.format(team.payable_now) }}</th>
     </tr></tfoot>
     {% endif %}
   </table>
