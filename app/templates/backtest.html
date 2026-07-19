@@ -26,7 +26,10 @@
       <th class="num">Book profit this month</th><th class="num">Same accounts last yr</th>
       <th class="num">Net gap this month</th><th class="num">Cumulative net gap</th>
       <th class="num">Growth pay</th><th class="num">Contribution</th><th class="num">Acquisition</th>
-      <th class="num">Total this month</th></tr></thead>
+      <th class="num">Total this month</th>
+      <th class="num" title="Cycle earned (all three pieces) — the target the collection %% applies to">Earned (cycle)</th>
+      <th class="num" title="Share of the rep's cycle billing actually collected, per the latest receivables upload">Collected</th>
+      <th class="num" title="Earned × collected %% — what's actually payable; the rest releases as invoices pay">Payable now</th></tr></thead>
     <tbody>
     {% for x in rows %}
       <tr>
@@ -39,9 +42,12 @@
         <td class="num">${{ '{:,.2f}'.format(x.contrib_mo) }} <span class="mut">({{ '{:,}'.format(x.n_items) }})</span></td>
         <td class="num">{% if x.acq_mo > 0 %}${{ '{:,.0f}'.format(x.acq_mo) }}{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num"><strong>${{ '{:,.0f}'.format(x.total_mo) }}</strong></td>
+        <td class="num mut">${{ '{:,.0f}'.format(x.earned_cycle) }}</td>
+        <td class="num mut">{{ '%.0f'|format(x.collected_pct) }}%</td>
+        <td class="num"><strong>${{ '{:,.0f}'.format(x.payable_now) }}</strong></td>
       </tr>
     {% else %}
-      <tr><td colspan="9" class="mut">No data.</td></tr>
+      <tr><td colspan="12" class="mut">No data.</td></tr>
     {% endfor %}
     </tbody>
     {% if rows %}
@@ -55,6 +61,8 @@
       <th class="num">${{ '{:,.2f}'.format(team.contrib_mo) }} <span class="mut">({{ '{:,}'.format(team.n_items) }})</span></th>
       <th class="num">${{ '{:,.0f}'.format(team.acq_mo) }}</th>
       <th class="num">${{ '{:,.0f}'.format(team.total_mo) }}</th>
+      <th class="num">${{ '{:,.0f}'.format(team.earned_cycle) }}</th><th></th>
+      <th class="num">${{ '{:,.0f}'.format(team.payable_now) }}</th>
     </tr></tfoot>
     {% endif %}
   </table>
@@ -62,37 +70,9 @@
     work-share — and the <b>last-year column is those SAME accounts</b> (even if someone else sold them then), so
     every row subtracts cleanly: <b>net gap = book this yr − same accounts last yr</b>.
     <b>Growth pay</b> = {{ '%.0f'|format(rate*100) }}% × new ground above the book's previous cumulative peak; a
-    red (negative) month pays $0 and is never clawed back.</p>
-</div>
-
-<div class="card">
-  <h2>Pay on collection <span class="mut" style="font-weight:400;font-size:12px">— bonus is only payable on money that actually came in</span></h2>
-  <p class="hint">The cycle's earned bonus (all three pieces) is a <b>target</b>; what's payable <b>now</b> scales
-    by the share of the rep's cycle billing that has actually been <b>collected</b> (per the latest receivables
-    upload). As invoices pay, the % rises and the remainder releases — a true-up that never overpays. Voided or
-    written-off invoices never count.</p>
-  <table>
-    <thead><tr><th>Rep</th><th class="num">Earned (cycle, all pieces)</th><th class="num">Collected %</th><th class="num">Payable now</th><th class="num">Releases on collection</th></tr></thead>
-    <tbody>
-    {% for x in rows %}
-      <tr>
-        <td><strong>{{ x.associate }}</strong></td>
-        <td class="num">${{ '{:,.0f}'.format(x.earned_cycle) }}</td>
-        <td class="num mut">{{ '%.0f'|format(x.collected_pct) }}%</td>
-        <td class="num"><strong>${{ '{:,.0f}'.format(x.payable_now) }}</strong></td>
-        <td class="num mut">${{ '{:,.0f}'.format(x.earned_cycle - x.payable_now) }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-    {% if rows %}
-    <tfoot><tr>
-      <th>Team</th>
-      <th class="num">${{ '{:,.0f}'.format(team.earned_cycle) }}</th><th></th>
-      <th class="num">${{ '{:,.0f}'.format(team.payable_now) }}</th>
-      <th class="num">${{ '{:,.0f}'.format(team.earned_cycle - team.payable_now) }}</th>
-    </tr></tfoot>
-    {% endif %}
-  </table>
+    red (negative) month pays $0 and is never clawed back.
+    <b>Payable now</b> = the cycle's earned (all three pieces) × the share of the rep's billing actually
+    <b>collected</b> — the rest releases as invoices pay (never overpays; voided/written-off never count).</p>
 </div>
 
 <div class="card" style="border-color:#6b46c1;background:#faf8ff">
