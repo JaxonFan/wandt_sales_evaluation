@@ -1,14 +1,18 @@
 """Standalone GROWTH BACKTEST service (own URL, separate ECS service via APP_MODULE=app.growth_main:app).
 
-One job: show the rep-netted cumulative profit-growth model, period by period, team-style — completely apart
-from the main scorecard app so the two never get mixed up. Read-only: pays nothing, writes nothing (login only).
+The next-generation scorecard, kept apart from the main app: the rep-netted cumulative profit-growth model
+plus the two retained pieces (Contribution, Acquisition), pay-on-collection, a manager guide, the new-account
+review tab, and the FIXED importer (keeps every invoice so account baselines are complete).
 
-The model (the manager's rule): for each rep, sum the profit gap of ALL accounts they work — account 1 + account
-2 + ... , each vs the SAME account a year ago, split by work-share. If the NET is positive, bonus = rate x net
-(trued up on the book's running peak, never clawed back); if negative, $0. Backtest window: Jan-Jun 2026 vs 2025.
+The growth rule (the manager's): for each rep, sum the profit gap of ALL accounts they work — account 1 +
+account 2 + ..., each vs the SAME account a year ago, split by work-share. Net positive -> rate x net (trued
+up on the book's running peak, never clawed back); net negative -> $0. Backtest window: Jan-Jun 2026 vs 2025.
 """
+import io
 import os
-from fastapi import FastAPI, Request, Depends, Form
+import datetime as dt
+import pandas as pd
+from fastapi import FastAPI, Request, Depends, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -29,6 +33,60 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 def current_user(request: Request, db: Session):
     uid = request.session.get("uid")
     return db.get(M.User, uid) if uid else None
+
+
+def _guard(request: Request, db: Session):
+    user = current_user(request, db)
+    return user if (user and user.role != "rep") else None
+
+
+# ---------- contribution + acquisition (monthly, alongside the cumulative growth) ----------
+def contribution_by_rep_month(db, months, team, item_rate):
+    """Line items placed per (rep, month) x item_rate — same direct formula as the scorecard."""
+    df = service.active_lines(db)
+    d = df[df["associate"].isin(team)].copy()
+    d["ym"] = d["document_date"].dt.to_period("M")
+    per_set = {pd.Period(m, "M") for m in months}
+    d = d[d["ym"].isin(per_set)]
+    counts = d.groupby(["associate", "ym"]).size()
+    return {(rep, str(per)): dict(n_items=int(n), bonus=float(n) * item_rate)
+            for (rep, per), n in counts.items()}
+
+
+def acquisition_by_rep_month(db, months, team, s):
+    """Flat landing bonus by new-account size, paid ONCE at the ~quarter mark (first-sale month + 2),
+    only for accounts the manager confirmed rep-won (AcquisitionReview). Size = first-8-weeks revenue,
+    annualized, into the same small/medium/large tiers as the scorecard. Returns (pay_map, review_rows)."""
+    df = service.active_lines(db)
+    first = df.groupby("account")["document_date"].min()
+    lo = pd.Period(months[0], "M") - 3                      # landed up to a quarter before the window still pays in it
+    hi = pd.Period(months[-1], "M")
+    cand = first[(first.dt.to_period("M") >= lo) & (first.dt.to_period("M") <= hi)]
+    self_acq = service.self_acquired_set(db)
+    names = service.customer_names(db)
+    flags = {r.account: r.rep_won for r in db.query(M.AcquisitionReview)}
+    small_max, med_max = float(s["acq_tier_small_max"]), float(s["acq_tier_medium_max"])
+    flats = dict(small=float(s["acq_flat_small"]), medium=float(s["acq_flat_medium"]), large=float(s["acq_flat_large"]))
+    pay, review = {}, []
+    for acct, fs in cand.items():
+        early = df[(df["account"] == acct) & (df["document_date"] <= fs + pd.Timedelta(days=56))]
+        rep_rev = early[early["associate"].isin(team)].groupby("associate")["extended_price"].sum()
+        rep = rep_rev.idxmax() if len(rep_rev) else None
+        rev8 = float(early["extended_price"].sum())
+        annual = rev8 * 365.0 / 56.0
+        tier = "small" if annual < small_max else ("medium" if annual < med_max else "large")
+        flat = flats[tier]
+        pay_month = str(fs.to_period("M") + 2)
+        confirmed = acct in self_acq
+        if rep and confirmed and pay_month in months:
+            pay[(rep, pay_month)] = pay.get((rep, pay_month), 0.0) + flat
+        review.append(dict(account=acct, customer=names.get(acct, acct), rep=rep or "—",
+                           first_order=str(fs.date()), rev8=rev8, annualized=annual, tier=tier, flat=flat,
+                           pay_month=pay_month,
+                           status=("rep-won" if flags.get(acct) is True
+                                   else ("house" if flags.get(acct) is False else "unreviewed"))))
+    review.sort(key=lambda r: -r["annualized"])
+    return pay, review
 
 
 @app.get("/healthz", response_class=PlainTextResponse)
@@ -59,26 +117,29 @@ def logout(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
-    user = current_user(request, db)
-    if not user or user.role == "rep":
+    user = _guard(request, db)
+    if not user:
         return RedirectResponse("/login", status_code=303)
     r = service.run_cumulative_growth(db)      # memoized; window = fiscal_start_month (Jan) -> data end
-    months = r["months"]                       # e.g. ['2026-01', ... '2026-06']
+    months = r["months"]
     if not months:
         return templates.TemplateResponse("backtest.html", {"request": request, "user": user, "months": [],
-                                                            "rows": [], "m": None, "nav": {}, "rate": 0})
+                                                            "rows": [], "m": None, "nav": {}, "rate": 0,
+                                                            "team": {}, "page": "dash"})
     if m not in months:
         m = months[-1]
     mi = months.index(m)
+    s = service.get_settings(db)
+    _, _, team = service.attribution_maps(db)
+    contrib = contribution_by_rep_month(db, months, team, float(s["item_rate"]))
+    acq_pay, _review = acquisition_by_rep_month(db, months, team, s)
 
-    # pay-on-collection (same scaling model as the main app's Collections page): a rep's earned growth is a
-    # TARGET; what's payable NOW scales by the fraction of their cycle billing that has actually collected.
-    # As invoices pay, the fraction rises toward 100% and the remainder releases (true-up, never overpays).
+    # pay-on-collection: earned (all three pieces) is a TARGET; payable now scales by the rep's collected
+    # fraction of their cycle billing (same rule as the scorecard's Collections page).
     df = service.active_lines(db)
     win = df[(df["document_date"] >= r["fiscal_start"]) & (df["document_date"] <= r["as_of"])]
-    _, _, team = service.attribution_maps(db)
     win = win[win["associate"].isin(team)]
-    coll = {str(s) for s in service.collected_set(db)}
+    coll = {str(x) for x in service.collected_set(db)}
     billed = win.groupby("associate")["extended_price"].sum()
     collected = win[win["sop_number"].astype(str).isin(coll)].groupby("associate")["extended_price"].sum()
 
@@ -86,26 +147,146 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     for _, x in r["reps"].iterrows():
         rep = x["associate"]
         t = r["trajectory"][rep][mi]
-        earned_cycle = float(r["trajectory"][rep][-1]["cum_pay"])
+        c = contrib.get((rep, m), dict(n_items=0, bonus=0.0))
+        a_mo = acq_pay.get((rep, m), 0.0)
+        growth_cycle = float(r["trajectory"][rep][-1]["cum_pay"])
+        contrib_cycle = sum(contrib.get((rep, mm), {}).get("bonus", 0.0) for mm in months)
+        acq_cycle = sum(v for (rp, _mm), v in acq_pay.items() if rp == rep)
+        earned_cycle = growth_cycle + contrib_cycle + acq_cycle
         b = float(billed.get(rep, 0.0))
         frac = min(1.0, float(collected.get(rep, 0.0)) / b) if b > 0 else 0.0
-        # ty_book/ly_book = the rep's BOOK this month, share-weighted over the SAME accounts both years,
-        # so the row subtracts cleanly: net gap == book this yr - same accounts last yr.
         rows.append(dict(
             associate=rep,
             profit_mo=float(t["ty_book"]), profit_mo_ly=float(t["ly_book"]),
             gap_mo=float(t["ty_book"]) - float(t["ly_book"]),
             cum_gap=float(t["cum_growth"]),
             pay_mo=float(t["pay"]), cum_pay=float(t["cum_pay"]),
+            n_items=c["n_items"], contrib_mo=c["bonus"], acq_mo=a_mo,
+            total_mo=float(t["pay"]) + c["bonus"] + a_mo,
             earned_cycle=earned_cycle, collected_pct=frac * 100.0, payable_now=earned_cycle * frac,
         ))
-    rows.sort(key=lambda z: -z["cum_pay"])
+    rows.sort(key=lambda z: -z["earned_cycle"])
     team_row = {k: sum(z[k] for z in rows) for k in
                 ("profit_mo", "profit_mo_ly", "gap_mo", "cum_gap", "pay_mo", "cum_pay",
-                 "earned_cycle", "payable_now")}
+                 "contrib_mo", "acq_mo", "total_mo", "earned_cycle", "payable_now")}
+    team_row["n_items"] = sum(z["n_items"] for z in rows)
     nav = dict(prev=(months[mi - 1] if mi > 0 else None), next=(months[mi + 1] if mi + 1 < len(months) else None),
                n=mi + 1, total=len(months))
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
-        "rows": rows, "team": team_row, "rate": r["cumulative_rate"],
+        "rows": rows, "team": team_row, "rate": r["cumulative_rate"], "page": "dash",
         "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
+
+
+# ---------- new-account review (assigned vs self-earned -> acquisition eligibility) ----------
+@app.get("/acquisitions", response_class=HTMLResponse)
+def acquisitions_page(request: Request, db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    r = service.run_cumulative_growth(db)
+    s = service.get_settings(db)
+    _, _, team = service.attribution_maps(db)
+    _pay, review = acquisition_by_rep_month(db, r["months"], team, s) if r["months"] else ({}, [])
+    return templates.TemplateResponse("backtest_acquisitions.html", {
+        "request": request, "user": user, "rows": review, "page": "acq"})
+
+
+@app.post("/acquisitions/flag")
+def acquisitions_flag(request: Request, account: str = Form(...), rep_won: str = Form(...),
+                      db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    rev = db.get(M.AcquisitionReview, account) or M.AcquisitionReview(account=account)
+    rev.rep_won = (rep_won == "yes"); rev.user_id = user.user_id; rev.created_at = dt.datetime.utcnow()
+    db.merge(rev); db.commit()
+    service._ENGINE_CACHE.clear()
+    return RedirectResponse("/acquisitions", status_code=303)
+
+
+# ---------- import (the FIXED importer — keeps every invoice) + AR + voided ----------
+@app.get("/upload", response_class=HTMLResponse)
+def upload_form(request: Request, db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    last = db.query(M.SalesLine).order_by(M.SalesLine.imported_at.desc()).first()
+    return templates.TemplateResponse("backtest_upload.html", {
+        "request": request, "user": user, "page": "upload",
+        "imported_at": last.imported_at if last else None,
+        "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
+
+
+@app.post("/upload")
+async def upload_sales(request: Request, sales_file: UploadFile = File(...), db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    raw = pd.read_excel(io.BytesIO(await sales_file.read()))
+    res = service.import_sales_frame(db, raw)          # shared FIXED importer
+    extra = f"; excluded {res['voided']:,} voided invoices" if res["has_void_col"] else ""
+    return templates.TemplateResponse("backtest_upload.html", {"request": request, "user": user, "page": "upload",
+        "msg": f"Imported {res['lines']:,} sales lines across {res['orders']:,} orders "
+               f"({res['tracked']:,} credited to tracked reps; the rest are history-only){extra}.",
+        "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
+
+
+@app.post("/upload-receivables")
+async def upload_receivables(request: Request, ar_file: UploadFile = File(...), db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    raw = pd.read_excel(io.BytesIO(await ar_file.read()))
+    collected = service.parse_collected(raw)
+    if collected is None:
+        msg = "No invoice-number column (Document / Invoice / SOP Number) found in the paid file."
+    else:
+        db.query(M.CollectedInvoice).delete(synchronize_session=False)
+        now = dt.datetime.utcnow()
+        for sop in collected:
+            db.add(M.CollectedInvoice(sop_number=sop, reported_at=now))
+        db.commit()
+        service._ENGINE_CACHE.clear()
+        msg = f"Recorded {len(collected):,} paid invoices (snapshot). Payable-now updates on the dashboard."
+    return templates.TemplateResponse("backtest_upload.html", {"request": request, "user": user, "page": "upload",
+        "ar_msg": msg, "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
+
+
+@app.post("/upload-voided")
+async def upload_voided(request: Request, voided_file: UploadFile = File(...), db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    raw = pd.read_excel(io.BytesIO(await voided_file.read()))
+    if service._invoice_col(raw) is None:
+        msg = "No invoice-number column (Document / Invoice / SOP Number) found in the file."
+    elif not any("void" in str(c).strip().lower() for c in raw.columns):
+        msg = ("Rejected: this file has no 'Void Status' column, so I can't tell which invoices are voided — "
+               "refusing to void the whole list.")
+    else:
+        voided = service.parse_voided(raw)
+        db.query(M.VoidedInvoice).delete(synchronize_session=False)
+        now = dt.datetime.utcnow()
+        for sop in voided:
+            db.add(M.VoidedInvoice(sop_number=sop, reported_at=now))
+        db.commit()
+        service._ENGINE_CACHE.clear()
+        msg = f"Recorded {len(voided):,} voided invoices (snapshot). They count toward nothing."
+    return templates.TemplateResponse("backtest_upload.html", {"request": request, "user": user, "page": "upload",
+        "void_msg": msg, "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
+
+
+# ---------- manager guide ----------
+@app.get("/guide", response_class=HTMLResponse)
+def guide(request: Request, db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    s = service.get_settings(db)
+    return templates.TemplateResponse("backtest_guide.html", {
+        "request": request, "user": user, "page": "guide",
+        "rate": float(s.get("cumulative_rate", 0.05)), "item_rate": float(s["item_rate"]),
+        "flat_small": int(float(s["acq_flat_small"])), "flat_medium": int(float(s["acq_flat_medium"])),
+        "flat_large": int(float(s["acq_flat_large"])),
+        "tier_small": int(float(s["acq_tier_small_max"])), "tier_medium": int(float(s["acq_tier_medium_max"]))})

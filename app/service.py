@@ -88,6 +88,59 @@ def parse_voided(raw):
     return _clean_invoices(raw.loc[is_void, col])
 
 
+def import_sales_frame(db, raw):
+    """Import an invoices XLSX frame (the FIXED importer, shared by both web apps).
+
+    Keeps EVERY invoice — untracked/inactive people's rows carry no bonus credit (all credit paths gate on
+    the active team) but complete each account's true history, so an inherited account has a real baseline.
+    Void-aware (a Void Status column both excludes those lines and records/reconciles the voided set) and
+    idempotent per invoice (re-import replaces). Returns dict(lines, tracked, orders, voided)."""
+    import datetime as _dt
+    prefix_map, variant_map, sales_team = attribution_maps(db)
+    sales = raw[raw["SOP Type"] == "Invoice"].copy()
+    for col in ["Extended Price", "Extended Cost", "QTY", "Unit Price", "Unit Cost"]:
+        sales[col] = pd.to_numeric(sales[col], errors="coerce")
+    sales["Document Date"] = pd.to_datetime(sales["Document Date"], errors="coerce")
+    sales["associate"] = sales["Batch Number"].apply(lambda b: resolve_associate(b, prefix_map, variant_map))
+    sales = sales.dropna(subset=["Document Date"])
+    sales["associate"] = sales["associate"].where(pd.notna(sales["associate"]), None)
+    vcol = next((c for c in raw.columns if "void" in str(c).strip().lower()), None)
+    voided_in_file = set()
+    if vcol is not None:
+        is_void = raw[vcol].astype(str).str.strip().str.lower().str.contains("void", na=False)
+        voided_in_file = {str(s).strip() for s in raw.loc[is_void, "SOP Number"].dropna() if str(s).strip()}
+        sales = sales[~sales["SOP Number"].astype(str).str.strip().isin(voided_in_file)]
+    sop_numbers = {str(s).strip() for s in sales["SOP Number"]}
+    dedup_sops = sop_numbers | voided_in_file
+    if dedup_sops:
+        db.query(M.SalesLine).filter(M.SalesLine.sop_number.in_(dedup_sops)).delete(synchronize_session=False)
+    n = 0
+    now = _dt.datetime.utcnow()
+    for r in sales.to_dict("records"):
+        ext_price = float(r["Extended Price"]) if pd.notna(r["Extended Price"]) else None
+        ext_cost = float(r["Extended Cost"]) if pd.notna(r["Extended Cost"]) else None
+        db.add(M.SalesLine(
+            sop_type=str(r["SOP Type"]), sop_number=str(r["SOP Number"]).strip(),
+            item_number=str(r["Item Number"]).strip(), item_description=str(r["Item Description"]),
+            qty=float(r["QTY"]) if pd.notna(r["QTY"]) else None,
+            unit_price=float(r["Unit Price"]) if pd.notna(r["Unit Price"]) else None,
+            extended_price=ext_price, unit_cost=float(r["Unit Cost"]) if pd.notna(r["Unit Cost"]) else None,
+            extended_cost=ext_cost,
+            line_profit=(ext_price - ext_cost) if (ext_price is not None and ext_cost is not None) else None,
+            customer_number=str(r["Customer Number"]).strip(), customer_name=str(r["Customer Name"]).strip(),
+            document_date=r["Document Date"].date(), batch_number=str(r["Batch Number"]).strip().upper(),
+            associate=r["associate"], imported_at=now))
+        n += 1
+    if vcol is not None and dedup_sops:
+        db.query(M.VoidedInvoice).filter(M.VoidedInvoice.sop_number.in_(dedup_sops)).delete(synchronize_session=False)
+        for sop in voided_in_file:
+            db.add(M.VoidedInvoice(sop_number=sop, reported_at=now))
+    db.commit()
+    _ENGINE_CACHE.clear()
+    return dict(lines=n, tracked=int(sales["associate"].isin(sales_team).sum()),
+                orders=len(sop_numbers), voided=len(voided_in_file), has_void_col=vcol is not None)
+
+
 def get_settings(db):
     s = dict(DEFAULTS)
     for row in db.query(M.Setting).all():

@@ -1,36 +1,4 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>W&T Growth Backtest</title>
-<style>
-  :root{--bg:#f4f6f9;--card:#fff;--ink:#1f2733;--muted:#6b7785;--line:#e6ebf1;
-        --green:#1a9e5c;--red:#d63b3b;--blue:#2b6cb0;--blue-bg:#e8f1fb;--purple:#6b46c1;--purple-bg:#efe9fb;}
-  *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
-  header{background:#2a1d4d;color:#fff;padding:13px 22px;display:flex;align-items:center;gap:14px}
-  header .brand{font-weight:600;font-size:16px}
-  header .tag{background:var(--purple-bg);color:var(--purple);border-radius:20px;padding:2px 11px;font-size:11.5px;font-weight:700}
-  header .right{margin-left:auto;font-size:12.5px;color:#bfb3e0}
-  header .right a{color:#bfb3e0}
-  .wrap{max-width:1040px;margin:0 auto;padding:20px 18px 60px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
-  h2{margin:0 0 4px;font-size:16px} .hint{color:var(--muted);font-size:12.5px;margin:0 0 12px;line-height:1.55}
-  table{width:100%;border-collapse:collapse;font-size:13.5px}
-  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
-  th{color:var(--muted);font-weight:600;font-size:12px} td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
-  tfoot th{border-top:2px solid var(--line);color:var(--ink);font-size:13px}
-  .pos{color:var(--green)} .neg{color:var(--red)} .mut{color:var(--muted)}
-  .pbar{display:flex;align-items:center;gap:14px}
-  .pbar .mid{text-align:center;flex:1} .pbar .ttl{font-size:15px;font-weight:600}
-  .pnav{display:inline-block;padding:6px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--blue);text-decoration:none;font-size:13px;font-weight:600}
-  .pnav:hover{background:var(--blue-bg)} .pnav.dis{color:#b8c2cf;background:#f7f9fb;pointer-events:none}
-  .psel{font-size:12.5px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:#fff}
-  footer{color:var(--muted);font-size:11.5px;text-align:center;padding:14px}
-</style></head><body>
-<header>
-  <span class="brand">W&T Growth Backtest</span>
-  <span class="tag">backtest — pays nothing</span>
-  <span class="right">{{ user.username }} · <a href="/logout">log out</a></span>
-</header>
-<div class="wrap">
+{% extends "backtest_base.html" %}{% block body %}
 
 <div class="card">
   <div class="pbar">
@@ -48,16 +16,17 @@
 
 <div class="card">
   <h2>Team — {{ m }}</h2>
-  <p class="hint"><b>The rule:</b> a rep's growth = the profit change of <b>ALL their accounts added together</b>
-    (account 1 + account 2 + …, each vs the <b>same account a year ago</b>, split by work-share when accounts are
-    shared). If the net is <b>positive</b>, bonus = <b>{{ '%.0f'|format(rate*100) }}%</b> of the net increase —
-    trued up each month on the book's running peak, never clawed back. If the net is <b>negative</b>, <b>$0</b>
-    (one growing account can't pay out while the rest of the book shrinks more).</p>
+  <p class="hint"><b>Growth:</b> a rep's growth = the profit change of <b>ALL their accounts added together</b>
+    (each vs the <b>same account a year ago</b>, work-share split; limited-stock items excluded from both years).
+    Net positive → <b>{{ '%.0f'|format(rate*100) }}%</b> of the net increase, trued up on the book's running peak,
+    never clawed back; net negative → <b>$0</b>. Plus <b>Contribution</b> (line items × rate) and
+    <b>Acquisition</b> (flat bonus at the quarter mark for confirmed rep-won new accounts — see New accounts tab).</p>
   <table>
     <thead><tr><th>Rep</th>
-      <th class="num">Book profit this month</th><th class="num">Same accounts, same month last yr</th>
+      <th class="num">Book profit this month</th><th class="num">Same accounts last yr</th>
       <th class="num">Net gap this month</th><th class="num">Cumulative net gap</th>
-      <th class="num">Pay this month</th><th class="num">Cumulative pay</th></tr></thead>
+      <th class="num">Growth pay</th><th class="num">Contribution</th><th class="num">Acquisition</th>
+      <th class="num">Total this month</th></tr></thead>
     <tbody>
     {% for x in rows %}
       <tr>
@@ -66,11 +35,13 @@
         <td class="num mut">${{ '{:,.0f}'.format(x.profit_mo_ly) }}</td>
         <td class="num {{ 'neg' if x.gap_mo < 0 else ('pos' if x.gap_mo > 0 else 'mut') }}">{{ '−$' + '{:,.0f}'.format(-x.gap_mo) if x.gap_mo < 0 else '$' + '{:,.0f}'.format(x.gap_mo) }}</td>
         <td class="num {{ 'neg' if x.cum_gap < 0 else '' }}">{{ '−$' + '{:,.0f}'.format(-x.cum_gap) if x.cum_gap < 0 else '$' + '{:,.0f}'.format(x.cum_gap) }}</td>
-        <td class="num"><strong>${{ '{:,.0f}'.format(x.pay_mo) }}</strong></td>
-        <td class="num mut">${{ '{:,.0f}'.format(x.cum_pay) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(x.pay_mo) }}</td>
+        <td class="num">${{ '{:,.2f}'.format(x.contrib_mo) }} <span class="mut">({{ '{:,}'.format(x.n_items) }})</span></td>
+        <td class="num">{% if x.acq_mo > 0 %}${{ '{:,.0f}'.format(x.acq_mo) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+        <td class="num"><strong>${{ '{:,.0f}'.format(x.total_mo) }}</strong></td>
       </tr>
     {% else %}
-      <tr><td colspan="7" class="mut">No data.</td></tr>
+      <tr><td colspan="9" class="mut">No data.</td></tr>
     {% endfor %}
     </tbody>
     {% if rows %}
@@ -81,26 +52,27 @@
       <th class="num {{ 'neg' if team.gap_mo < 0 }}">{{ '−$' + '{:,.0f}'.format(-team.gap_mo) if team.gap_mo < 0 else '$' + '{:,.0f}'.format(team.gap_mo) }}</th>
       <th class="num {{ 'neg' if team.cum_gap < 0 }}">{{ '−$' + '{:,.0f}'.format(-team.cum_gap) if team.cum_gap < 0 else '$' + '{:,.0f}'.format(team.cum_gap) }}</th>
       <th class="num">${{ '{:,.0f}'.format(team.pay_mo) }}</th>
-      <th class="num">${{ '{:,.0f}'.format(team.cum_pay) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(team.contrib_mo) }} <span class="mut">({{ '{:,}'.format(team.n_items) }})</span></th>
+      <th class="num">${{ '{:,.0f}'.format(team.acq_mo) }}</th>
+      <th class="num">${{ '{:,.0f}'.format(team.total_mo) }}</th>
     </tr></tfoot>
     {% endif %}
   </table>
   <p class="hint" style="margin-top:10px"><b>Book profit</b> = the accounts the rep works this cycle, at their
     work-share — and the <b>last-year column is those SAME accounts</b> (even if someone else sold them then), so
-    every row subtracts cleanly: <b>net gap = book this yr − same accounts last yr</b>. Limited-stock items are
-    excluded from <b>both</b> years (a "couldn't ship it" decline isn't charged to the rep).
-    <b>Pay this month</b> = {{ '%.0f'|format(rate*100) }}% × new ground above the book's previous cumulative peak;
-    a red (negative) month pays $0 and is never clawed back.</p>
+    every row subtracts cleanly: <b>net gap = book this yr − same accounts last yr</b>.
+    <b>Growth pay</b> = {{ '%.0f'|format(rate*100) }}% × new ground above the book's previous cumulative peak; a
+    red (negative) month pays $0 and is never clawed back.</p>
 </div>
 
 <div class="card">
   <h2>Pay on collection <span class="mut" style="font-weight:400;font-size:12px">— bonus is only payable on money that actually came in</span></h2>
-  <p class="hint">Same rule as the scorecard's Collections page: the cycle's earned growth is a <b>target</b>;
-    what's payable <b>now</b> scales by the share of the rep's cycle billing that has actually been
-    <b>collected</b> (per the latest receivables upload). As invoices pay, the % rises and the remainder
-    releases — a true-up that never overpays. A voided or written-off invoice never counts.</p>
+  <p class="hint">The cycle's earned bonus (all three pieces) is a <b>target</b>; what's payable <b>now</b> scales
+    by the share of the rep's cycle billing that has actually been <b>collected</b> (per the latest receivables
+    upload). As invoices pay, the % rises and the remainder releases — a true-up that never overpays. Voided or
+    written-off invoices never count.</p>
   <table>
-    <thead><tr><th>Rep</th><th class="num">Earned (cycle)</th><th class="num">Collected %</th><th class="num">Payable now</th><th class="num">Releases on collection</th></tr></thead>
+    <thead><tr><th>Rep</th><th class="num">Earned (cycle, all pieces)</th><th class="num">Collected %</th><th class="num">Payable now</th><th class="num">Releases on collection</th></tr></thead>
     <tbody>
     {% for x in rows %}
       <tr>
@@ -138,7 +110,4 @@
     staff who left (e.g. Maple Tran) keep their full history, so whoever inherits them isn't paid for "growth"
     that is really just a handover.</p>
 </div>
-
-<footer>W&T Growth Backtest · standalone preview on live data · the scorecard app is unaffected</footer>
-</div>
-</body></html>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "backtest_base.html" %}{% block body %}
+<div class="card">
+  <h2>New accounts — assigned vs self-earned</h2>
+  <p class="hint">Every account whose <b>first-ever sale</b> falls in (or just before) the backtest window.
+    Confirm the ones the rep genuinely <b>won</b> — those earn the flat acquisition bonus at the ~quarter mark
+    (first-sale month + 2), sized by the account's annualized run-rate. Unreviewed or <b>house</b> (inbound /
+    company-assigned) accounts pay no acquisition bonus. Their profit still feeds the growth net either way
+    (a brand-new account has no year-ago, so its whole profit is its gap).</p>
+  <table>
+    <thead><tr><th>Customer</th><th>Rep</th><th>First order</th><th class="num">First-8-wk revenue</th>
+      <th class="num">Annualized</th><th>Tier</th><th class="num">Flat $</th><th>Pays in</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.customer }}</td>
+        <td>{{ r.rep }}</td>
+        <td class="mut">{{ r.first_order }}</td>
+        <td class="num">${{ '{:,.0f}'.format(r.rev8) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(r.annualized) }}</td>
+        <td>{{ r.tier }}</td>
+        <td class="num">${{ '{:,.0f}'.format(r.flat) }}</td>
+        <td class="mut">{{ r.pay_month }}</td>
+        <td>{% if r.status == 'rep-won' %}<span class="badge b-ok">rep-won ✓</span>
+            {% elif r.status == 'house' %}<span class="badge b-warn">house</span>
+            {% else %}<span class="badge b-new">unreviewed</span>{% endif %}</td>
+        <td style="white-space:nowrap">
+          <form method="post" action="/acquisitions/flag" style="display:inline;margin:0">
+            <input type="hidden" name="account" value="{{ r.account }}"><input type="hidden" name="rep_won" value="yes">
+            <button type="submit" class="ghost" {{ 'disabled' if r.status=='rep-won' }}>rep-won</button></form>
+          <form method="post" action="/acquisitions/flag" style="display:inline;margin:0">
+            <input type="hidden" name="account" value="{{ r.account }}"><input type="hidden" name="rep_won" value="no">
+            <button type="submit" class="ghost" {{ 'disabled' if r.status=='house' }}>house</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="10" class="mut">No new accounts in the window.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

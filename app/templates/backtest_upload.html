@@ -1,0 +1,37 @@
+{% extends "backtest_base.html" %}{% block body %}
+<div class="card" style="max-width:680px">
+  <h2>Import — monthly data drop</h2>
+  <p class="hint">Three files, same as always (from Dynamics GP). The sales importer here keeps <b>every</b>
+    invoice — rows from staff who left carry no bonus credit but preserve each account's true history, so
+    inherited accounts never show phantom growth. Re-uploading a file safely replaces what it covers.
+    {% if imported_at %}<br>Data now: <b>{{ '{:,}'.format(n_lines) }}</b> sales lines (last import
+    {{ imported_at.strftime('%Y-%m-%d %H:%M') }} UTC) · <b>{{ '{:,}'.format(n_collected) }}</b> collected invoices.{% endif %}</p>
+
+  {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+  <h3>1 · Sales invoices (XLSX)</h3>
+  <p class="hint">The item-level invoices export. If it has a <b>Void Status</b> column, voided invoices are
+    excluded and recorded automatically.</p>
+  <form method="post" action="/upload" enctype="multipart/form-data" style="margin-bottom:18px">
+    <input type="file" name="sales_file" accept=".xlsx,.XLSX" required>
+    <button type="submit">Import sales</button>
+  </form>
+
+  {% if ar_msg %}<div class="msg">{{ ar_msg }}</div>{% endif %}
+  <h3>2 · Paid invoices / receivables (XLSX)</h3>
+  <p class="hint">The cumulative <b>paid</b> report. Each upload replaces the collected set (a reversed payment
+    drops back out). Drives the <b>Payable now</b> column.</p>
+  <form method="post" action="/upload-receivables" enctype="multipart/form-data" style="margin-bottom:18px">
+    <input type="file" name="ar_file" accept=".xlsx,.XLSX" required>
+    <button type="submit">Import paid</button>
+  </form>
+
+  {% if void_msg %}<div class="msg">{{ void_msg }}</div>{% endif %}
+  <h3>3 · Voided invoices (XLSX)</h3>
+  <p class="hint">Must include a <b>Void Status</b> column (a file without one is rejected). Voided invoices
+    count toward nothing.</p>
+  <form method="post" action="/upload-voided" enctype="multipart/form-data">
+    <input type="file" name="voided_file" accept=".xlsx,.XLSX" required>
+    <button type="submit">Import voided</button>
+  </form>
+</div>
+{% endblock %}

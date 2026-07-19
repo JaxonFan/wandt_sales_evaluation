@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>W&T Growth Backtest</title>
+<style>
+  :root{--bg:#f4f6f9;--card:#fff;--ink:#1f2733;--muted:#6b7785;--line:#e6ebf1;
+        --green:#1a9e5c;--green-bg:#e7f6ee;--red:#d63b3b;--blue:#2b6cb0;--blue-bg:#e8f1fb;
+        --amber:#c98a00;--amber-bg:#fbf2dd;--purple:#6b46c1;--purple-bg:#efe9fb;}
+  *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:#2a1d4d;color:#fff;padding:13px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header .brand{font-weight:600;font-size:16px}
+  header .tag{background:var(--purple-bg);color:var(--purple);border-radius:20px;padding:2px 11px;font-size:11.5px;font-weight:700}
+  header nav a{color:#bfb3e0;text-decoration:none;font-size:13.5px;margin-right:14px}
+  header nav a:hover,header nav a.on{color:#fff}
+  header .right{margin-left:auto;font-size:12.5px;color:#bfb3e0}
+  header .right a{color:#bfb3e0}
+  .wrap{max-width:1080px;margin:0 auto;padding:20px 18px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+  h2{margin:0 0 4px;font-size:16px} h3{margin:14px 0 4px;font-size:14px}
+  .hint{color:var(--muted);font-size:12.5px;margin:0 0 12px;line-height:1.55}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px} td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tfoot th{border-top:2px solid var(--line);color:var(--ink);font-size:13px}
+  .pos{color:var(--green)} .neg{color:var(--red)} .mut{color:var(--muted)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:700}
+  .b-ok{background:var(--green-bg);color:var(--green)} .b-warn{background:var(--amber-bg);color:var(--amber)}
+  .b-new{background:var(--blue-bg);color:var(--blue)}
+  .pbar{display:flex;align-items:center;gap:14px}
+  .pbar .mid{text-align:center;flex:1} .pbar .ttl{font-size:15px;font-weight:600}
+  .pnav{display:inline-block;padding:6px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--blue);text-decoration:none;font-size:13px;font-weight:600}
+  .pnav:hover{background:var(--blue-bg)} .pnav.dis{color:#b8c2cf;background:#f7f9fb;pointer-events:none}
+  .psel{font-size:12.5px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:#fff}
+  input[type=file]{font-size:13px}
+  button{padding:6px 13px;border:1px solid var(--blue);background:var(--blue);color:#fff;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600}
+  button.ghost{background:#fff;color:#445;border-color:var(--line)}
+  .msg{background:var(--green-bg);color:var(--green);border-radius:8px;padding:9px 13px;font-size:13px;margin:0 0 12px}
+  .guide-body{font-size:13.5px;line-height:1.7;max-width:800px}
+  .guide-body code{background:#f0f2f6;border-radius:4px;padding:1px 5px}
+  footer{color:var(--muted);font-size:11.5px;text-align:center;padding:14px}
+</style></head><body>
+<header>
+  <span class="brand">W&T Growth Backtest</span>
+  <span class="tag">preview — pays nothing</span>
+  <nav>
+    <a href="/" class="{{ 'on' if page=='dash' }}">Dashboard</a>
+    <a href="/acquisitions" class="{{ 'on' if page=='acq' }}">New accounts</a>
+    <a href="/upload" class="{{ 'on' if page=='upload' }}">Import</a>
+    <a href="/guide" class="{{ 'on' if page=='guide' }}">Manager guide</a>
+  </nav>
+  <span class="right">{{ user.username }} · <a href="/logout">log out</a></span>
+</header>
+<div class="wrap">{% block body %}{% endblock %}</div>
+<footer>W&T Growth Backtest · standalone preview on live data · the scorecard app is unaffected</footer>
+</body></html>
