@@ -55,7 +55,7 @@
     (one growing account can't pay out while the rest of the book shrinks more).</p>
   <table>
     <thead><tr><th>Rep</th>
-      <th class="num">Profit this month</th><th class="num">Same month last yr</th>
+      <th class="num">Book profit this month</th><th class="num">Same accounts, same month last yr</th>
       <th class="num">Net gap this month</th><th class="num">Cumulative net gap</th>
       <th class="num">Pay this month</th><th class="num">Cumulative pay</th></tr></thead>
     <tbody>
@@ -85,10 +85,12 @@
     </tr></tfoot>
     {% endif %}
   </table>
-  <p class="hint" style="margin-top:10px"><b>Profit this month</b> = the rep's own attributed sales profit (context).
-    <b>Net gap</b> = their whole book vs the same accounts a year ago (this is what the bonus is computed on —
-    includes accounts they share, at their work-share). <b>Pay this month</b> = {{ '%.0f'|format(rate*100) }}% ×
-    new ground above the book's previous cumulative peak; a red (negative) month pays $0 and is never clawed back.</p>
+  <p class="hint" style="margin-top:10px"><b>Book profit</b> = the accounts the rep works this cycle, at their
+    work-share — and the <b>last-year column is those SAME accounts</b> (even if someone else sold them then), so
+    every row subtracts cleanly: <b>net gap = book this yr − same accounts last yr</b>. Limited-stock items are
+    excluded from <b>both</b> years (a "couldn't ship it" decline isn't charged to the rep).
+    <b>Pay this month</b> = {{ '%.0f'|format(rate*100) }}% × new ground above the book's previous cumulative peak;
+    a red (negative) month pays $0 and is never clawed back.</p>
 </div>
 
 <footer>W&T Growth Backtest · standalone preview on live data · the scorecard app is unaffected</footer>

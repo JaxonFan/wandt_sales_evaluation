@@ -8,7 +8,6 @@ The model (the manager's rule): for each rep, sum the profit gap of ALL accounts
 (trued up on the book's running peak, never clawed back); if negative, $0. Backtest window: Jan-Jun 2026 vs 2025.
 """
 import os
-import pandas as pd
 from fastapi import FastAPI, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -72,24 +71,16 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         m = months[-1]
     mi = months.index(m)
 
-    # per-rep attributed profit for the selected month, this year and the same month last year (context columns)
-    df = service.active_lines(db)
-    per = pd.Period(m, "M")
-    ym = df["document_date"].dt.to_period("M")
-    _, _, team = service.attribution_maps(db)
-    this_mo = df[(ym == per) & df["associate"].isin(team)].groupby("associate")["line_profit"].sum()
-    last_mo = df[(ym == per - 12) & df["associate"].isin(team)].groupby("associate")["line_profit"].sum()
-
     rows = []
     for _, x in r["reps"].iterrows():
         rep = x["associate"]
-        traj = r["trajectory"][rep]
-        t = traj[mi]
-        prev_cum = traj[mi - 1]["cum_growth"] if mi > 0 else 0.0
+        t = r["trajectory"][rep][mi]
+        # ty_book/ly_book = the rep's BOOK this month, share-weighted over the SAME accounts both years,
+        # so the row subtracts cleanly: net gap == book this yr - same accounts last yr.
         rows.append(dict(
             associate=rep,
-            profit_mo=float(this_mo.get(rep, 0.0)), profit_mo_ly=float(last_mo.get(rep, 0.0)),
-            gap_mo=float(t["cum_growth"]) - float(prev_cum),
+            profit_mo=float(t["ty_book"]), profit_mo_ly=float(t["ly_book"]),
+            gap_mo=float(t["ty_book"]) - float(t["ly_book"]),
             cum_gap=float(t["cum_growth"]),
             pay_mo=float(t["pay"]), cum_pay=float(t["cum_pay"]),
         ))

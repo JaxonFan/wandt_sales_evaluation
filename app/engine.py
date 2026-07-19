@@ -543,7 +543,8 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
 
 
 def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative_rate,
-                              young_account_pct, young_account_months=12):
+                              young_account_pct, young_account_months=12,
+                              constrained_item_numbers=frozenset()):
     """Cumulative profit-growth model (the 'what-if' replacement for the Growth piece).
 
     Measured PER ACCOUNT against the SAME account a year ago (not per-rep totals — 35% of the book
@@ -571,7 +572,9 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
     if not len(df):
         return empty
 
-    d = df[df["document_date"] <= as_of].copy()
+    # limited-stock items are removed from BOTH years (apples-to-apples): a decline caused by
+    # "couldn't ship it" isn't charged to the rep, and last year's sales of it don't raise the bar.
+    d = exclude_constrained_items(df[df["document_date"] <= as_of], constrained_item_numbers).copy()
     d["ym"] = d["document_date"].dt.to_period("M")
     months = list(pd.period_range(fiscal_start.to_period("M"), as_of.to_period("M"), freq="M"))
     if not months:
@@ -607,11 +610,14 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
         is_young = bool(first_sale.get(acct, as_of) > young_cut)
         # raw cumulative gap trajectory (this-year running total - last-year running total), NO per-account
         # floor: declines carry their sign so they NET against the rep's growers.
-        cum, s_ty, s_ly = [], 0.0, 0.0
+        cum, mo_ty, mo_ly, s_ty, s_ly = [], [], [], 0.0, 0.0
         for i in range(len(months)):
-            s_ty += aprof(acct, months[i]); s_ly += aprof(acct, ly_months[i])
+            ty_i, ly_i = aprof(acct, months[i]), aprof(acct, ly_months[i])
+            mo_ty.append(ty_i); mo_ly.append(ly_i)
+            s_ty += ty_i; s_ly += ly_i
             cum.append(s_ty - s_ly)
         per_acct[acct] = dict(shares=shares, primary=primary, is_young=is_young, cum=cum,
+                              mo_ty=mo_ty, mo_ly=mo_ly,
                               gap=cum[-1] if cum else 0.0, ty_profit=s_ty, ly_profit=s_ly)
 
     reps, trajectory = [], {}
@@ -624,7 +630,11 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
             pay = cumulative_rate * max(0.0, net_traj[i] - run_max)
             run_max = max(run_max, net_traj[i])
             cum_pay += pay
-            rows.append(dict(month=str(m), pay=pay, cum_pay=cum_pay, cum_growth=net_traj[i]))
+            # the rep's BOOK this month, both years (share-weighted, same accounts) -> ty - ly == the month gap
+            ty_book = sum(v["mo_ty"][i] * v["shares"][rep] for _, v in held)
+            ly_book = sum(v["mo_ly"][i] * v["shares"][rep] for _, v in held)
+            rows.append(dict(month=str(m), pay=pay, cum_pay=cum_pay, cum_growth=net_traj[i],
+                             ty_book=ty_book, ly_book=ly_book))
         trajectory[rep] = rows
         net_final = net_traj[-1] if net_traj else 0.0
         reps.append(dict(associate=rep, n_accounts=len(held),

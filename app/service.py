@@ -525,7 +525,8 @@ def run_cumulative_growth(db):
         yr = as_of.year if as_of.month >= fmonth else as_of.year - 1
         fiscal_start = pd.Timestamp(year=yr, month=fmonth, day=1)
         res = compute_cumulative_growth(df, fiscal_start, as_of, team, cumulative_rate=rate,
-                                        young_account_pct=young_pct, young_account_months=young_months)
+                                        young_account_pct=young_pct, young_account_months=young_months,
+                                        constrained_item_numbers=get_constrained_items(db))
         res["current_growth"] = _current_growth_by_rep(db, fiscal_start, as_of)
         return res
 

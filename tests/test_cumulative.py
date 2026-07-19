@@ -109,6 +109,32 @@ def test_trueup_pays_the_net_peak_and_pauses_after():
     assert [row["cum_pay"] for row in traj] == sorted(row["cum_pay"] for row in traj)
 
 
+def test_constrained_item_excluded_from_both_years():
+    # base flat book + item "SHORT" that the company couldn't supply this year (sold last year only):
+    # unconstrained, that reads as a decline; constrained, it's removed from BOTH years -> ~flat, apples-to-apples.
+    base = mk("A", "Rep A", "BASE", HIST, AS_OF, 7, 100, 90)
+    short_ly = mk("A", "Rep A", "SHORT", HIST, FISCAL - DAY, 7, 60, 40)     # $20/wk profit, stops at cycle start
+    df = df_from(base + short_ly)
+    plain = engine.compute_cumulative_growth(df, FISCAL, AS_OF, ["Rep A"], cumulative_rate=RATE,
+                                             young_account_pct=RATE)
+    fixed = engine.compute_cumulative_growth(df, FISCAL, AS_OF, ["Rep A"], cumulative_rate=RATE,
+                                             young_account_pct=RATE, constrained_item_numbers=["SHORT"])
+    assert rep_row(plain, "Rep A")["cum_growth"] < -700       # unconstrained: charged the missing item
+    assert abs(rep_row(fixed, "Rep A")["cum_growth"]) < 45    # constrained: symmetric removal -> ~flat
+
+
+def test_book_columns_subtract_to_the_gap():
+    # trajectory ty_book/ly_book must satisfy: ty - ly == the month's net-gap step (display consistency)
+    lines = (mk("G", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("G", "Rep A", "X", FISCAL, AS_OF, 7, 115, 100))
+    res = run(df_from(lines), ["Rep A"])
+    traj = res["trajectory"]["Rep A"]
+    prev = 0.0
+    for t in traj:
+        assert t["ty_book"] - t["ly_book"] == pytest.approx(t["cum_growth"] - prev, abs=1e-6)
+        prev = t["cum_growth"]
+
+
 def test_net_down_book_pays_zero():
     # a book that's below last year the whole cycle earns $0 (never negative pay)
     shr = (mk("SHR", "Rep A", "Y", HIST, FISCAL - DAY, 7, 115, 100)
