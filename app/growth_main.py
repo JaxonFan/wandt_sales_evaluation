@@ -71,10 +71,24 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         m = months[-1]
     mi = months.index(m)
 
+    # pay-on-collection (same scaling model as the main app's Collections page): a rep's earned growth is a
+    # TARGET; what's payable NOW scales by the fraction of their cycle billing that has actually collected.
+    # As invoices pay, the fraction rises toward 100% and the remainder releases (true-up, never overpays).
+    df = service.active_lines(db)
+    win = df[(df["document_date"] >= r["fiscal_start"]) & (df["document_date"] <= r["as_of"])]
+    _, _, team = service.attribution_maps(db)
+    win = win[win["associate"].isin(team)]
+    coll = {str(s) for s in service.collected_set(db)}
+    billed = win.groupby("associate")["extended_price"].sum()
+    collected = win[win["sop_number"].astype(str).isin(coll)].groupby("associate")["extended_price"].sum()
+
     rows = []
     for _, x in r["reps"].iterrows():
         rep = x["associate"]
         t = r["trajectory"][rep][mi]
+        earned_cycle = float(r["trajectory"][rep][-1]["cum_pay"])
+        b = float(billed.get(rep, 0.0))
+        frac = min(1.0, float(collected.get(rep, 0.0)) / b) if b > 0 else 0.0
         # ty_book/ly_book = the rep's BOOK this month, share-weighted over the SAME accounts both years,
         # so the row subtracts cleanly: net gap == book this yr - same accounts last yr.
         rows.append(dict(
@@ -83,10 +97,12 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
             gap_mo=float(t["ty_book"]) - float(t["ly_book"]),
             cum_gap=float(t["cum_growth"]),
             pay_mo=float(t["pay"]), cum_pay=float(t["cum_pay"]),
+            earned_cycle=earned_cycle, collected_pct=frac * 100.0, payable_now=earned_cycle * frac,
         ))
     rows.sort(key=lambda z: -z["cum_pay"])
     team_row = {k: sum(z[k] for z in rows) for k in
-                ("profit_mo", "profit_mo_ly", "gap_mo", "cum_gap", "pay_mo", "cum_pay")}
+                ("profit_mo", "profit_mo_ly", "gap_mo", "cum_gap", "pay_mo", "cum_pay",
+                 "earned_cycle", "payable_now")}
     nav = dict(prev=(months[mi - 1] if mi > 0 else None), next=(months[mi + 1] if mi + 1 < len(months) else None),
                n=mi + 1, total=len(months))
     return templates.TemplateResponse("backtest.html", {
