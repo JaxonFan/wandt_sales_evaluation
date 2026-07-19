@@ -635,7 +635,11 @@ async def upload(request: Request, sales_file: UploadFile = File(...), db: Sessi
         sales[col] = pd.to_numeric(sales[col], errors="coerce")
     sales["Document Date"] = pd.to_datetime(sales["Document Date"], errors="coerce")
     sales["associate"] = sales["Batch Number"].apply(lambda b: service.resolve_associate(b, prefix_map, variant_map))
-    sales = sales[sales["associate"].isin(sales_team)].dropna(subset=["Document Date"])
+    # Keep EVERY invoice — including ones from inactive/untracked people (e.g. MT). They carry no bonus credit
+    # (every credit path gates on the active sales team), but they complete each account's true history so an
+    # account inherited from an untracked person doesn't show phantom growth against an empty baseline.
+    sales = sales.dropna(subset=["Document Date"])
+    sales["associate"] = sales["associate"].where(pd.notna(sales["associate"]), None)
     # if the invoices file carries a Void Status column, voided invoices are DELETED: don't import their lines,
     # and record them as voided so they're excluded from every bonus (and any already-imported copy is dropped).
     vcol = next((c for c in raw.columns if "void" in str(c).strip().lower()), None)
@@ -671,10 +675,13 @@ async def upload(request: Request, sales_file: UploadFile = File(...), db: Sessi
             db.add(M.VoidedInvoice(sop_number=sop, reported_at=dt.datetime.utcnow()))
     db.commit()
     service._ENGINE_CACHE.clear()
-    audit(db, user, "upload", "sales_lines", {"lines": n, "orders": len(sop_numbers), "voided": len(voided_in_file)})
+    n_tracked = int(sales["associate"].isin(sales_team).sum())
+    audit(db, user, "upload", "sales_lines", {"lines": n, "tracked": n_tracked,
+                                              "orders": len(sop_numbers), "voided": len(voided_in_file)})
     extra = f"; excluded {len(voided_in_file):,} voided invoices" if vcol is not None else ""
     return templates.TemplateResponse("upload.html", {"request": request, "user": user,
-        "msg": f"Imported {n:,} rep sales lines across {len(sop_numbers):,} orders{extra}."})
+        "msg": f"Imported {n:,} sales lines across {len(sop_numbers):,} orders "
+               f"({n_tracked:,} credited to tracked reps; the rest are history-only){extra}."})
 
 
 @app.post("/upload-receivables")

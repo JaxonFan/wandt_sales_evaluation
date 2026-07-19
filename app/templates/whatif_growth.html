@@ -4,10 +4,11 @@
   <p class="hint">A read-only sandbox for the proposed replacement of the Growth piece. Nothing here is paid or
     recorded — it shows how the model would score the cycle on live data, beside today's number.
     <b>The rule:</b> each account's <b>cumulative profit this cycle</b> is compared to <b>what that same account
-    did a year ago</b>, month by month; you're paid <b>{{ '%.1f'|format(rate*100) }}% of the increment</b>, split
-    among the reps working it by <b>work-share</b>. It's a <b>progressive true-up</b> — each month pays only the
-    new ground above the prior peak, so a down month just pauses pay (<b>never clawed back</b>). A flat account
-    pays ~$0; a brand-new account has no year-ago, so its whole profit counts as the increment.</p>
+    did a year ago</b>, month by month, split among the reps working it by <b>work-share</b> — then <b>netted
+    within each rep's own book</b>: your declining accounts offset your growers, and you're paid
+    <b>{{ '%.1f'|format(rate*100) }}% of your NET increment</b>. It's a <b>progressive true-up</b> — each month
+    pays only new ground above your book's prior peak, so a down month pauses pay (<b>never clawed back</b>). A
+    flat account adds ~$0; a brand-new account has no year-ago, so its whole profit feeds your net.</p>
   <p class="hint" style="background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 12px">
     <b>Window:</b> {{ fiscal_start.strftime('%b %Y') }} → {{ as_of.strftime('%b %Y') }} vs the same months a year
     earlier. This is a <b>retroactive check</b> (anchored to {{ fiscal_start.strftime('%B') }}) until the
@@ -23,9 +24,9 @@
 
 <div class="card">
   <h2>Per rep</h2>
-  <p class="hint">Growth credit = Σ over your accounts of <b>{{ '%.1f'|format(rate*100) }}%</b> × each account's
-    peak cumulative gap (this cycle vs a year ago) × your work-share. <b>Payable</b> is never negative — a
-    shrinking account contributes $0, it doesn't drag down your growers.</p>
+  <p class="hint"><b>Cumulative growth</b> = your book's NET gap (growers minus decliners, each × your
+    work-share) — negative means your book is behind last year. <b>Payable</b> = {{ '%.1f'|format(rate*100) }}% ×
+    the highest net gap your book reached this cycle (floored at $0 — a decline pauses pay, never claws back).</p>
   <table>
     <thead><tr><th>Rep</th><th class="num">Accounts</th><th class="num">New (&lt;1yr)</th><th class="num">Cumulative growth</th><th class="num">What-if payable</th><th class="num">Today's growth</th></tr></thead>
     <tbody>
@@ -34,7 +35,7 @@
         <td>{{ x.associate }}</td>
         <td class="num">{{ x.n_accounts }}</td>
         <td class="num mut">{{ x.n_young }}</td>
-        <td class="num">${{ '{:,.0f}'.format(x.cum_growth) }}</td>
+        <td class="num">{% if x.cum_growth < 0 %}<span class="neg">−${{ '{:,.0f}'.format(-x.cum_growth) }}</span>{% else %}${{ '{:,.0f}'.format(x.cum_growth) }}{% endif %}</td>
         <td class="num"><b>${{ '{:,.0f}'.format(x.payable) }}</b></td>
         <td class="num mut">${{ '{:,.0f}'.format(x.today) }}</td>
       </tr>
@@ -48,8 +49,8 @@
 <div class="card">
   <h2>Month-by-month · every rep <span class="mut" style="font-weight:400;font-size:12px">— the breakdown, side by side</span></h2>
   <p class="hint">Each cell is that rep's number for the month. Toggle between <b>pay</b> (the trued-up increment
-    that month — a month where none of the rep's accounts hit a new high is <b>$0</b>) and <b>cumulative growth</b>
-    (the running profit gap vs a year ago). The <b>Total</b> row is each rep's cycle payable.</p>
+    that month — a month where the rep's NET book doesn't hit a new high is <b>$0</b>) and <b>cumulative growth</b>
+    (the running net gap vs a year ago; red = behind last year). The <b>Total</b> row is each rep's cycle payable.</p>
   <div style="margin-bottom:10px">
     <button type="button" class="mx-tog" data-view="pay">Monthly pay</button>
     <button type="button" class="mx-tog ghost" data-view="growth">Cumulative growth</button>
@@ -61,27 +62,30 @@
       <tr>
         <td>{{ row.month }}</td>
         {% for name in rep_names %}
-        <td class="num"><span class="v-pay">${{ '{:,.0f}'.format(row.pay[loop.index0]) }}</span><span class="v-growth" style="display:none">${{ '{:,.0f}'.format(row.cum_growth[loop.index0]) }}</span></td>
+        {% set g = row.cum_growth[loop.index0] %}
+        <td class="num"><span class="v-pay">${{ '{:,.0f}'.format(row.pay[loop.index0]) }}</span><span class="v-growth {{ 'neg' if g < 0 }}" style="display:none">{{ '−$' + '{:,.0f}'.format(-g) if g < 0 else '$' + '{:,.0f}'.format(g) }}</span></td>
         {% endfor %}
-        <td class="num"><b><span class="v-pay">${{ '{:,.0f}'.format(row.team) }}</span><span class="v-growth" style="display:none">${{ '{:,.0f}'.format(row.cum_growth|sum) }}</span></b></td>
+        {% set tg = row.cum_growth|sum %}
+        <td class="num"><b><span class="v-pay">${{ '{:,.0f}'.format(row.team) }}</span><span class="v-growth {{ 'neg' if tg < 0 }}" style="display:none">{{ '−$' + '{:,.0f}'.format(-tg) if tg < 0 else '$' + '{:,.0f}'.format(tg) }}</span></b></td>
       </tr>
     {% endfor %}
     </tbody>
     <tfoot><tr style="border-top:2px solid var(--line)">
       <th>Total</th>
-      {% for name in rep_names %}<th class="num"><span class="v-pay">${{ '{:,.0f}'.format(totals.pay[loop.index0]) }}</span><span class="v-growth" style="display:none">${{ '{:,.0f}'.format(reps[loop.index0].cum_growth) }}</span></th>{% endfor %}
-      <th class="num"><span class="v-pay">${{ '{:,.0f}'.format(totals.team) }}</span><span class="v-growth" style="display:none">${{ '{:,.0f}'.format(team_cum) }}</span></th>
+      {% for name in rep_names %}{% set g = reps[loop.index0].cum_growth %}<th class="num"><span class="v-pay">${{ '{:,.0f}'.format(totals.pay[loop.index0]) }}</span><span class="v-growth {{ 'neg' if g < 0 }}" style="display:none">{{ '−$' + '{:,.0f}'.format(-g) if g < 0 else '$' + '{:,.0f}'.format(g) }}</span></th>{% endfor %}
+      <th class="num"><span class="v-pay">${{ '{:,.0f}'.format(totals.team) }}</span><span class="v-growth {{ 'neg' if team_cum < 0 }}" style="display:none">{{ '−$' + '{:,.0f}'.format(-team_cum) if team_cum < 0 else '$' + '{:,.0f}'.format(team_cum) }}</span></th>
     </tr></tfoot>
   </table>
 </div>
 
 <div class="card">
   <h2>Account detail <span class="mut" style="font-weight:400;font-size:12px">— what's driving each rep's number</span></h2>
-  <p class="hint">Sorted by growth credit (= peak cumulative gap). <span class="badge b-new">new</span> = &lt; 12
-    months old (no full year-ago, so its whole profit is the gap). A near-$0 credit on a big account means it's
-    flat vs last year — you earn by growing it, not holding it.</p>
+  <p class="hint">Sorted by gap (this cycle − the same account a year ago; red = below last year — it nets against
+    the holder's growers). <span class="badge b-new">new</span> = &lt; 12 months old (no full year-ago, so its
+    whole profit is the gap). A near-$0 gap on a big account means it's flat — you earn by growing it, not
+    holding it.</p>
   <table>
-    <thead><tr><th>Customer</th><th>Holder</th><th class="num">Profit this cycle</th><th class="num">Same acct a year ago</th><th class="num">Growth credit</th><th></th></tr></thead>
+    <thead><tr><th>Customer</th><th>Holder</th><th class="num">Profit this cycle</th><th class="num">Same acct a year ago</th><th class="num">Gap (nets in book)</th><th></th></tr></thead>
     <tbody>
     {% for a in detail %}
       <tr>
@@ -89,7 +93,7 @@
         <td>{{ a.holder }}</td>
         <td class="num">${{ '{:,.0f}'.format(a.ty_profit) }}</td>
         <td class="num mut">{% if a.is_young %}—{% else %}${{ '{:,.0f}'.format(a.ly_profit) }}{% endif %}</td>
-        <td class="num">${{ '{:,.0f}'.format(a.growth) }}</td>
+        <td class="num">{% if a.growth < 0 %}<span class="neg">−${{ '{:,.0f}'.format(-a.growth) }}</span>{% else %}${{ '{:,.0f}'.format(a.growth) }}{% endif %}</td>
         <td>{% if a.is_young %}<span class="badge b-new">new</span>{% endif %}</td>
       </tr>
     {% else %}

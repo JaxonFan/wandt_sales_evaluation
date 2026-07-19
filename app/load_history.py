@@ -59,8 +59,10 @@ def read_sales(db):
         sales[col] = pd.to_numeric(sales[col], errors="coerce")
     sales["Document Date"] = pd.to_datetime(sales["Document Date"])
     sales["associate"] = sales["Batch Number"].apply(lambda b: resolve_associate(b, prefix_map, variant_map))
-    sales = sales[sales["associate"].isin(sales_team)].copy()    # rep transactions only
-    return sales
+    # keep EVERY invoice: untracked/inactive people's rows carry no bonus credit (credit paths gate on the
+    # active team) but complete each account's true baseline history (no phantom growth on inherited accounts)
+    sales["associate"] = sales["associate"].where(pd.notna(sales["associate"]), None)
+    return sales.copy()
 
 
 def main():
