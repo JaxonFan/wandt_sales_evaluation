@@ -19,12 +19,14 @@
       $4,119 利润；2026 年这个客户转给了 Vanessa。它离开 An Cao 的账本时<b>连同基数一起离开</b>（不扣他的分），
       Vanessa 接手时<b>连同基数一起接手</b>（只有做过 $4,119 才有增长）。调客户对双方都不加分、不减分 ——
       离职员工（如 Maple Tran）的客户也一样保留历史。</li>
-    <li><b>整本账一起算。</b>一个客户涨不能掩盖其它客户跌 —— 客户1 + 客户2 + … 的净和才算数。
-      共同负责的客户按各自的业务占比拆分。</li>
+    <li><b>整本账一起算。</b>一个客户涨不能掩盖其它客户跌 —— 客户1 + 客户2 + … 的净和才算数。</li>
+    <li><b>共同负责的客户。</b>两个销售一起做一个客户时，这个客户的同比变化按各自当前的业务占比拆分 ——
+      这样年中换人也是中性的（客户的历史不会被重复发放）。</li>
     <li><b>逐月累计 + 补差发放。</b>每月比较累计数（今年至今 vs 去年同期至今），只对<b>超过之前高点的
       新增部分</b>发放。跌的月份 $0，<b>永不倒扣</b>。季节性自然抵消。</li>
-    <li><b>一次性大单：</b>发生时发放，第二年同期基数变高、自然抵消 —— 两年合计基本打平，销售最差也是 $0，
-      不会倒欠。</li>
+    <li><b>一次性大单：</b>客户偶尔下一笔特别大的订单，当年就照发 —— 是他们赚来的。第二年这笔通常不会重复，
+      账面会显得低一些；没关系，销售只是不会为同一笔生意再拿一次钱。而且奖金永远不会低于 $0，
+      所以一次性大单只会帮到销售，绝不会让他们倒亏。</li>
     <li><b>限购商品</b>（<a href="/constrained">Limited stock</a>）：两年都剔除 —— 缺货造成的下滑不算销售的，
       去年卖过的也不抬高基数。</li>
     <li><b>关店：</b>默认计入（真实的利润损失，销售是我们的预警系统）。确认无过失关店可以豁免 ——
@@ -44,6 +46,9 @@
     <li>大（年化 ≥ ${{ '{:,}'.format(tier_medium) }}）→ <b>${{ flat_large }}</b></li>
   </ul>
   <p>新客户没有去年基数，它的全部利润同时自动计入增长 —— 一次性奖励酬<b>开发</b>，增长奖酬<b>经营</b>。</p>
+  <p class="hint"><b>怎么区分是销售开发的还是客户自己打电话来的？</b>电话没法查证，所以我们不去猜。
+  <b>默认按 house（不发）</b>—— 需要销售主动申报一个真实的开发，由经理判断是否合理（是否在他的片区、
+  是否是他已经在做的连锁店的分店等）。影响很小：金额不大，而且不管算不算，客户的利润照样计入增长和开单。</p>
 
   <h3>按收款发放</h3>
   <p>以上都是<b>目标数</b>。实际可发 = 目标 × 该销售货款回收比例（来自应收上传）。款到多少、发多少，
@@ -71,12 +76,16 @@
       <i>with</i> its baseline (doesn't count against him) and she inherits it <i>with</i> the baseline
       (earns only above $4,119). Handoffs are neutral — including accounts from staff who left.</li>
     <li><b>Whole book, netted.</b> One growing account can't pay out while the rest of the book shrinks more —
-      account 1 + account 2 + … must be net positive. Shared accounts split by each rep's share of its profit.</li>
+      account 1 + account 2 + … must be net positive.</li>
+    <li><b>Shared accounts.</b> When two reps work the same account, that account's YoY change is split by each
+      rep's current share of it — so a mid-year handoff stays neutral (the account's history isn't double-paid).</li>
     <li><b>Cumulative + true-up.</b> Each month we compare the running totals (this year so far vs the same
       months last year) and pay only <b>new ground above the previous peak</b>. A down month pays $0 — and is
       <b>never clawed back</b>. Seasonality cancels out by construction.</li>
-    <li><b>One-off orders.</b> A one-time windfall pays when it happens and simply makes next year's compare
-      harder by the same amount — a wash over two years, and the floor at $0 means the rep can never owe.</li>
+    <li><b>One-time big orders.</b> If a customer places one unusually large order, the rep is paid on it that
+      year — they earned it. The next year that order usually won't repeat, so the account looks lower; that's
+      fine — the rep just isn't paid <i>again</i> for a sale that only happened once. Because a rep's bonus can
+      never drop below $0, a one-off can only ever help them, never cost them.</li>
     <li><b>Limited stock</b> (<a href="/constrained">tab</a>): flagged items are removed from <b>both</b> years —
       a "couldn't ship it" decline is not charged to the rep, and last year's sales of it don't raise the bar.</li>
     <li><b>Store closures.</b> By default a closure counts against the book (it's a real loss, and the rep is the
@@ -99,6 +108,10 @@
   </ul>
   <p>The new account's profit also feeds the growth net automatically (it has no year-ago, so its whole profit
   is its gap) — the flat bonus rewards the <i>landing</i>, growth rewards the <i>building</i>.</p>
+  <p class="hint"><b>How to tell rep-won from a call-in?</b> There's no way to verify a phone call, so we don't
+  try. The <b>default is house</b> (no bonus) — the rep must claim a genuine win and you decide if it's
+  plausible (their territory, a sister store they already serve, etc.). It's low-stakes on purpose: the amount is
+  small and the account earns growth + contribution regardless.</p>
 
   <h3>Pay on collection</h3>
   <p>Everything above is a <b>target</b>. What's actually payable scales with the share of the rep's billing

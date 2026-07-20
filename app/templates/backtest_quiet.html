@@ -1,0 +1,39 @@
+{% extends "backtest_base.html" %}{% block body %}
+{% set zh = mine and (lang != 'en') %}
+<div class="card">
+  <div style="display:flex;align-items:center;gap:10px">
+    <h2 style="margin:0">{{ '静默客户 — 好久没下单了' if zh else 'Quiet accounts — haven’t ordered in a while' }}</h2>
+    {% if mine %}<span class="mut" style="margin-left:auto;font-size:12.5px">
+      <a href="/me/quiet?lang=zh" {% if zh %}style="font-weight:700"{% endif %}>中文</a> ·
+      <a href="/me/quiet?lang=en" {% if not zh %}style="font-weight:700"{% endif %}>EN</a></span>{% endif %}
+  </div>
+  <p class="hint" style="margin-top:6px">
+    {% if zh %}这些客户已经超过<b>它自己平时下单间隔的 3 倍</b>还没下单（有的天天下、有的月月下，各自比各自）。
+    按<b>风险优先</b>排：又不下单<b>又欠着货款</b>（未付 &gt; 0）的最该先打电话；不下单但已结清（$0）多半是正常流失。
+    {% else %}Accounts silent for more than <b>3× their own normal order gap</b> (some order daily, some monthly).
+    Sorted <b>risky-first</b>: gone quiet <b>and still owing</b> (Unpaid &gt; 0) is the real loss risk; quiet but
+    paid-up ($0) is usually clean churn. Chase the top rows first.{% endif %}</p>
+  <table>
+    <thead><tr><th>{{ '客户' if zh else 'Customer' }}</th>
+      {% if not mine %}<th>Rep</th>{% endif %}
+      <th class="num">{{ '正常间隔(天)' if zh else 'Normal gap (d)' }}</th>
+      <th class="num">{{ '已静默(天)' if zh else 'Days silent' }}</th>
+      <th>{{ '最后下单' if zh else 'Last order' }}</th>
+      <th class="num">{{ '未付货款' if zh else 'Unpaid' }}</th></tr></thead>
+    <tbody>
+    {% for c in rows %}
+      <tr>
+        <td>{{ c.customer }}</td>
+        {% if not mine %}<td>{{ c.rep }}</td>{% endif %}
+        <td class="num mut">{{ c.median_gap_days }}</td>
+        <td class="num">{{ c.days_silent }}</td>
+        <td class="mut">{{ c.last_order }}</td>
+        <td class="num">{% if c.unpaid > 0 %}<b class="neg">${{ '{:,}'.format(c.unpaid) }}</b>{% else %}<span class="mut">$0</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="{{ 5 if mine else 6 }}" class="mut">{{ '目前没有静默客户。' if zh else 'No quiet accounts right now.' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

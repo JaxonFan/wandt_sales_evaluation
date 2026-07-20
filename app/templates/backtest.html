@@ -27,8 +27,8 @@
       <th class="num">Net gap this month</th><th class="num">Cumulative net gap</th>
       <th class="num">Growth pay</th><th class="num">Contribution</th><th class="num">Acquisition</th>
       <th class="num">Total this month</th>
-      <th class="num" title="Cycle earned (all three pieces) — the target the collection %% applies to">Earned (cycle)</th>
-      <th class="num" title="Share of the rep's cycle billing actually collected, per the latest receivables upload">Collected</th>
+      <th class="num" title="Earned so far this cycle (all three pieces), through {{ m }} — the target the collection %% applies to">Earned (to {{ m }})</th>
+      <th class="num" title="Share of the rep's billing through {{ m }} actually collected, per the latest receivables upload">Collected</th>
       <th class="num" title="Cumulative bonus already recorded as paid this cycle">Paid</th>
       <th class="num" title="Earned × collected %% − already paid; the rest releases as invoices pay">Payable now</th></tr></thead>
     <tbody>
@@ -47,7 +47,7 @@
         <td class="num mut">{{ '%.0f'|format(x.collected_pct) }}%</td>
         <td class="num mut">${{ '{:,.0f}'.format(x.paid) }}</td>
         <td class="num"><strong>${{ '{:,.0f}'.format(x.payable_now) }}</strong>
-          {% if x.payable_now >= 0.5 %}
+          {% if is_latest and x.payable_now >= 0.5 %}
           <form method="post" action="/pay" style="margin:0;display:inline" onsubmit="return confirm('Record ${{ '{:,.0f}'.format(x.payable_now) }} as PAID to {{ x.associate }}?')">
             <input type="hidden" name="associate" value="{{ x.associate }}">
             <input type="hidden" name="amount" value="{{ '%.2f'|format(x.payable_now) }}">
@@ -80,10 +80,11 @@
     every row subtracts cleanly: <b>net gap = book this yr − same accounts last yr</b>.
     <b>Growth pay</b> = {{ '%.0f'|format(rate*100) }}% × new ground above the book's previous cumulative peak; a
     red (negative) month pays $0 and is never clawed back.
-    <b>Payable now</b> = the cycle's earned (all three pieces) × the share of the rep's billing actually
-    <b>collected</b>, minus what's already been <b>paid</b> — the rest releases as invoices pay (never overpays;
-    voided/written-off never count). <b>Record pay</b> logs a payout so next month only shows the new amount.
-    Click a rep's name for the account-by-account drill-down.</p>
+    The <b>Earned / Collected / Paid / Payable</b> columns are <b>cumulative through {{ m }}</b> — step the month
+    selector and they build up (August alone → Aug+Sep → …). <b>Payable now</b> = earned so far × the share of
+    billing <b>collected</b> − already <b>paid</b> (never overpays; voided/written-off never count). <b>Record
+    pay</b> (latest month only) logs a payout so next month shows only the new amount. Click a rep's name for the
+    account-by-account drill-down.</p>
 </div>
 
 <div class="card" style="border-color:#6b46c1;background:#faf8ff">

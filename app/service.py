@@ -322,15 +322,28 @@ def _lines_cached(db, ver):
     return df
 
 
+def excluded_account_set(db):
+    """Accounts to drop from the scorecard entirely: a customer whose ONLY name is a generic 'cash & carry'
+    (walk-in cash, not a rep relationship). Kept deliberately narrow — an account with any other identifying
+    name (e.g. '新天海', '任天行') is KEPT. Deterministic from the data (names), so it needs no cache key.
+    Could become a manager-managed exclusion table later."""
+    def norm(s):
+        return "".join(ch for ch in str(s).lower() if ch.isalnum())
+    return {acct for acct, nm in customer_names(db).items() if norm(nm) in ("cashandcarry", "cashcarry")}
+
+
 def active_lines(db):
-    """The sales dataframe with VOIDED invoices removed — they're deleted, so they count toward NOTHING
-    (contribution, growth, acquisition, collected, unpaid). Every bonus path uses this instead of the raw
-    lines. Cached by (data_version, voided set)."""
+    """The sales dataframe with VOIDED invoices AND excluded accounts (bare cash & carry) removed — they count
+    toward NOTHING (contribution, growth, acquisition, collected, unpaid). Every bonus path uses this instead of
+    the raw lines. Cached by (data_version, voided set)."""
     voided = frozenset(voided_set(db))
 
     def _filter():
         df = _lines_cached(db, _data_version(db))
-        return df[~df["sop_number"].astype(str).isin(voided)] if voided else df
+        if voided:
+            df = df[~df["sop_number"].astype(str).isin(voided)]
+        excl = excluded_account_set(db)
+        return df[~df["account"].isin(excl)] if excl else df
     return _memo(("active_lines", _data_version(db), voided), _filter)
 
 

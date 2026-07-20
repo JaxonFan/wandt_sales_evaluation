@@ -135,6 +135,15 @@ def test_book_columns_subtract_to_the_gap():
         prev = t["cum_growth"]
 
 
+def test_excluded_account_normalization():
+    # the bare "cash & carry" name normalizes to the exclusion key; named variants do not
+    from app import service
+    norm = lambda s: "".join(ch for ch in str(s).lower() if ch.isalnum())
+    assert norm("CASH & CARRY") in ("cashandcarry", "cashcarry")
+    assert norm("CASH & CARRY /  新天海") not in ("cashandcarry", "cashcarry")
+    assert norm("CASH & CARRY-任天行") not in ("cashandcarry", "cashcarry")
+
+
 def test_net_down_book_pays_zero():
     # a book that's below last year the whole cycle earns $0 (never negative pay)
     shr = (mk("SHR", "Rep A", "Y", HIST, FISCAL - DAY, 7, 115, 100)

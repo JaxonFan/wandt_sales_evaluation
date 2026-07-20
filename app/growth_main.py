@@ -138,9 +138,12 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     acq_pay, _review = acquisition_by_rep_month(db, months, team, s)
 
     # pay-on-collection: earned (all three pieces) is a TARGET; payable now scales by the rep's collected
-    # fraction of their cycle billing (same rule as the scorecard's Collections page).
+    # fraction of their billing. Everything below is CUMULATIVE THROUGH THE SELECTED MONTH, so stepping the
+    # month selector forward adds up (August alone -> Aug+Sep -> ...), not the whole cycle at once.
+    thru = months[:mi + 1]
+    sel_end = min(pd.Period(m, "M").end_time, pd.Timestamp(r["as_of"]))
     df = service.active_lines(db)
-    win = df[(df["document_date"] >= r["fiscal_start"]) & (df["document_date"] <= r["as_of"])]
+    win = df[(df["document_date"] >= r["fiscal_start"]) & (df["document_date"] <= sel_end)]
     win = win[win["associate"].isin(team)]
     coll = {str(x) for x in service.collected_set(db)}
     billed = win.groupby("associate")["extended_price"].sum()
@@ -155,9 +158,9 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         t = r["trajectory"][rep][mi]
         c = contrib.get((rep, m), dict(n_items=0, bonus=0.0))
         a_mo = acq_pay.get((rep, m), 0.0)
-        growth_cycle = float(r["trajectory"][rep][-1]["cum_pay"])
-        contrib_cycle = sum(contrib.get((rep, mm), {}).get("bonus", 0.0) for mm in months)
-        acq_cycle = sum(v for (rp, _mm), v in acq_pay.items() if rp == rep)
+        growth_cycle = float(r["trajectory"][rep][mi]["cum_pay"])                       # through selected month
+        contrib_cycle = sum(contrib.get((rep, mm), {}).get("bonus", 0.0) for mm in thru)
+        acq_cycle = sum(v for (rp, mmn), v in acq_pay.items() if rp == rep and mmn in thru)
         earned_cycle = growth_cycle + contrib_cycle + acq_cycle
         b = float(billed.get(rep, 0.0))
         frac = min(1.0, float(collected.get(rep, 0.0)) / b) if b > 0 else 0.0
@@ -184,6 +187,7 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
         "rows": rows, "team": team_row, "rate": r["cumulative_rate"], "page": "dash",
+        "is_latest": (mi == len(months) - 1),
         "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
 
 
@@ -452,6 +456,29 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
         "request": request, "user": user, "page": "me", "lang": lang, "name": name,
         "months": months, "traj": traj, "accounts": accounts, "k": k,
         "rate": r["cumulative_rate"], "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
+
+
+# ---------- quiet / silent accounts (haven't ordered in a while) ----------
+@app.get("/quiet", response_class=HTMLResponse)
+def quiet_accounts(request: Request, db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse("backtest_quiet.html", {
+        "request": request, "user": user, "page": "quiet", "lang": "en",
+        "rows": service.flag_silent_accounts(db), "mine": False})
+
+
+@app.get("/me/quiet", response_class=HTMLResponse)
+def rep_quiet(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if user.role != "rep":
+        return RedirectResponse("/quiet", status_code=303)
+    return templates.TemplateResponse("backtest_quiet.html", {
+        "request": request, "user": user, "page": "mequiet", "lang": lang,
+        "rows": service.flag_silent_accounts(db, associate=user.associate_name), "mine": True})
 
 
 # ---------- guides (manager + rep, EN / 中文) ----------
