@@ -322,28 +322,16 @@ def _lines_cached(db, ver):
     return df
 
 
-def excluded_account_set(db):
-    """Accounts to drop from the scorecard entirely: a customer whose ONLY name is a generic 'cash & carry'
-    (walk-in cash, not a rep relationship). Kept deliberately narrow — an account with any other identifying
-    name (e.g. '新天海', '任天行') is KEPT. Deterministic from the data (names), so it needs no cache key.
-    Could become a manager-managed exclusion table later."""
-    def norm(s):
-        return "".join(ch for ch in str(s).lower() if ch.isalnum())
-    return {acct for acct, nm in customer_names(db).items() if norm(nm) in ("cashandcarry", "cashcarry")}
-
-
 def active_lines(db):
-    """The sales dataframe with VOIDED invoices AND excluded accounts (bare cash & carry) removed — they count
-    toward NOTHING (contribution, growth, acquisition, collected, unpaid). Every bonus path uses this instead of
-    the raw lines. Cached by (data_version, voided set)."""
+    """The sales dataframe with VOIDED invoices removed — they're deleted, so they count toward NOTHING
+    (contribution, growth, acquisition, collected, unpaid). Every bonus path uses this instead of the raw
+    lines. Cached by (data_version, voided set). (Cash & Carry is a real shared account and is INCLUDED;
+    account-level growth exemptions like FIRSTIN01 are applied inside the growth engine only.)"""
     voided = frozenset(voided_set(db))
 
     def _filter():
         df = _lines_cached(db, _data_version(db))
-        if voided:
-            df = df[~df["sop_number"].astype(str).isin(voided)]
-        excl = excluded_account_set(db)
-        return df[~df["account"].isin(excl)] if excl else df
+        return df[~df["sop_number"].astype(str).isin(voided)] if voided else df
     return _memo(("active_lines", _data_version(db), voided), _filter)
 
 
@@ -577,8 +565,11 @@ def run_cumulative_growth(db):
     """Read-only 'what-if': the cumulative account-level profit-growth model (see engine.compute_cumulative_growth)
     on the current August fiscal cycle, plus today's growth number per rep for contrast. Memoized by
     _engine_version; NEVER touches Awards / live pay."""
+    from .config import GROWTH_EXEMPT_ACCOUNTS
     s = get_settings(db)
-    rate = float(s.get("cumulative_rate", 0.0017))
+    rate = float(s.get("cumulative_rate", 0.05))
+    accel = float(s.get("growth_accel_rate", rate))
+    default_target = float(s.get("growth_target_default", 0.06))
     young_pct = float(s.get("young_account_pct", 0.01))
     young_months = int(s.get("young_account_months", 12))
     fmonth = int(s.get("fiscal_start_month", 8))
@@ -586,11 +577,14 @@ def run_cumulative_growth(db):
     def _run():
         df = active_lines(db)
         _, _, team = attribution_maps(db)
+        targets = {name: float(s.get(f"growth_target::{name}", default_target)) for name in team}
         _lo, hi = data_bounds(db)
         as_of = hi
         yr = as_of.year if as_of.month >= fmonth else as_of.year - 1
         fiscal_start = pd.Timestamp(year=yr, month=fmonth, day=1)
         res = compute_cumulative_growth(df, fiscal_start, as_of, team, cumulative_rate=rate,
+                                        accel_rate=accel, rep_targets=targets,
+                                        exempt_accounts=GROWTH_EXEMPT_ACCOUNTS,
                                         young_account_pct=young_pct, young_account_months=young_months,
                                         constrained_item_numbers=get_constrained_items(db))
         res["current_growth"] = _current_growth_by_rep(db, fiscal_start, as_of)

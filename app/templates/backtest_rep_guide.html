@@ -11,9 +11,11 @@
   {% if zh %}
   <p class="hint" style="margin-top:6px">一共三项，每一项我们都可以自己算得出来。奖金只按<b>已收回的货款</b>发放。</p>
 
-  <h3>1 · 增长奖 — 净增长的 {{ '%.0f'|format(rate*100) }}%</h3>
-  <p><b>一句话：</b>把我们手上<b>所有客户</b>的利润加在一起，和<b>同样这批客户去年同期</b>比 ——
-  比去年多出来的部分，我们拿 <b>{{ '%.0f'|format(rate*100) }}%</b>；如果整体比去年少，这个月是 $0（不倒扣）。</p>
+  <h3>1 · 增长奖 — 到目标 {{ '%.0f'|format(rate*100) }}%，超过目标 {{ '%.1f'|format(accel*100) }}%</h3>
+  <p><b>一句话：</b>把我们手上<b>所有客户</b>的利润加在一起，和<b>同样这批客户去年同期</b>比，多出来的部分 ——
+  到自己的<b>目标</b>之前拿 <b>{{ '%.0f'|format(rate*100) }}%</b>，超过目标的部分拿
+  <b>{{ '%.1f'|format(accel*100) }}%</b>；如果整体比去年少，这个月是 $0（不倒扣）。目标 = 去年这些客户利润的
+  一个百分比（在「我的奖金」页能看到自己的目标）。</p>
   <ul>
     <li><b>算客户，不算个人。</b>客户换人负责时，它的历史跟着客户走：接手一个平稳的客户不算增长，
       也不会因为客户被调走而吃亏 —— 调整客户对谁都不加分、不减分。</li>
@@ -50,10 +52,11 @@
   <p class="hint" style="margin-top:6px">Three pieces, each simple enough to check yourself. Paid only on
   collected money.</p>
 
-  <h3>1 · Growth — {{ '%.0f'|format(rate*100) }}% of your net increase</h3>
+  <h3>1 · Growth — {{ '%.0f'|format(rate*100) }}% up to target, {{ '%.1f'|format(accel*100) }}% above</h3>
   <p><b>One sentence:</b> add up the profit of <b>all your accounts</b> and compare it to <b>what those same
-  accounts did last year</b> — you earn <b>{{ '%.0f'|format(rate*100) }}%</b> of the increase; if the total is
-  below last year, that month is $0 (never clawed back).</p>
+  accounts did last year</b> — on the increase you earn <b>{{ '%.0f'|format(rate*100) }}%</b> up to your
+  <b>target</b> and <b>{{ '%.1f'|format(accel*100) }}%</b> above it; if the total is below last year, that month
+  is $0 (never clawed back). Your target is a percent of last year's profit on those accounts (see "My bonus").</p>
   <ul>
     <li><b>Accounts, not people.</b> When an account changes hands its history travels with it — inheriting a
       flat account isn't growth, and losing an account doesn't hurt you. Reassignments are neutral.</li>

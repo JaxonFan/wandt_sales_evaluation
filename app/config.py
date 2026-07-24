@@ -56,8 +56,10 @@ DEFAULTS = {
     "acq_revenue_pct": 0.01,       # (deprecated — acquisition is now a size-tiered flat amount, not a % of revenue)
     "acq_ramp_periods": 3,         # an account counts as "new" for ~1 quarter (3 periods), then graduates
 
-    # --- Cumulative profit-growth (the 'what-if' growth model — /whatif/growth, pays nothing yet) ---
-    "cumulative_rate": 0.05,       # $ earned per $ of NET cumulative YoY PROFIT growth (5%; rep-level netting — a rep's own declines offset their growers; progressive true-up on the rep's peak, no clawback)
+    # --- Cumulative profit-growth (the growth-model service) ---
+    "cumulative_rate": 0.05,       # BASE rate: $ earned per $ of NET cumulative YoY PROFIT growth up to the rep's target (rep-level netting; progressive true-up on the rep's peak, no clawback)
+    "growth_accel_rate": 0.075,    # ACCELERATOR rate on the portion of growth ABOVE the rep's target (marginal)
+    "growth_target_default": 0.06, # default per-rep target = this x the rep's last-year book profit (overrides in Setting keys 'growth_target::<name>')
     "young_account_pct": 0.01,     # (display/back-compat) a brand-new account's gap already equals its own profit, so it earns cumulative_rate x profit automatically; this dial is no longer used in the math
     "young_account_months": 12,    # an account younger than this is flagged "new" on the page (no full year-ago to compare)
     "fiscal_start_month": 1,       # cumulative cycle anchor month. 1 = January (retroactive check: Jan->present vs Jan->same-last-year). Set to 8 at the Aug-2026 launch so cycles run Aug->Jul and reset each August.
@@ -65,5 +67,9 @@ DEFAULTS = {
     # --- closure decision-support ---
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)
 }
+
+# Accounts removed from the GROWTH calc only (house accounts run by non-reps; still fine for the raw data).
+# Could become a manager-managed list later.
+GROWTH_EXEMPT_ACCOUNTS = frozenset({"FIRSTIN01"})   # FIRST CHOICE SEAFOOD INC — 100% Cindy Chan (a manager)
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")

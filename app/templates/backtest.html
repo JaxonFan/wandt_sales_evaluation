@@ -18,9 +18,10 @@
   <h2>Team — {{ m }}</h2>
   <p class="hint"><b>Growth:</b> a rep's growth = the profit change of <b>ALL their accounts added together</b>
     (each vs the <b>same account a year ago</b>, work-share split; limited-stock items excluded from both years).
-    Net positive → <b>{{ '%.0f'|format(rate*100) }}%</b> of the net increase, trued up on the book's running peak,
-    never clawed back; net negative → <b>$0</b>. Plus <b>Contribution</b> (line items × rate) and
-    <b>Acquisition</b> (flat bonus at the quarter mark for confirmed rep-won new accounts — see New accounts tab).</p>
+    Net positive → <b>{{ '%.0f'|format(rate*100) }}%</b> up to the rep's <b>target</b> (a % of their last-year
+    book, set in Settings) and <b>7.5%</b> on anything above it, trued up on the running peak, never clawed back;
+    net negative → <b>$0</b>. Plus <b>Contribution</b> (line items × rate) and <b>Acquisition</b> (flat bonus at
+    the quarter mark for confirmed rep-won new accounts — see New accounts tab).</p>
   <table>
     <thead><tr><th>Rep</th>
       <th class="num">Book profit this month</th><th class="num">Same accounts last yr</th>

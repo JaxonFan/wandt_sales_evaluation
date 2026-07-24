@@ -11,9 +11,14 @@
   {% if zh %}
   <p class="hint" style="margin-top:6px">一共三项，每项都是一条谁都能核对的直接公式。只按已收货款发放。</p>
 
-  <h3>1 · 增长奖 — 净利润增长的 {{ '%.0f'|format(rate*100) }}%</h3>
+  <h3>1 · 增长奖 — 到目标 {{ '%.0f'|format(rate*100) }}%，超过目标 {{ '%.1f'|format(accel*100) }}%</h3>
   <p><b>一句话规则：</b>把销售手上<b>每一个客户</b>的利润，和<b>同一个客户去年同期</b>比，全部加在一起 ——
-  总数为<b>正</b>，销售拿 <b>{{ '%.0f'|format(rate*100) }}%</b>；为<b>负</b>，$0。</p>
+  总数为<b>正</b>：到<b>目标</b>之前拿 <b>{{ '%.0f'|format(rate*100) }}%</b>，超过目标的部分拿
+  <b>{{ '%.1f'|format(accel*100) }}%</b>；为<b>负</b>，$0。</p>
+  <ul><li><b>目标</b> = 每个销售的一个百分比 × 他<b>去年这些客户的利润</b>（书大的人同样的%对应更多的钱）。
+  默认 {{ '%.0f'|format(default_target*100) }}%，经理可在 <a href="/settings">Settings</a> 里逐人调整
+  （目前 Wendy 8%、An Cao 4%、其余 6%）。目标之前是 {{ '%.0f'|format(rate*100) }}%，
+  超过目标才加速到 {{ '%.1f'|format(accel*100) }}% —— 鼓励真正跑赢自己的目标。</li></ul>
   <ul>
     <li><b>算客户，不算个人。</b>客户换人时历史跟着客户走。例子：An Cao 在 2025 年 1 月做了檳城超級市場
       $4,119 利润；2026 年这个客户转给了 Vanessa。它离开 An Cao 的账本时<b>连同基数一起离开</b>（不扣他的分），
@@ -66,10 +71,15 @@
   {% else %}
   <p class="hint" style="margin-top:6px">Three pieces, each a direct formula anyone can check. Paid only on collected money.</p>
 
-  <h3>1 · Growth — {{ '%.0f'|format(rate*100) }}% of your book's net profit increase</h3>
+  <h3>1 · Growth — {{ '%.0f'|format(rate*100) }}% up to target, {{ '%.1f'|format(accel*100) }}% above</h3>
   <p><b>The rule in one sentence:</b> take every account a rep works, add up how much more (or less) profit each
   one made than <i>that same account</i> made in the same months last year — if the total is <b>positive</b>, the
-  rep earns <b>{{ '%.0f'|format(rate*100) }}%</b> of it; if it's <b>negative</b>, <b>$0</b>.</p>
+  rep earns <b>{{ '%.0f'|format(rate*100) }}%</b> up to their <b>target</b> and <b>{{ '%.1f'|format(accel*100) }}%</b>
+  on anything above it; if it's <b>negative</b>, <b>$0</b>.</p>
+  <ul><li><b>The target</b> = a per-rep percent × <b>what those accounts earned last year</b> (a bigger book needs
+  more dollars to hit the same %). Default {{ '%.0f'|format(default_target*100) }}%, editable per rep in
+  <a href="/settings">Settings</a> (currently Wendy 8%, An Cao 4%, everyone else 6%). You earn the base rate up to
+  target and only accelerate to {{ '%.1f'|format(accel*100) }}% once you truly beat it.</li></ul>
   <ul>
     <li><b>Accounts, not salespeople.</b> An account carries its history when it changes hands. Example:
       An Cao sold NEW BEN CITY $4,119 in Jan 2025; in 2026 it moved to Vanessa. It leaves his book

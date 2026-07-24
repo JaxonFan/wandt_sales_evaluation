@@ -11,14 +11,18 @@
   <p class="hint" style="margin-top:6px">
     {% if zh %}周期 {{ months[0] }} → {{ months[-1] }}（和去年同期比）。我们比较的是<b>你现在负责的客户</b>，
     对比<b>同样这些客户去年的利润</b> —— 不论去年是谁负责。所有客户加在一起算：有的涨、有的跌，看<b>净增长</b>。
-    净增长为正，按 <b>{{ '%.0f'|format(rate*100) }}%</b> 发；为负，这个月是 $0（不倒扣，等做回来了再发）。
+    净增长为正：到<b>目标</b>之前拿 <b>{{ '%.0f'|format(rate*100) }}%</b>，超过目标的部分拿 <b>7.5%</b>；
+    为负，这个月是 $0（不倒扣，等做回来了再发）。你的目标 = 去年这些客户利润的一个百分比。
     {% else %}Cycle {{ months[0] }} → {{ months[-1] }} (vs the same months last year). We compare <b>the accounts
     you work now</b> against <b>what those same accounts earned last year</b> — no matter who worked them then.
-    All accounts count together: some up, some down — what matters is the <b>net</b>. Net positive →
-    <b>{{ '%.0f'|format(rate*100) }}%</b> of it; net negative → $0 that month (never clawed back).{% endif %}</p>
+    All accounts count together: some up, some down — what matters is the <b>net</b>. Net positive → you earn
+    <b>{{ '%.0f'|format(rate*100) }}%</b> up to your <b>target</b> and <b>7.5%</b> above it; net negative → $0
+    (never clawed back). Your target is a percent of what these accounts earned last year.{% endif %}</p>
   <div>
     <div class="kpi"><div class="label">{{ '累计净增长' if zh else 'Cumulative net growth' }}</div>
       <div class="val {{ 'neg' if k.cum_gap < 0 }}">{{ '−$' + '{:,.0f}'.format(-k.cum_gap) if k.cum_gap < 0 else '$' + '{:,.0f}'.format(k.cum_gap) }}</div></div>
+    {% if k.target %}<div class="kpi"><div class="label">{{ '目标（到此为5%）' if zh else 'Target (5% up to here)' }}</div>
+      <div class="val" style="font-size:20px">${{ '{:,.0f}'.format(k.target) }} <span class="mut" style="font-size:13px">{{ '%.0f'|format(k.target_pct) }}%</span></div></div>{% endif %}
     <div class="kpi"><div class="label">{{ '已赚（三项合计）' if zh else 'Earned (all pieces)' }}</div>
       <div class="val">${{ '{:,.0f}'.format(k.earned) }}</div></div>
     <div class="kpi"><div class="label">{{ '货款已收' if zh else 'Collected' }}</div>

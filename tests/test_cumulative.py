@@ -135,13 +135,46 @@ def test_book_columns_subtract_to_the_gap():
         prev = t["cum_growth"]
 
 
-def test_excluded_account_normalization():
-    # the bare "cash & carry" name normalizes to the exclusion key; named variants do not
-    from app import service
-    norm = lambda s: "".join(ch for ch in str(s).lower() if ch.isalnum())
-    assert norm("CASH & CARRY") in ("cashandcarry", "cashcarry")
-    assert norm("CASH & CARRY /  新天海") not in ("cashandcarry", "cashcarry")
-    assert norm("CASH & CARRY-任天行") not in ("cashandcarry", "cashcarry")
+def test_tiered_pay_marginal_above_target():
+    # strong grower ($5/wk -> $45/wk) so growth far exceeds the target; base 5% up to target, 7.5% above.
+    lines = (mk("G", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("G", "Rep A", "X", FISCAL, AS_OF, 7, 145, 100))
+    df = df_from(lines)
+    res = engine.compute_cumulative_growth(df, FISCAL, AS_OF, ["Rep A"], cumulative_rate=0.05,
+                                           accel_rate=0.075, rep_targets={"Rep A": 0.5}, young_account_pct=0.05)
+    row = rep_row(res, "Rep A")
+    traj = res["trajectory"]["Rep A"]
+    G = row["cum_growth"]                                       # monotonic grower -> peak == final
+    T = 0.5 * sum(t["ly_book"] for t in traj)                   # target$ = 50% of the last-year book
+    assert G > T > 0
+    assert row["earned"] == pytest.approx(0.05 * T + 0.075 * (G - T), rel=1e-4)   # marginal tiers
+    # flat (no target) pays base x G, which is strictly less than the accelerated amount
+    flat = engine.compute_cumulative_growth(df, FISCAL, AS_OF, ["Rep A"], cumulative_rate=0.05,
+                                            young_account_pct=0.05)
+    assert rep_row(flat, "Rep A")["earned"] == pytest.approx(0.05 * G, rel=1e-4)
+    assert row["earned"] > rep_row(flat, "Rep A")["earned"]
+
+
+def test_growth_below_target_is_just_base_rate():
+    lines = (mk("G", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("G", "Rep A", "X", FISCAL, AS_OF, 7, 108, 100))    # tiny growth, well under a big target
+    res = engine.compute_cumulative_growth(df_from(lines), FISCAL, AS_OF, ["Rep A"], cumulative_rate=0.05,
+                                           accel_rate=0.075, rep_targets={"Rep A": 5.0}, young_account_pct=0.05)
+    row = rep_row(res, "Rep A")
+    assert row["earned"] == pytest.approx(0.05 * row["cum_growth"], rel=1e-4)   # all in the base tier
+
+
+def test_exempt_account_dropped_from_growth():
+    keep = (mk("KEEP", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+            + mk("KEEP", "Rep A", "X", FISCAL, AS_OF, 7, 130, 100))
+    house = (mk("HOUSE", "Rep A", "Y", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("HOUSE", "Rep A", "Y", FISCAL, AS_OF, 7, 160, 100))
+    df = df_from(keep + house)
+    full = run(df, ["Rep A"])
+    exempt = engine.compute_cumulative_growth(df, FISCAL, AS_OF, ["Rep A"], cumulative_rate=RATE,
+                                              young_account_pct=RATE, exempt_accounts={"HOUSE"})
+    assert acct(exempt, "HOUSE") is None and acct(full, "HOUSE") is not None
+    assert rep_row(exempt, "Rep A")["cum_growth"] < rep_row(full, "Rep A")["cum_growth"]
 
 
 def test_net_down_book_pays_zero():

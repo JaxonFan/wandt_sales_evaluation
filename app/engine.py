@@ -544,7 +544,8 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
 
 def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative_rate,
                               young_account_pct, young_account_months=12,
-                              constrained_item_numbers=frozenset()):
+                              constrained_item_numbers=frozenset(), accel_rate=None,
+                              rep_targets=None, exempt_accounts=frozenset()):
     """Cumulative profit-growth model (the 'what-if' replacement for the Growth piece).
 
     Measured PER ACCOUNT against the SAME account a year ago (not per-rep totals — 35% of the book
@@ -557,16 +558,25 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
       account cumulative gap(t) = Sum_{m<=t}( this-year profit(m) - last-year profit(m-12mo) )   (raw, signable)
       rep net gap(t) = Sum over accounts( account gap(t) x rep work-share )   -- REP-LEVEL NETTING: a rep's own
             declining accounts offset their growers, so pay comes only from NET book growth (self-funding).
-      true-up at the REP level: pay_t = cumulative_rate x max(0, rep gap(t) - running peak); a down month pays $0
-            and nothing is clawed back. Total earned = cumulative_rate x max(0, peak of the rep's net gap).
-      A brand-new account has no year-ago, so its gap == its own profit (feeds the rep's net; the acquisition
-      landing bonus is separate).
+      TWO-TIER pay on the running peak of the rep's net gap G, trued-up (down month $0, no clawback):
+        target$ = rep_target_pct x (rep's cumulative last-year book profit through the month)
+        earned  = cumulative_rate x min(G, target$)  +  accel_rate x max(0, G - target$)   [marginal]
+      cumulative_rate is the BASE rate; accel_rate defaults to the base (=> flat) when not given, and a rep with
+      no target entry is treated as target=inf (=> flat base rate). exempt_accounts are dropped from growth
+      entirely (house accounts run by non-reps). A brand-new account has no year-ago, so its gap == its own profit.
 
     Pure/read-only: pays nothing, writes nothing. Returns dict(reps, trajectory, accounts, months, ...).
     """
     fiscal_start = pd.Timestamp(fiscal_start).normalize()
     as_of = pd.Timestamp(as_of).normalize()
     team = set(sales_team)
+    accel_rate = cumulative_rate if accel_rate is None else accel_rate
+    rep_targets = rep_targets or {}
+    exempt_accounts = set(exempt_accounts)
+
+    def tier(G, target):
+        G = max(0.0, G)
+        return cumulative_rate * min(G, target) + accel_rate * max(0.0, G - target)
     empty = dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=cumulative_rate,
                  months=[], reps=pd.DataFrame(), trajectory={}, accounts=pd.DataFrame())
     if not len(df):
@@ -598,6 +608,8 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
 
     per_acct = {}
     for acct in rep_prof.index.get_level_values(0).unique():
+        if acct in exempt_accounts:                              # house accounts: out of the growth calc
+            continue
         rp = rep_prof.loc[acct]                                  # Series: rep -> this-cycle profit
         pos = rp[rp > 0]
         if pos.sum() > 0:
@@ -621,25 +633,34 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
                               gap=cum[-1] if cum else 0.0, ty_profit=s_ty, ly_profit=s_ly)
 
     reps, trajectory = [], {}
+    INF = float("inf")
     for rep in sorted(team):
         held = [(a, v) for a, v in per_acct.items() if rep in v["shares"]]
-        # rep-level netting + true-up: pay only NEW ground above the rep's running NET peak; floored at $0
-        rows, run_max, cum_pay = [], 0.0, 0.0
+        target_pct = rep_targets.get(rep)                        # None -> flat (target = inf)
+        # rep-level netting + TWO-TIER true-up: earned = base x min(peak,target$) + accel x max(0,peak-target$).
+        # target$ scales with the rep's cumulative last-year book so the accelerator grows through the cycle.
+        rows, run_max, cum_pay, cum_ly = [], 0.0, 0.0, 0.0
         net_traj = [sum(v["cum"][i] * v["shares"][rep] for _, v in held) for i in range(len(months))]
+        target_final = 0.0
         for i, m in enumerate(months):
-            pay = cumulative_rate * max(0.0, net_traj[i] - run_max)
             run_max = max(run_max, net_traj[i])
-            cum_pay += pay
             # the rep's BOOK this month, both years (share-weighted, same accounts) -> ty - ly == the month gap
             ty_book = sum(v["mo_ty"][i] * v["shares"][rep] for _, v in held)
             ly_book = sum(v["mo_ly"][i] * v["shares"][rep] for _, v in held)
+            cum_ly += ly_book
+            target = target_pct * max(0.0, cum_ly) if target_pct is not None else INF
+            target_final = target
+            earned = tier(run_max, target)
+            pay = max(0.0, earned - cum_pay)                     # true-up: only new ground, never clawed back
+            cum_pay += pay
             rows.append(dict(month=str(m), pay=pay, cum_pay=cum_pay, cum_growth=net_traj[i],
-                             ty_book=ty_book, ly_book=ly_book))
+                             ty_book=ty_book, ly_book=ly_book, target=(None if target == INF else target)))
         trajectory[rep] = rows
         net_final = net_traj[-1] if net_traj else 0.0
         reps.append(dict(associate=rep, n_accounts=len(held),
                          n_young=sum(1 for _, v in held if v["is_young"]),
-                         cum_growth=net_final, earned=cumulative_rate * max(0.0, run_max)))
+                         cum_growth=net_final, earned=cum_pay,
+                         target=(None if target_final == INF else target_final)))
 
     accounts = pd.DataFrame([dict(account=a, holder=v["primary"], ty_profit=v["ty_profit"],
                                   ly_profit=v["ly_profit"], growth=v["gap"], is_young=v["is_young"])

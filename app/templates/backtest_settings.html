@@ -1,0 +1,26 @@
+{% extends "backtest_base.html" %}{% block body %}
+<div class="card" style="max-width:640px">
+  <h2>Settings · growth pay</h2>
+  {% if saved %}<div class="msg">Saved.</div>{% endif %}
+  <p class="hint">Growth pay is tiered: a rep earns the <b>base rate</b> on profit growth up to their
+    <b>target</b>, and the <b>accelerator rate</b> on anything above it. Each rep's target is a percent of that
+    rep's <b>last-year book profit</b> (so a bigger book needs more dollars to hit the same %).</p>
+  <form method="post" action="/settings">
+    <table>
+      <tr><th colspan="2">Rates</th></tr>
+      <tr><td>Base rate (up to target)</td>
+        <td class="num"><input name="cumulative_rate" type="number" step="0.005" value="{{ base_rate }}" style="width:90px"> = {{ '%.1f'|format(base_rate*100) }}%</td></tr>
+      <tr><td>Accelerator rate (above target)</td>
+        <td class="num"><input name="growth_accel_rate" type="number" step="0.005" value="{{ accel_rate }}" style="width:90px"> = {{ '%.1f'|format(accel_rate*100) }}%</td></tr>
+      <tr><td>Default target (if a rep has none)</td>
+        <td class="num"><input name="growth_target_default" type="number" step="0.005" value="{{ default_target }}" style="width:90px"> = {{ '%.1f'|format(default_target*100) }}%</td></tr>
+      <tr><th colspan="2">Per-rep target (% of their last-year book profit)</th></tr>
+      {% for r in reps %}
+      <tr><td>{{ r.name }}</td>
+        <td class="num"><input name="target::{{ r.name }}" type="number" step="0.005" value="{{ r.target }}" style="width:90px"> = {{ '%.1f'|format(r.target*100) }}%</td></tr>
+      {% endfor %}
+    </table>
+    <p style="margin-top:12px"><button type="submit">Save</button></p>
+  </form>
+</div>
+{% endblock %}

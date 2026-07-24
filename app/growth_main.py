@@ -25,6 +25,27 @@ from .config import SECRET_KEY
 from . import service
 
 Base.metadata.create_all(engine)
+
+
+def _seed_targets():
+    """One-time: set the initial per-rep growth targets (Wendy 8%, An Cao 4%; everyone else uses the 6% default).
+    Idempotent — only inserts a key if it's absent, so manager edits are never overwritten."""
+    from .db import SessionLocal
+    db = SessionLocal()
+    try:
+        for name, pct in (("Wendy Ye", "0.08"), ("An Cao", "0.04")):
+            key = f"growth_target::{name}"
+            if not db.get(M.Setting, key):
+                db.add(M.Setting(key=key, value=pct))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+_seed_targets()
+
 app = FastAPI(title="W&T Sales Scorecard (growth model)")
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=8 * 3600)
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
@@ -272,6 +293,46 @@ def acquisitions_flag(request: Request, account: str = Form(...), rep_won: str =
     return RedirectResponse("/acquisitions", status_code=303)
 
 
+# ---------- settings: growth pay dials (base/accel rate, per-rep target %) ----------
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, saved: int = 0, db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    s = service.get_settings(db)
+    _, _, team = service.attribution_maps(db)
+    default_t = float(s.get("growth_target_default", 0.06))
+    reps = [dict(name=n, target=float(s.get(f"growth_target::{n}", default_t))) for n in sorted(team)]
+    return templates.TemplateResponse("backtest_settings.html", {
+        "request": request, "user": user, "page": "settings", "saved": bool(saved), "reps": reps,
+        "base_rate": float(s.get("cumulative_rate", 0.05)),
+        "accel_rate": float(s.get("growth_accel_rate", 0.075)), "default_target": default_t})
+
+
+@app.post("/settings")
+async def settings_save(request: Request, db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    form = await request.form()
+
+    def put(key, val):
+        row = db.get(M.Setting, key) or M.Setting(key=key)
+        row.value = str(val); db.merge(row)
+
+    for key in ("cumulative_rate", "growth_accel_rate", "growth_target_default"):
+        if form.get(key, "").strip():
+            put(key, float(form[key]))
+    _, _, team = service.attribution_maps(db)
+    for name in team:
+        v = form.get(f"target::{name}", "").strip()
+        if v:
+            put(f"growth_target::{name}", float(v))
+    db.commit()
+    service._ENGINE_CACHE.clear()
+    return RedirectResponse("/settings?saved=1", status_code=303)
+
+
 # ---------- import (the FIXED importer — keeps every invoice) + AR + voided ----------
 @app.get("/upload", response_class=HTMLResponse)
 def upload_form(request: Request, db: Session = Depends(get_db)):
@@ -449,9 +510,13 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     p = db.query(M.GrowthPayment).filter(M.GrowthPayment.associate == name,
                                          M.GrowthPayment.fiscal_start == r["fiscal_start"].date()).first()
     already = float(p.paid_cum or 0.0) if p else 0.0
-    k = dict(cum_gap=float(r["trajectory"][name][-1]["cum_growth"]), earned=earned,
+    rr = r["reps"]; me_row = rr[rr["associate"] == name]
+    target = float(me_row.iloc[0]["target"]) if len(me_row) and me_row.iloc[0]["target"] is not None else None
+    net = float(r["trajectory"][name][-1]["cum_growth"])
+    k = dict(cum_gap=net, earned=earned,
              growth_cycle=growth_cycle, contrib_cycle=contrib_cycle, acq_cycle=acq_cycle,
-             collected_pct=frac * 100.0, paid=already, payable=max(0.0, earned * frac - already))
+             collected_pct=frac * 100.0, paid=already, payable=max(0.0, earned * frac - already),
+             target=target, target_pct=(min(100.0, max(0.0, net) / target * 100.0) if target else None))
     return templates.TemplateResponse("backtest_me.html", {
         "request": request, "user": user, "page": "me", "lang": lang, "name": name,
         "months": months, "traj": traj, "accounts": accounts, "k": k,
@@ -490,7 +555,8 @@ def guide(request: Request, lang: str = "en", db: Session = Depends(get_db)):
     s = service.get_settings(db)
     return templates.TemplateResponse("backtest_guide.html", {
         "request": request, "user": user, "page": "guide", "lang": lang,
-        "rate": float(s.get("cumulative_rate", 0.05)), "item_rate": float(s["item_rate"]),
+        "rate": float(s.get("cumulative_rate", 0.05)), "accel": float(s.get("growth_accel_rate", 0.075)),
+        "default_target": float(s.get("growth_target_default", 0.06)), "item_rate": float(s["item_rate"]),
         "flat_small": int(float(s["acq_flat_small"])), "flat_medium": int(float(s["acq_flat_medium"])),
         "flat_large": int(float(s["acq_flat_large"])),
         "tier_small": int(float(s["acq_tier_small_max"])), "tier_medium": int(float(s["acq_tier_medium_max"]))})
@@ -504,6 +570,7 @@ def rep_guide(request: Request, lang: str = "zh", db: Session = Depends(get_db))
     s = service.get_settings(db)
     return templates.TemplateResponse("backtest_rep_guide.html", {
         "request": request, "user": user, "page": "repguide", "lang": lang,
-        "rate": float(s.get("cumulative_rate", 0.05)), "item_rate": float(s["item_rate"]),
+        "rate": float(s.get("cumulative_rate", 0.05)), "accel": float(s.get("growth_accel_rate", 0.075)),
+        "item_rate": float(s["item_rate"]),
         "flat_small": int(float(s["acq_flat_small"])), "flat_medium": int(float(s["acq_flat_medium"])),
         "flat_large": int(float(s["acq_flat_large"]))})
