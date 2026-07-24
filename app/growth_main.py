@@ -90,12 +90,19 @@ def acquisition_by_rep_month(db, months, team, s):
     flags = {r.account: r.rep_won for r in db.query(M.AcquisitionReview)}
     small_max, med_max = float(s["acq_tier_small_max"]), float(s["acq_tier_medium_max"])
     flats = dict(small=float(s["acq_flat_small"]), medium=float(s["acq_flat_medium"]), large=float(s["acq_flat_large"]))
+    # VECTORIZED first-8-weeks window per candidate (no per-account full-df scan): each candidate's early rows =
+    # its lines within 56 days of its own first sale. rev8 per account + the top TEAM rep in that window.
+    sub = df[df["account"].isin(set(cand.index))].copy()
+    sub["_first"] = sub["account"].map(first)
+    early = sub[sub["document_date"] <= sub["_first"] + pd.Timedelta(days=56)]
+    rev8_by = early.groupby("account")["extended_price"].sum()
+    teamrev = early[early["associate"].isin(team)].groupby(["account", "associate"])["extended_price"].sum()
+    rep_by = (teamrev.reset_index().sort_values("extended_price").groupby("account").tail(1)
+              .set_index("account")["associate"]) if len(teamrev) else pd.Series(dtype=object)
     pay, review = {}, []
     for acct, fs in cand.items():
-        early = df[(df["account"] == acct) & (df["document_date"] <= fs + pd.Timedelta(days=56))]
-        rep_rev = early[early["associate"].isin(team)].groupby("associate")["extended_price"].sum()
-        rep = rep_rev.idxmax() if len(rep_rev) else None
-        rev8 = float(early["extended_price"].sum())
+        rep = rep_by.get(acct)
+        rev8 = float(rev8_by.get(acct, 0.0))
         annual = rev8 * 365.0 / 56.0
         tier = "small" if annual < small_max else ("medium" if annual < med_max else "large")
         flat = flats[tier]
@@ -146,7 +153,7 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    r = service.run_cumulative_growth(db)      # memoized; window = fiscal_start_month (Jan) -> data end
+    r = service.run_cumulative_growth(db, with_comparison=False)   # window = fiscal_start_month -> data end
     months = r["months"]
     if not months:
         return templates.TemplateResponse("backtest.html", {"request": request, "user": user, "months": [],
@@ -221,7 +228,7 @@ def record_pay(request: Request, associate: str = Form(...), amount: float = For
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    r = service.run_cumulative_growth(db)
+    r = service.run_cumulative_growth(db, with_comparison=False)
     fs = r["fiscal_start"].date()
     p = db.query(M.GrowthPayment).filter(M.GrowthPayment.associate == associate,
                                          M.GrowthPayment.fiscal_start == fs).first()
@@ -241,7 +248,7 @@ def rep_detail(request: Request, name: str, m: str = None, db: Session = Depends
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    r = service.run_cumulative_growth(db)
+    r = service.run_cumulative_growth(db, with_comparison=False)
     months = r["months"]
     if not months or name not in r["trajectory"]:
         return RedirectResponse("/", status_code=303)
@@ -274,7 +281,7 @@ def acquisitions_page(request: Request, db: Session = Depends(get_db)):
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    r = service.run_cumulative_growth(db)
+    r = service.run_cumulative_growth(db, with_comparison=False)
     s = service.get_settings(db)
     _, _, team = service.attribution_maps(db)
     _pay, review = acquisition_by_rep_month(db, r["months"], team, s) if r["months"] else ({}, [])
@@ -473,7 +480,7 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     if user.role != "rep":
         return RedirectResponse("/", status_code=303)
     name = user.associate_name
-    r = service.run_cumulative_growth(db)
+    r = service.run_cumulative_growth(db, with_comparison=False)
     months = r["months"]
     if not months or name not in r["trajectory"]:
         return templates.TemplateResponse("backtest_me.html", {

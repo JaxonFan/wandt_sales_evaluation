@@ -578,7 +578,7 @@ def _current_growth_by_rep(db, lo, hi):
     return out
 
 
-def run_cumulative_growth(db):
+def run_cumulative_growth(db, with_comparison=True):
     """Read-only 'what-if': the cumulative account-level profit-growth model (see engine.compute_cumulative_growth)
     on the current August fiscal cycle, plus today's growth number per rep for contrast. Memoized by
     _engine_version; NEVER touches Awards / live pay."""
@@ -605,11 +605,13 @@ def run_cumulative_growth(db):
                                          young_account_pct=young_pct, young_account_months=young_months,
                                          constrained_item_numbers=get_constrained_items(db))
 
-    # memo the EXPENSIVE engine by a growth-only key (acquisition marks don't invalidate it); attach the cheap
-    # "vs today's model" comparison fresh (its own pieces are period-cached).
+    # memo the EXPENSIVE engine by a growth-only key (acquisition marks don't invalidate it).
     core = _memo(("cum_core", _growth_version(db)), _core)
     res = dict(core)
-    res["current_growth"] = _current_growth_by_rep(db, res["fiscal_start"], res["as_of"])
+    # The "vs today's model" comparison runs the OLD period engine 10x — only the /whatif page uses it, so the
+    # growth-model service skips it (with_comparison=False) to avoid that cost on every page load.
+    res["current_growth"] = (_current_growth_by_rep(db, res["fiscal_start"], res["as_of"])
+                             if with_comparison else {})
     return res
 
 
@@ -816,7 +818,15 @@ def flag_silent_accounts(db, gap_multiple=3.0, min_orders=5, associate=None):
     """Accounts silent > gap_multiple x their own median inter-order gap — closure/at-risk candidates. Each record
     carries the UNPAID AR still owed (an account that's gone quiet AND owes money is the real loss risk, vs clean
     churn that owes $0), and is sorted RISKY-FIRST (most owed, then longest silent). `associate` filters to one rep
-    (for the rep-facing tab). Voided invoices are excluded; collected/written-off don't count as outstanding."""
+    (for the rep-facing tab). Voided invoices are excluded; collected/written-off don't count as outstanding.
+    Memoized (it scans every account) — invalidates on new data / AR / voided / write-off uploads."""
+    key = ("silent", _data_version(db), frozenset(voided_set(db)),
+           db.query(func.count(M.CollectedInvoice.sop_number), func.max(M.CollectedInvoice.reported_at)).one(),
+           frozenset(written_off_set(db)), gap_multiple, min_orders, associate)
+    return _memo(key, lambda: _flag_silent_accounts(db, gap_multiple, min_orders, associate))
+
+
+def _flag_silent_accounts(db, gap_multiple, min_orders, associate):
     df = active_lines(db)
     if not len(df):
         return []
