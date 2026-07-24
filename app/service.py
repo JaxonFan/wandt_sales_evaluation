@@ -159,17 +159,20 @@ def get_settings(db):
 
 
 def customer_names(db):
-    """customer_number -> its most-common name, with Big5/GBK mojibake decoded (same fix as item names)."""
-    rows = db.query(M.SalesLine.customer_number, M.SalesLine.customer_name,
-                    func.count(M.SalesLine.id)).group_by(M.SalesLine.customer_number,
-                                                         M.SalesLine.customer_name).all()
-    best = {}   # customer_number -> (count, name)
-    for num, name, cnt in rows:
-        if name is None:
-            continue
-        if num not in best or cnt > best[num][0]:
-            best[num] = (cnt, name)
-    return {num: decode_desc(nm) for num, (c, nm) in best.items()}
+    """customer_number -> its most-common name, with Big5/GBK mojibake decoded (same fix as item names).
+    Memoized by data version (one key; used on many hot paths — acquisitions, /me, quiet, drill-down)."""
+    def _compute():
+        rows = db.query(M.SalesLine.customer_number, M.SalesLine.customer_name,
+                        func.count(M.SalesLine.id)).group_by(M.SalesLine.customer_number,
+                                                             M.SalesLine.customer_name).all()
+        best = {}   # customer_number -> (count, name)
+        for num, name, cnt in rows:
+            if name is None:
+                continue
+            if num not in best or cnt > best[num][0]:
+                best[num] = (cnt, name)
+        return {num: decode_desc(nm) for num, (c, nm) in best.items()}
+    return _memo(("customer_names", _data_version(db)), _compute)
 
 
 # ---------- period grid (fixed 4-week buckets anchored to the latest data) ----------
@@ -352,6 +355,20 @@ def _engine_version(db):
         frozenset(written_off_set(db)),
         frozenset(voided_set(db)),
         db.query(func.count(M.CollectedInvoice.sop_number), func.max(M.CollectedInvoice.reported_at)).one(),
+    )
+
+
+def _growth_version(db):
+    """Narrow signature for the cumulative GROWTH engine only — exactly what compute_cumulative_growth reads
+    (data, settings/dials incl. per-rep targets, voided, constrained). Deliberately EXCLUDES acquisition
+    (AcquisitionReview / self_acquired), manager actions, and awards, so marking a new account rep-won/house
+    does NOT invalidate the (expensive) growth result."""
+    s = get_settings(db)
+    return (
+        _data_version(db),
+        hash(tuple(sorted((k, str(v)) for k, v in s.items()))),
+        frozenset(voided_set(db)),
+        frozenset(get_constrained_items(db)),
     )
 
 
@@ -574,7 +591,7 @@ def run_cumulative_growth(db):
     young_months = int(s.get("young_account_months", 12))
     fmonth = int(s.get("fiscal_start_month", 8))
 
-    def _run():
+    def _core():
         df = active_lines(db)
         _, _, team = attribution_maps(db)
         targets = {name: float(s.get(f"growth_target::{name}", default_target)) for name in team}
@@ -582,15 +599,18 @@ def run_cumulative_growth(db):
         as_of = hi
         yr = as_of.year if as_of.month >= fmonth else as_of.year - 1
         fiscal_start = pd.Timestamp(year=yr, month=fmonth, day=1)
-        res = compute_cumulative_growth(df, fiscal_start, as_of, team, cumulative_rate=rate,
-                                        accel_rate=accel, rep_targets=targets,
-                                        exempt_accounts=GROWTH_EXEMPT_ACCOUNTS,
-                                        young_account_pct=young_pct, young_account_months=young_months,
-                                        constrained_item_numbers=get_constrained_items(db))
-        res["current_growth"] = _current_growth_by_rep(db, fiscal_start, as_of)
-        return res
+        return compute_cumulative_growth(df, fiscal_start, as_of, team, cumulative_rate=rate,
+                                         accel_rate=accel, rep_targets=targets,
+                                         exempt_accounts=GROWTH_EXEMPT_ACCOUNTS,
+                                         young_account_pct=young_pct, young_account_months=young_months,
+                                         constrained_item_numbers=get_constrained_items(db))
 
-    return _memo(("cumulative", _engine_version(db)), _run)
+    # memo the EXPENSIVE engine by a growth-only key (acquisition marks don't invalidate it); attach the cheap
+    # "vs today's model" comparison fresh (its own pieces are period-cached).
+    core = _memo(("cum_core", _growth_version(db)), _core)
+    res = dict(core)
+    res["current_growth"] = _current_growth_by_rep(db, res["fiscal_start"], res["as_of"])
+    return res
 
 
 def written_off_set(db):

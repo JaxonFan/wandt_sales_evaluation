@@ -77,7 +77,9 @@ def contribution_by_rep_month(db, months, team, item_rate):
 def acquisition_by_rep_month(db, months, team, s):
     """Flat landing bonus by new-account size, paid ONCE at the ~quarter mark (first-sale month + 2),
     only for accounts the manager confirmed rep-won (AcquisitionReview). Size = first-8-weeks revenue,
-    annualized, into the same small/medium/large tiers as the scorecard. Returns (pay_map, review_rows)."""
+    annualized, into the same small/medium/large tiers as the scorecard. Returns (pay_map, review_rows).
+    Fast (~0.2s) and NOT memoized on purpose: reads AcquisitionReview live so a mark shows immediately, and
+    never pollutes the engine cache / evicts the (expensive) growth result."""
     df = service.active_lines(db)
     first = df.groupby("account")["document_date"].min()
     lo = pd.Period(months[0], "M") - 3                      # landed up to a quarter before the window still pays in it
@@ -289,7 +291,8 @@ def acquisitions_flag(request: Request, account: str = Form(...), rep_won: str =
     rev = db.get(M.AcquisitionReview, account) or M.AcquisitionReview(account=account)
     rev.rep_won = (rep_won == "yes"); rev.user_id = user.user_id; rev.created_at = dt.datetime.utcnow()
     db.merge(rev); db.commit()
-    service._ENGINE_CACHE.clear()
+    # NOTE: no cache clear — acquisition status doesn't affect the (expensive) growth engine, and the
+    # acquisition memo is keyed by the AcquisitionReview signature, so this mark refreshes it on its own.
     return RedirectResponse("/acquisitions", status_code=303)
 
 
