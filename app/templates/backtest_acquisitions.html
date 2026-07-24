@@ -26,10 +26,10 @@
         <td style="white-space:nowrap">
           <form method="post" action="/acquisitions/flag" style="display:inline;margin:0">
             <input type="hidden" name="account" value="{{ r.account }}"><input type="hidden" name="rep_won" value="yes">
-            <button type="submit" class="ghost" {{ 'disabled' if r.status=='rep-won' }}>rep-won</button></form>
+            <button type="submit" class="ghost" {{ 'disabled' if r.status=='rep-won' }}>{{ '✓ rep-won' if r.status=='rep-won' else 'rep-won' }}</button></form>
           <form method="post" action="/acquisitions/flag" style="display:inline;margin:0">
             <input type="hidden" name="account" value="{{ r.account }}"><input type="hidden" name="rep_won" value="no">
-            <button type="submit" class="ghost" {{ 'disabled' if r.status=='house' }}>house</button></form>
+            <button type="submit" class="ghost" {{ 'disabled' if r.status=='house' }}>{{ '✓ house' if r.status=='house' else 'house' }}</button></form>
         </td>
       </tr>
     {% else %}
