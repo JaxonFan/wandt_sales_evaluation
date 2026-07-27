@@ -316,7 +316,10 @@ def settings_page(request: Request, saved: int = 0, db: Session = Depends(get_db
     return templates.TemplateResponse("backtest_settings.html", {
         "request": request, "user": user, "page": "settings", "saved": bool(saved), "reps": reps,
         "base_rate": float(s.get("cumulative_rate", 0.05)),
-        "accel_rate": float(s.get("growth_accel_rate", 0.075)), "default_target": default_t})
+        "accel_rate": float(s.get("growth_accel_rate", 0.075)), "default_target": default_t,
+        "acq_small": int(float(s["acq_flat_small"])), "acq_medium": int(float(s["acq_flat_medium"])),
+        "acq_large": int(float(s["acq_flat_large"])),
+        "tier_small": int(float(s["acq_tier_small_max"])), "tier_medium": int(float(s["acq_tier_medium_max"]))})
 
 
 @app.post("/settings")
@@ -333,6 +336,9 @@ async def settings_save(request: Request, db: Session = Depends(get_db)):
     for key in ("cumulative_rate", "growth_accel_rate", "growth_target_default"):
         if form.get(key, "").strip():
             put(key, float(form[key]))
+    for key in ("acq_flat_small", "acq_flat_medium", "acq_flat_large"):
+        if form.get(key, "").strip():
+            put(key, int(float(form[key])))
     _, _, team = service.attribution_maps(db)
     for name in team:
         v = form.get(f"target::{name}", "").strip()

@@ -19,6 +19,13 @@
       <tr><td>{{ r.name }}</td>
         <td class="num"><input name="target::{{ r.name }}" type="number" step="0.005" value="{{ r.target }}" style="width:90px"> = {{ '%.1f'|format(r.target*100) }}%</td></tr>
       {% endfor %}
+      <tr><th colspan="2">Acquisition landing bonus (flat $, paid once for a confirmed rep-won new account)</th></tr>
+      <tr><td>Small (&lt; ${{ '{:,}'.format(tier_small) }}/yr)</td>
+        <td class="num">$<input name="acq_flat_small" type="number" step="10" value="{{ acq_small }}" style="width:90px"></td></tr>
+      <tr><td>Medium (&lt; ${{ '{:,}'.format(tier_medium) }}/yr)</td>
+        <td class="num">$<input name="acq_flat_medium" type="number" step="10" value="{{ acq_medium }}" style="width:90px"></td></tr>
+      <tr><td>Large (≥ ${{ '{:,}'.format(tier_medium) }}/yr)</td>
+        <td class="num">$<input name="acq_flat_large" type="number" step="10" value="{{ acq_large }}" style="width:90px"></td></tr>
     </table>
     <p style="margin-top:12px"><button type="submit">Save</button></p>
   </form>

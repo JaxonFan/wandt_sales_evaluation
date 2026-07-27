@@ -50,9 +50,9 @@ DEFAULTS = {
     # --- Acquisition (new accounts: a flat bonus by size, paid once when the account lands) ---
     "acq_tier_small_max": 15000,   # annualized revenue < this -> "small" new account
     "acq_tier_medium_max": 65000,  # annualized revenue < this -> "medium"; >= this -> "large"
-    "acq_flat_small": 150,         # flat $ for landing a small new account (rewards the effort, not raw size)
-    "acq_flat_medium": 250,        # flat $ for a medium new account
-    "acq_flat_large": 400,         # flat $ for a large new account
+    "acq_flat_small": 50,          # flat $ for landing a small new account (rewards the effort, not raw size)
+    "acq_flat_medium": 100,        # flat $ for a medium new account
+    "acq_flat_large": 200,         # flat $ for a large new account
     "acq_revenue_pct": 0.01,       # (deprecated — acquisition is now a size-tiered flat amount, not a % of revenue)
     "acq_ramp_periods": 3,         # an account counts as "new" for ~1 quarter (3 periods), then graduates
 
