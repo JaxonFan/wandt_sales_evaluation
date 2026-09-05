@@ -1,0 +1,58 @@
+{% extends "backtest_base.html" %}{% block body %}
+<div class="card">
+  <h2>Logins</h2>
+  <p class="hint">One login per person. Reps see only their own page (<code>/me</code>) — their bonus, their
+    team's accounts, the quiet and falling-behind lists. Everyone can change their own password under
+    <b>My account</b>; use the reset here when someone is locked out. A login still on the shared default
+    password is called out below — those should be changed before the reps start using the site.</p>
+  {% if saved == 'error' %}<div class="msg" style="background:#fdecec;color:#c0392b;border-color:#f5c6c6">
+    Could not save — the password must be at least {{ min_len }} characters and the username must be free.</div>
+  {% elif saved %}<div class="msg">Password set for <b>{{ saved }}</b>.</div>{% endif %}
+  <table>
+    <thead><tr><th>Username</th><th>Role</th><th>Salesperson</th><th>Team</th><th>Password</th><th>Set a new password</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td><strong>{{ r.username }}</strong></td>
+        <td class="mut">{{ r.role }}</td>
+        <td>{{ r.associate or '—' }}</td>
+        <td class="mut">{{ r.team or '—' }}</td>
+        <td>{% if r.default_pw %}<span class="badge" style="background:#fdecec;color:#c0392b">default — change it</span>
+            {% else %}<span class="mut">set</span>{% endif %}</td>
+        <td>
+          <form method="post" action="/logins/reset" style="margin:0;display:flex;gap:6px">
+            <input type="hidden" name="username" value="{{ r.username }}">
+            <input name="password" type="text" minlength="{{ min_len }}" required placeholder="new password"
+                   style="padding:4px 7px;font-size:12.5px;border:1px solid var(--line);border-radius:6px;width:150px">
+            <button type="submit" class="ghost" style="padding:3px 10px;font-size:12px">set</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if missing %}
+<div class="card">
+  <h2>Salespeople without a login</h2>
+  <p class="hint">Give them one and hand over the password — they can change it themselves afterwards.</p>
+  <table>
+    <thead><tr><th>Salesperson</th><th>Username</th><th>Password</th><th></th></tr></thead>
+    <tbody>
+    {% for name in missing %}
+      <tr>
+        <form method="post" action="/logins/create">
+        <td>{{ name }}<input type="hidden" name="associate" value="{{ name }}"></td>
+        <td><input name="username" value="{{ name.split()[0]|lower }}" style="padding:4px 7px;font-size:12.5px;border:1px solid var(--line);border-radius:6px;width:120px"></td>
+        <td><input name="password" type="text" minlength="{{ min_len }}" required placeholder="password"
+                   style="padding:4px 7px;font-size:12.5px;border:1px solid var(--line);border-radius:6px;width:150px"></td>
+        <td><button type="submit" class="ghost" style="padding:3px 10px;font-size:12px">create login</button></td>
+        </form>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

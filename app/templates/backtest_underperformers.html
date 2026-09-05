@@ -1,0 +1,63 @@
+{% extends "backtest_base.html" %}{% block body %}
+{% set zh = (lang != 'en') %}
+{% set base = '/me/watch' if mine else '/underperformers' %}
+<div class="card">
+  <div style="display:flex;align-items:center;gap:10px">
+    <h2 style="margin:0">{% if zh %}落后的客户{% else %}Accounts falling behind{% endif %}
+      {% if mine %}<span class="mut" style="font-weight:400">· {{ team or '—' }}</span>{% endif %}</h2>
+    {% if mine %}<span class="mut" style="margin-left:auto;font-size:12.5px">
+      <a href="{{ base }}?lang=zh&view={{ view }}" {% if zh %}style="font-weight:700"{% endif %}>中文</a> ·
+      <a href="{{ base }}?lang=en&view={{ view }}" {% if not zh %}style="font-weight:700"{% endif %}>EN</a></span>{% endif %}
+  </div>
+  <p class="hint">{% if zh %}滚动看<b>最近 {{ months }} 个月</b>的利润，和<b>去年同样这 {{ months }} 个月</b>比。
+    两种落后：<b>下滑</b> = 比去年少；<b>跑输同级</b> = 和<b>体量相近的客户</b>比（按去年利润分成五档，取各档的
+    <b>中位数</b>）涨得更少。两个都占的最需要先去看。去年利润不足 ${{ '{:,.0f}'.format(min_profit) }} 的客户不参与
+    判断（基数太小），没有去年数据的算<b>新客户</b>。
+    {% else %}A rolling look at the last <b>{{ months }} months</b> of profit against the <b>same
+    {{ months }} months a year ago</b>. Two ways to fall behind: <b>Down</b> = below last year, and
+    <b>Below its size band</b> = it moved less than the <b>median account of its own size</b> (accounts split
+    into five bands by last year's profit — median, not average, so one giant doesn't set the bar). The ones
+    carrying both flags are where to start. Accounts under ${{ '{:,.0f}'.format(min_profit) }} of profit a year
+    ago are too small to judge and sit out; accounts with no year-ago window are marked <b>new</b>.{% endif %}</p>
+  <div style="margin:10px 0">
+    <a class="pnav {{ 'on' if view=='both' }}" href="{{ base }}?view=both&lang={{ lang }}">{{ '两项都占' if zh else 'Down AND below band' }} ({{ counts.both }})</a>
+    <a class="pnav {{ 'on' if view=='negative' }}" href="{{ base }}?view=negative&lang={{ lang }}">{{ '下滑' if zh else 'Down vs last year' }} ({{ counts.negative }})</a>
+    <a class="pnav {{ 'on' if view=='below' }}" href="{{ base }}?view=below&lang={{ lang }}">{{ '跑输同级' if zh else 'Below its size band' }} ({{ counts.below }})</a>
+    <a class="pnav {{ 'on' if view=='new' }}" href="{{ base }}?view=new&lang={{ lang }}">{{ '新客户' if zh else 'New' }} ({{ counts.new }})</a>
+    <a class="pnav {{ 'on' if view=='all' }}" href="{{ base }}?view=all&lang={{ lang }}">{{ '全部' if zh else 'All' }} ({{ counts.all }})</a>
+  </div>
+  <table>
+    <thead><tr><th>{{ '客户' if zh else 'Customer' }}</th>
+      {% if not mine %}<th>{{ 'Team' }}</th>{% endif %}
+      <th class="num">{{ '最近' if zh else 'Last' }} {{ months }}{{ '个月' if zh else 'mo' }}</th>
+      <th class="num">{{ '去年同期' if zh else 'Same months last yr' }}</th>
+      <th class="num">{{ '变化' if zh else 'Change' }}</th>
+      <th class="num">{{ '增长率' if zh else 'Growth' }}</th>
+      <th class="num">{{ '同级中位数' if zh else 'Its band median' }}</th>
+      <th>{{ '标记' if zh else 'Flags' }}</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.customer }}<div class="mut" style="font-size:11px">{{ r.account }}</div></td>
+        {% if not mine %}<td class="mut">{{ r.team or ('未分配' if zh else 'unassigned') }}</td>{% endif %}
+        <td class="num">${{ '{:,.0f}'.format(r.ty_profit) }}</td>
+        <td class="num mut">{% if r.is_new %}—{% else %}${{ '{:,.0f}'.format(r.ly_profit) }}{% endif %}</td>
+        <td class="num {{ 'neg' if r.change < 0 else ('pos' if r.change > 0 else 'mut') }}">{{ '−$' + '{:,.0f}'.format(-r.change) if r.change < 0 else '$' + '{:,.0f}'.format(r.change) }}</td>
+        <td class="num {{ 'neg' if r.growth_pct is not none and r.growth_pct < 0 else 'mut' }}">{% if r.growth_pct is none %}—{% else %}{{ '%+.0f'|format(r.growth_pct*100) }}%{% endif %}</td>
+        <td class="num mut">{% if r.band_median is none %}—{% else %}{{ '%+.0f'|format(r.band_median*100) }}%{% endif %}</td>
+        <td>
+          {% if r.is_new %}<span class="badge b-new">{{ '新' if zh else 'new' }}</span>{% endif %}
+          {% if r.negative %}<span class="badge" style="background:#fdecec;color:#c0392b">{{ '下滑' if zh else 'down' }}</span>{% endif %}
+          {% if r.below_band %}<span class="badge">{{ '跑输同级' if zh else 'below band' }}</span>{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="mut">{{ '这一类暂时没有客户。' if zh else 'Nothing in this view.' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if n_shown > rows|length %}<p class="hint">{{ '按亏损金额排序，只显示前' if zh else 'Ranked by dollars lost — showing the top' }} {{ rows|length }} / {{ n_shown }}.</p>{% endif %}
+  <p class="hint" style="margin-top:10px">{% if zh %}按<b>少掉的钱</b>排序 —— 最上面的客户，先打电话。
+    {% else %}Ranked by <b>dollars lost</b> — the top rows are the calls worth making first.{% endif %}</p>
+</div>
+{% endblock %}

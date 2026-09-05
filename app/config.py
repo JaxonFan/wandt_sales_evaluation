@@ -66,6 +66,11 @@ DEFAULTS = {
     "program_start": "2026-08-01",  # the program's first day. The displayed cycle never starts before this, so nothing earned before launch shows up as pay (Aug-Sep 2026 is its own contribution-only chapter).
     "growth_start": "2026-10-01",  # growth + acquisition begin here. Before this date the scorecard pays CONTRIBUTION ONLY; history is still kept (it is the year-ago side of the Oct comparison, and what makes new/quiet accounts detectable).
 
+    # --- underperforming accounts (rolling 3-month watch list) ---
+    "underperf_window_months": 3,   # rolling window: the last 3 months of PROFIT vs the same 3 months a year ago
+    "underperf_min_profit": 500,    # ignore accounts below this much profit in the year-ago window (too small/noisy to judge)
+    "underperf_bands": 5,           # accounts are compared against the MEDIAN growth of accounts their own size (quintiles by year-ago profit)
+
     # --- closure decision-support ---
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)
 }

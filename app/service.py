@@ -455,6 +455,76 @@ def account_assignments(db):
     return _memo(("assignments", _data_version(db), _assignment_version(db)), _compute)
 
 
+def underperforming_accounts(db):
+    """Rolling watch list: which accounts are falling behind, and behind WHAT.
+
+    Window = the trailing `underperf_window_months` (default 3, rolling — it moves with the data) of account
+    PROFIT against the SAME three months a year earlier. Two ways to be underperforming, both reported:
+      - `negative`   : the account is simply down year over year;
+      - `below_band` : it moved LESS than the median account of its own size (accounts are put in
+                       `underperf_bands` quintiles by their year-ago profit, so a $200k account isn't judged
+                       against a $2k one). Median, not average — one huge account would drag an average.
+    The two are judged independently, so the worst accounts carry both flags; by construction about half of
+    the judged accounts sit below their band's median, which is why the page ranks by dollars lost.
+    Accounts under `underperf_min_profit` a year ago are skipped (too small to read), and accounts with no
+    year-ago window are flagged `new` and never called underperforming. Rows carry the owning team so a rep
+    sees their own. Memoized by data version + assignments."""
+    s = get_settings(db)
+    months = int(s.get("underperf_window_months", 3))
+    min_profit = float(s.get("underperf_min_profit", 500))
+    n_bands = int(s.get("underperf_bands", 5))
+
+    def _compute():
+        df = active_lines(db)
+        if not len(df):
+            return []
+        _lo, hi = data_bounds(db)
+        start = hi - pd.DateOffset(months=months)
+        ly_start, ly_end = start - pd.DateOffset(years=1), hi - pd.DateOffset(years=1)
+        now = df[(df["document_date"] > start) & (df["document_date"] <= hi)]
+        then = df[(df["document_date"] > ly_start) & (df["document_date"] <= ly_end)]
+        ty_profit = now.groupby("account")["line_profit"].sum()
+        ly_profit = then.groupby("account")["line_profit"].sum()
+        team_of = {r["account"]: r["team"] for r in account_assignments(db)}
+        first_sale = df.groupby("account")["document_date"].min()
+        names = customer_names(db)
+
+        rows = []
+        for account in sorted(set(ty_profit.index) | set(ly_profit.index)):
+            ty = float(ty_profit.get(account, 0.0))
+            ly = float(ly_profit.get(account, 0.0))
+            is_new = bool(first_sale.get(account, hi) > ly_end)      # no year-ago window to judge against
+            if not is_new and ly < min_profit:
+                continue                                            # too small a base to read anything into
+            rows.append(dict(account=account, customer=names.get(account, account), team=team_of.get(account),
+                             ty_profit=ty, ly_profit=ly, change=ty - ly,
+                             growth_pct=((ty - ly) / ly if ly > 0 else None), is_new=is_new))
+        # size bands by year-ago profit, then each band's MEDIAN growth as the bar to clear
+        judged = [r for r in rows if not r["is_new"] and r["growth_pct"] is not None]
+        judged.sort(key=lambda r: r["ly_profit"])
+        band_median = {}
+        for i, r in enumerate(judged):
+            r["band"] = min(n_bands - 1, i * n_bands // max(1, len(judged)))
+        for band in range(n_bands):
+            pcts = sorted(r["growth_pct"] for r in judged if r["band"] == band)
+            band_median[band] = pcts[len(pcts) // 2] if pcts else 0.0
+        for r in rows:
+            band = r.get("band")
+            r["band_median"] = band_median.get(band)
+            r["negative"] = (not r["is_new"]) and r["change"] < 0
+            # "below its size band" is judged on its own, so an account can be BOTH down and below the median
+            # (the worst case) — and an account that grew less than its peers still shows up even while up.
+            r["below_band"] = (not r["is_new"]) and band is not None and r["growth_pct"] < band_median[band]
+            r["gap_to_band"] = (r["growth_pct"] - band_median[band]) if r.get("below_band") is not None \
+                and band is not None else None
+            r["flagged"] = bool(r["negative"] or r["below_band"])
+        rows.sort(key=lambda r: r["change"])                        # biggest dollar losses first
+        return rows
+
+    return _memo(("underperf", _data_version(db), _assignment_version(db),
+                  months, min_profit, n_bands), _compute)
+
+
 def unassigned_summary(db):
     """How much book is sitting in accounts no team owns yet — the nudge to the Accounts tab (they earn
     nothing for anyone until the manager assigns them)."""

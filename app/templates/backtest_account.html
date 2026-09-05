@@ -1,0 +1,32 @@
+{% extends "backtest_base.html" %}{% block body %}
+{% set zh = (lang != 'en') %}
+<div class="card" style="max-width:520px">
+  <h2>{{ '修改密码' if zh else 'Change my password' }}</h2>
+  <p class="hint">{% if zh %}登录名 <b>{{ user.username }}</b>{% if user.associate_name %}（{{ user.associate_name }}）{% endif %}。
+    密码至少 {{ min_len }} 位。改完之后用新密码登录。
+    {% else %}Signed in as <b>{{ user.username }}</b>{% if user.associate_name %} ({{ user.associate_name }}){% endif %}.
+    At least {{ min_len }} characters. You'll use the new password next time you sign in.{% endif %}</p>
+  {% if saved %}<div class="msg">{{ '密码已更新。' if zh else 'Password updated.' }}</div>{% endif %}
+  {% if err %}
+  <div class="msg" style="background:#fdecec;color:#c0392b;border-color:#f5c6c6">
+    {% if err == 'wrong' %}{{ '当前密码不对。' if zh else 'That current password is not right.' }}
+    {% elif err == 'short' %}{{ '新密码太短。' if zh else 'New password is too short.' }} ({{ min_len }}+)
+    {% elif err == 'mismatch' %}{{ '两次输入的新密码不一样。' if zh else 'The two new passwords do not match.' }}
+    {% elif err == 'same' %}{{ '新密码和旧密码一样。' if zh else 'That is your current password.' }}
+    {% else %}{{ '改不了，请重试。' if zh else 'Could not change it — try again.' }}{% endif %}
+  </div>
+  {% endif %}
+  <form method="post" action="/account">
+    <input type="hidden" name="lang" value="{{ lang }}">
+    <table>
+      <tr><td>{{ '当前密码' if zh else 'Current password' }}</td>
+        <td><input name="current" type="password" required autocomplete="current-password" style="width:200px"></td></tr>
+      <tr><td>{{ '新密码' if zh else 'New password' }}</td>
+        <td><input name="new" type="password" required minlength="{{ min_len }}" autocomplete="new-password" style="width:200px"></td></tr>
+      <tr><td>{{ '再输一次' if zh else 'Confirm new password' }}</td>
+        <td><input name="confirm" type="password" required minlength="{{ min_len }}" autocomplete="new-password" style="width:200px"></td></tr>
+    </table>
+    <button type="submit" style="margin-top:12px">{{ '保存' if zh else 'Save' }}</button>
+  </form>
+</div>
+{% endblock %}

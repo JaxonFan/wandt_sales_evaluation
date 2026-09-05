@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_db, engine, Base
 from . import models as M
-from .auth import verify_password
+from .auth import verify_password, hash_password
 from .config import SECRET_KEY
 from . import service
 
@@ -352,6 +352,141 @@ def accounts_assign(request: Request, account: str = Form(...), team: str = Form
     row.updated_at = dt.datetime.utcnow()
     db.merge(row); db.commit()
     return RedirectResponse(f"/accounts?view={view}", status_code=303)
+
+
+# ---------- my account: change my own password ----------
+MIN_PASSWORD = 8
+
+
+@app.get("/account", response_class=HTMLResponse)
+def account_page(request: Request, lang: str = "zh", saved: int = 0, err: str = "",
+                 db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse("backtest_account.html", {
+        "request": request, "user": user, "page": "account", "saved": bool(saved), "err": err,
+        "lang": (lang if user.role == "rep" else "en"), "min_len": MIN_PASSWORD})
+
+
+@app.post("/account")
+def account_save(request: Request, current: str = Form(...), new: str = Form(...),
+                 confirm: str = Form(...), lang: str = Form("zh"), db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if not verify_password(current, user.password_hash):
+        err = "wrong"
+    elif len(new) < MIN_PASSWORD:
+        err = "short"
+    elif new != confirm:
+        err = "mismatch"
+    elif verify_password(new, user.password_hash):
+        err = "same"
+    else:
+        user.password_hash = hash_password(new)
+        db.commit()
+        return RedirectResponse(f"/account?saved=1&lang={lang}", status_code=303)
+    return RedirectResponse(f"/account?err={err}&lang={lang}", status_code=303)
+
+
+# ---------- logins (manager): one account per rep, reset a forgotten password ----------
+DEFAULT_PASSWORD = "demo123"
+
+
+@app.get("/logins", response_class=HTMLResponse)
+def logins_page(request: Request, saved: str = "", db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    _, _, roster = service.attribution_maps(db)
+    rep_team = service.team_of_rep(db)
+    users = db.query(M.User).order_by(M.User.role, M.User.username).all()
+    rows = [dict(username=u.username, role=u.role, associate=u.associate_name,
+                 team=rep_team.get(u.associate_name or ""),
+                 default_pw=verify_password(DEFAULT_PASSWORD, u.password_hash)) for u in users]
+    have = {u.associate_name for u in users if u.associate_name}
+    missing = [n for n in roster if n not in have]
+    return templates.TemplateResponse("backtest_logins.html", {
+        "request": request, "user": user, "page": "logins", "rows": rows, "missing": missing,
+        "saved": saved, "min_len": MIN_PASSWORD})
+
+
+@app.post("/logins/reset")
+def logins_reset(request: Request, username: str = Form(...), password: str = Form(...),
+                 db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    target = db.query(M.User).filter(M.User.username == username).first()
+    if target is None or len(password) < MIN_PASSWORD:
+        return RedirectResponse("/logins?saved=error", status_code=303)
+    target.password_hash = hash_password(password)
+    db.commit()
+    return RedirectResponse(f"/logins?saved={username}", status_code=303)
+
+
+@app.post("/logins/create")
+def logins_create(request: Request, associate: str = Form(...), username: str = Form(...),
+                  password: str = Form(...), db: Session = Depends(get_db)):
+    """Give a roster rep their own read-only login."""
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    username = username.strip().lower()
+    if not username or len(password) < MIN_PASSWORD or \
+            db.query(M.User).filter(M.User.username == username).first():
+        return RedirectResponse("/logins?saved=error", status_code=303)
+    db.add(M.User(username=username, password_hash=hash_password(password), role="rep",
+                  associate_name=associate))
+    db.commit()
+    return RedirectResponse(f"/logins?saved={username}", status_code=303)
+
+
+# ---------- underperforming accounts (rolling 3-month watch list) ----------
+def _underperf_context(db, view, team=None):
+    s = service.get_settings(db)
+    rows = service.underperforming_accounts(db)
+    if team:
+        rows = [r for r in rows if r["team"] == team]
+    counts = dict(both=sum(1 for r in rows if r["negative"] and r["below_band"]),
+                  negative=sum(1 for r in rows if r["negative"]),
+                  below=sum(1 for r in rows if r["below_band"]),
+                  new=sum(1 for r in rows if r["is_new"]), all=len(rows))
+    pick = {"both": lambda r: r["negative"] and r["below_band"],
+            "negative": lambda r: r["negative"],
+            "below": lambda r: r["below_band"],
+            "new": lambda r: r["is_new"],
+            "all": lambda r: True}
+    shown = [r for r in rows if pick.get(view, pick["both"])(r)]
+    return dict(rows=shown[:300], n_shown=len(shown), counts=counts, view=view,
+                months=int(s.get("underperf_window_months", 3)),
+                min_profit=float(s.get("underperf_min_profit", 500)))
+
+
+@app.get("/underperformers", response_class=HTMLResponse)
+def underperformers_page(request: Request, view: str = "both", db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    ctx = _underperf_context(db, view)
+    return templates.TemplateResponse("backtest_underperformers.html", dict(
+        ctx, request=request, user=user, page="under", lang="en", mine=False, team=None))
+
+
+@app.get("/me/watch", response_class=HTMLResponse)
+def rep_underperformers(request: Request, lang: str = "zh", view: str = "both",
+                        db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if user.role != "rep":
+        return RedirectResponse("/underperformers", status_code=303)
+    r = service.run_cumulative_growth(db, with_comparison=False)
+    my_team = next((t for t, ms in r.get("team_members", {}).items() if user.associate_name in ms), None)
+    ctx = _underperf_context(db, view, team=my_team)
+    return templates.TemplateResponse("backtest_underperformers.html", dict(
+        ctx, request=request, user=user, page="mewatch", lang=lang, mine=True, team=my_team))
 
 
 # ---------- new-account review (assigned vs self-earned -> acquisition eligibility) ----------
