@@ -28,15 +28,17 @@ Base.metadata.create_all(engine)
 
 
 def _seed_targets():
-    """One-time: set the initial per-rep growth targets (Wendy 8%, An Cao 4%; everyone else uses the 6% default).
-    Idempotent — only inserts a key if it's absent, so manager edits are never overwritten."""
+    """One-time: give each TEAM a growth target key at the default, so the manager sees editable rows on
+    /settings. Idempotent — only inserts a key if it's absent, so manager edits are never overwritten.
+    (The old per-rep target keys are left in place, unused, rather than deleted behind the manager's back.)"""
     from .db import SessionLocal
+    from .config import TEAMS, DEFAULTS
     db = SessionLocal()
     try:
-        for name, pct in (("Wendy Ye", "0.08"), ("An Cao", "0.04")):
+        for name in TEAMS:
             key = f"growth_target::{name}"
             if not db.get(M.Setting, key):
-                db.add(M.Setting(key=key, value=pct))
+                db.add(M.Setting(key=key, value=str(DEFAULTS["growth_target_default"])))
         db.commit()
     except Exception:
         db.rollback()
@@ -185,13 +187,31 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     paid = {p.associate: float(p.paid_cum or 0.0)
             for p in db.query(M.GrowthPayment).filter(M.GrowthPayment.fiscal_start == r["fiscal_start"].date())}
 
+    # GROWTH is earned by the TEAM (the accounts it owns) and split equally; CONTRIBUTION and ACQUISITION
+    # stay individual. So there are two views: the team's growth, then each rep's own pay line.
+    team_rows = []
+    for _, x in r.get("teams", pd.DataFrame()).iterrows():
+        tname = x["team"]
+        t = r["trajectory"][tname][mi]
+        team_rows.append(dict(
+            team=tname, members=r["team_members"].get(tname, []), n_accounts=int(x["n_accounts"]),
+            profit_mo=float(t["ty_book"]), profit_mo_ly=float(t["ly_book"]),
+            gap_mo=float(t["ty_book"]) - float(t["ly_book"]), cum_gap=float(t["cum_growth"]),
+            pay_mo=float(t["pay"]), cum_pay=float(t["cum_pay"]),
+            target=(float(t["target"]) if t["target"] is not None else None)))
+
+    # every rep on the roster gets a pay line (contribution is individual, so a house-team rep still earns it);
+    # the growth share comes from their team, or is absent if they are not on a paid team.
+    rep_team = {row["associate"]: row["team"] for _, row in r["reps"].iterrows()} if len(r["reps"]) else {}
+    members_of = {t: len(ms) for t, ms in r.get("team_members", {}).items()}
+    zero = dict(pay=0.0, cum_pay=0.0)
     rows = []
-    for _, x in r["reps"].iterrows():
-        rep = x["associate"]
-        t = r["trajectory"][rep][mi]
+    for rep in team:
+        t = r.get("rep_trajectory", {}).get(rep, [zero] * len(months))[mi]
+        x = dict(team=rep_team.get(rep), members=members_of.get(rep_team.get(rep), 1))
         c = contrib.get((rep, m), dict(n_items=0, bonus=0.0))
         a_mo = acq_pay.get((rep, m), 0.0)
-        growth_cycle = float(r["trajectory"][rep][mi]["cum_pay"])                       # through selected month
+        growth_cycle = float(t["cum_pay"])                                              # through selected month
         contrib_cycle = sum(contrib.get((rep, mm), {}).get("bonus", 0.0) for mm in thru)
         acq_cycle = sum(v for (rp, mmn), v in acq_pay.items() if rp == rep and mmn in thru)
         earned_cycle = growth_cycle + contrib_cycle + acq_cycle
@@ -200,26 +220,25 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         collectable = earned_cycle * frac
         already = paid.get(rep, 0.0)
         rows.append(dict(
-            associate=rep,
-            profit_mo=float(t["ty_book"]), profit_mo_ly=float(t["ly_book"]),
-            gap_mo=float(t["ty_book"]) - float(t["ly_book"]),
-            cum_gap=float(t["cum_growth"]),
-            pay_mo=float(t["pay"]), cum_pay=float(t["cum_pay"]),
+            associate=rep, team=x["team"], members=int(x["members"] or 1),
+            pay_mo=float(t["pay"]), cum_pay=growth_cycle,
             n_items=c["n_items"], contrib_mo=c["bonus"], acq_mo=a_mo,
             total_mo=float(t["pay"]) + c["bonus"] + a_mo,
             earned_cycle=earned_cycle, collected_pct=frac * 100.0,
             paid=already, payable_now=max(0.0, collectable - already),
         ))
-    rows.sort(key=lambda z: -z["earned_cycle"])
+    rows.sort(key=lambda z: (z["team"] is None, z["team"] or "", -z["earned_cycle"]))
     team_row = {k: sum(z[k] for z in rows) for k in
-                ("profit_mo", "profit_mo_ly", "gap_mo", "cum_gap", "pay_mo", "cum_pay",
-                 "contrib_mo", "acq_mo", "total_mo", "earned_cycle", "paid", "payable_now")}
+                ("pay_mo", "cum_pay", "contrib_mo", "acq_mo", "total_mo", "earned_cycle", "paid", "payable_now")}
     team_row["n_items"] = sum(z["n_items"] for z in rows)
+    for k in ("profit_mo", "profit_mo_ly", "gap_mo", "cum_gap"):
+        team_row[k] = sum(z[k] for z in team_rows)
     nav = dict(prev=(months[mi - 1] if mi > 0 else None), next=(months[mi + 1] if mi + 1 < len(months) else None),
                n=mi + 1, total=len(months))
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
-        "rows": rows, "team": team_row, "rate": r["cumulative_rate"], "page": "dash",
+        "rows": rows, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
+        "unassigned": service.unassigned_summary(db),
         "is_latest": (mi == len(months) - 1), "growth_active": growth_active,
         "growth_start": r["growth_start"],
         "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
@@ -249,36 +268,90 @@ def record_pay(request: Request, associate: str = Form(...), amount: float = For
 # ---------- per-rep drill-down: which accounts drove the number ----------
 @app.get("/rep/{name}", response_class=HTMLResponse)
 def rep_detail(request: Request, name: str, m: str = None, db: Session = Depends(get_db)):
-    user = _guard(request, db)
+    """Growth is a TEAM number, so a rep's drill-down is their team's."""
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    r = service.run_cumulative_growth(db, with_comparison=False)
+    for team_name, members in r.get("team_members", {}).items():
+        if name in members:
+            return RedirectResponse(f"/team/{team_name}" + (f"?m={m}" if m else ""), status_code=303)
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/team/{team_name}", response_class=HTMLResponse)
+def team_detail(request: Request, team_name: str, m: str = None, db: Session = Depends(get_db)):
+    """Which accounts drove a team's growth number — the team owns each one whole, so no share column."""
+    user = current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
     r = service.run_cumulative_growth(db, with_comparison=False)
     months = r["months"]
     # the drill-down is purely a growth view — nothing to show in the contribution-only chapter
-    if not months or name not in r["trajectory"] or not r.get("growth_active", True):
-        return RedirectResponse("/", status_code=303)
+    if not months or team_name not in r["trajectory"] or not r.get("growth_active", True):
+        return RedirectResponse("/" if user.role != "rep" else "/me", status_code=303)
+    if user.role == "rep" and user.associate_name not in r["team_members"].get(team_name, []):
+        return RedirectResponse("/me", status_code=303)          # a rep only sees their own team
     if m not in months:
         m = months[-1]
     mi = months.index(m)
     names = service.customer_names(db)
     rows = []
     for acct, v in r["account_monthly"].items():
-        if name not in v["shares"]:
+        if team_name not in v["shares"]:
             continue
-        sh = v["shares"][name]
-        ty_mo, ly_mo = v["mo_ty"][mi] * sh, v["mo_ly"][mi] * sh
-        rows.append(dict(account=acct, customer=names.get(acct, acct), share=sh * 100.0,
+        ty_mo, ly_mo = v["mo_ty"][mi], v["mo_ly"][mi]
+        rows.append(dict(account=acct, customer=names.get(acct, acct),
                          ty_mo=ty_mo, ly_mo=ly_mo, gap_mo=ty_mo - ly_mo,
-                         cum_gap=v["cum"][mi] * sh, is_young=bool(v["is_young"])))
+                         cum_gap=v["cum"][mi], is_young=bool(v["is_young"])))
     rows.sort(key=lambda z: -z["gap_mo"])
     tot = {k: sum(z[k] for z in rows) for k in ("ty_mo", "ly_mo", "gap_mo", "cum_gap")}
-    t = r["trajectory"][name][mi]
+    t = r["trajectory"][team_name][mi]
+    members = r["team_members"].get(team_name, [])
     nav = dict(prev=(months[mi - 1] if mi > 0 else None), next=(months[mi + 1] if mi + 1 < len(months) else None))
     return templates.TemplateResponse("backtest_rep_detail.html", {
-        "request": request, "user": user, "page": "dash", "name": name, "m": m, "months": months, "nav": nav,
+        "request": request, "user": user, "page": "dash", "name": team_name, "members": members,
+        "m": m, "months": months, "nav": nav,
         "rows": rows, "tot": tot, "pay_mo": float(t["pay"]), "cum_pay": float(t["cum_pay"]),
+        "share_each": (float(t["pay"]) / len(members)) if members else 0.0,
         "rate": r["cumulative_rate"], "growth_active": r.get("growth_active", True),
         "growth_start": r["growth_start"]})
+
+
+# ---------- account assignment: which TEAM owns each account ----------
+@app.get("/accounts", response_class=HTMLResponse)
+def accounts_page(request: Request, view: str = "shared", q: str = "", db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    from .config import TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS, HOUSE_TEAM
+    rows = service.account_assignments(db)
+    teams = list(service.team_members(db)) + [HOUSE_TEAM]
+    counts = dict(all=len(rows), shared=sum(1 for r in rows if r["shared"]))
+    for t in teams:
+        counts[t] = sum(1 for r in rows if r["team"] == t)
+    shown = [r for r in rows if (view == "all" or (view == "shared" and r["shared"]) or r["team"] == view)]
+    if q:
+        needle = q.strip().lower()
+        shown = [r for r in shown if needle in r["customer"].lower() or needle in r["account"].lower()]
+    return templates.TemplateResponse("backtest_accounts.html", {
+        "request": request, "user": user, "page": "accounts", "rows": shown[:400], "n_shown": len(shown),
+        "teams": teams, "view": view, "q": q, "counts": counts,
+        "pct": TEAM_OWNERSHIP_PCT * 100, "months": TEAM_WINDOW_MONTHS})
+
+
+@app.post("/accounts/assign")
+def accounts_assign(request: Request, account: str = Form(...), team: str = Form(...), view: str = Form("shared"),
+                    db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    row = db.get(M.AccountAssignment, account) or M.AccountAssignment(account=account)
+    row.team = team or None                       # empty -> clear the override, fall back to the 80% rule
+    row.user_id = user.user_id
+    row.updated_at = dt.datetime.utcnow()
+    db.merge(row); db.commit()
+    return RedirectResponse(f"/accounts?view={view}", status_code=303)
 
 
 # ---------- new-account review (assigned vs self-earned -> acquisition eligibility) ----------
@@ -318,7 +391,9 @@ def settings_page(request: Request, saved: int = 0, db: Session = Depends(get_db
     s = service.get_settings(db)
     _, _, team = service.attribution_maps(db)
     default_t = float(s.get("growth_target_default", 0.06))
-    reps = [dict(name=n, target=float(s.get(f"growth_target::{n}", default_t))) for n in sorted(team)]
+    # targets are per TEAM now (growth is earned by the team and split equally among its members)
+    reps = [dict(name=t, target=float(s.get(f"growth_target::{t}", default_t)), members=", ".join(ms))
+            for t, ms in service.team_members(db).items()]
     return templates.TemplateResponse("backtest_settings.html", {
         "request": request, "user": user, "page": "settings", "saved": bool(saved), "reps": reps,
         "base_rate": float(s.get("cumulative_rate", 0.05)),
@@ -345,8 +420,7 @@ async def settings_save(request: Request, db: Session = Depends(get_db)):
     for key in ("acq_flat_small", "acq_flat_medium", "acq_flat_large"):
         if form.get(key, "").strip():
             put(key, int(float(form[key])))
-    _, _, team = service.attribution_maps(db)
-    for name in team:
+    for name in service.team_members(db):
         v = form.get(f"target::{name}", "").strip()
         if v:
             put(f"growth_target::{name}", float(v))
@@ -494,26 +568,33 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     name = user.associate_name
     r = service.run_cumulative_growth(db, with_comparison=False)
     months = r["months"]
-    if not months or name not in r["trajectory"]:
+    my_team = next((t for t, ms in r.get("team_members", {}).items() if name in ms), None)
+    if not months:
         return templates.TemplateResponse("backtest_me.html", {
             "request": request, "user": user, "page": "me", "lang": lang, "name": name,
-            "months": [], "traj": [], "accounts": [], "k": {},
+            "months": [], "traj": [], "accounts": [], "k": {}, "my_team": my_team, "members": [],
             "growth_active": r.get("growth_active", True), "growth_start": r["growth_start"]})
     s = service.get_settings(db)
     _, _, team = service.attribution_maps(db)
     growth_active = r.get("growth_active", True)
     contrib = contribution_by_rep_month(db, months, team, float(s["item_rate"]))
     acq_pay = acquisition_by_rep_month(db, months, team, s)[0] if growth_active else {}
+    # growth numbers are the TEAM's; the rep's share of the pay is an equal split. ty/ly/gap columns show the
+    # team's book so the rep can see what the share was earned on.
+    members = r.get("team_members", {}).get(my_team, [])
+    team_traj = r["trajectory"].get(my_team) if my_team else None
+    my_traj = r.get("rep_trajectory", {}).get(name)
     traj = []
     for i, mm in enumerate(months):
-        t = r["trajectory"][name][i]
+        t = team_traj[i] if team_traj else dict(ty_book=0.0, ly_book=0.0, cum_growth=0.0)
+        my_pay = float(my_traj[i]["pay"]) if my_traj else 0.0
         c = contrib.get((name, mm), dict(n_items=0, bonus=0.0))
         a_mo = acq_pay.get((name, mm), 0.0)
         traj.append(dict(month=mm, ty=float(t["ty_book"]), ly=float(t["ly_book"]),
                          gap=float(t["ty_book"]) - float(t["ly_book"]), cum=float(t["cum_growth"]),
-                         pay=float(t["pay"]), n_items=c["n_items"], contrib=c["bonus"], acq=a_mo,
-                         total=float(t["pay"]) + c["bonus"] + a_mo))
-    growth_cycle = float(r["trajectory"][name][-1]["cum_pay"])
+                         pay=my_pay, n_items=c["n_items"], contrib=c["bonus"], acq=a_mo,
+                         total=my_pay + c["bonus"] + a_mo))
+    growth_cycle = float(my_traj[-1]["cum_pay"]) if my_traj else 0.0
     contrib_cycle = sum(x["contrib"] for x in traj)
     acq_cycle = sum(x["acq"] for x in traj)
     earned = growth_cycle + contrib_cycle + acq_cycle
@@ -527,16 +608,16 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     names = service.customer_names(db)
     acc = r["accounts"]
     accounts = []
-    if len(acc):
-        for a in acc[acc["holder"] == name].sort_values("growth", ascending=False).itertuples(index=False):
+    if len(acc) and my_team:
+        for a in acc[acc["holder"] == my_team].sort_values("growth", ascending=False).itertuples(index=False):
             accounts.append(dict(name=names.get(a.account, a.account), ty=float(a.ty_profit),
                                  ly=float(a.ly_profit), gap=float(a.growth), is_young=bool(a.is_young)))
     p = db.query(M.GrowthPayment).filter(M.GrowthPayment.associate == name,
                                          M.GrowthPayment.fiscal_start == r["fiscal_start"].date()).first()
     already = float(p.paid_cum or 0.0) if p else 0.0
-    rr = r["reps"]; me_row = rr[rr["associate"] == name]
+    rr = r["reps"]; me_row = rr[rr["associate"] == name] if len(rr) else rr
     target = float(me_row.iloc[0]["target"]) if len(me_row) and me_row.iloc[0]["target"] is not None else None
-    net = float(r["trajectory"][name][-1]["cum_growth"])
+    net = float(team_traj[-1]["cum_growth"]) if team_traj else 0.0
     k = dict(cum_gap=net, earned=earned,
              growth_cycle=growth_cycle, contrib_cycle=contrib_cycle, acq_cycle=acq_cycle,
              collected_pct=frac * 100.0, paid=already, payable=max(0.0, earned * frac - already),
@@ -544,6 +625,7 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     return templates.TemplateResponse("backtest_me.html", {
         "request": request, "user": user, "page": "me", "lang": lang, "name": name,
         "months": months, "traj": traj, "accounts": accounts, "k": k,
+        "my_team": my_team, "members": members,
         "rate": r["cumulative_rate"], "fiscal_start": r["fiscal_start"], "as_of": r["as_of"],
         "growth_active": growth_active, "growth_start": r["growth_start"]})
 

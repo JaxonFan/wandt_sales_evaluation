@@ -360,16 +360,113 @@ def _engine_version(db):
 
 def _growth_version(db):
     """Narrow signature for the cumulative GROWTH engine only — exactly what compute_cumulative_growth reads
-    (data, settings/dials incl. per-rep targets, voided, constrained). Deliberately EXCLUDES acquisition
-    (AcquisitionReview / self_acquired), manager actions, and awards, so marking a new account rep-won/house
-    does NOT invalidate the (expensive) growth result."""
+    (data, settings/dials incl. per-team targets, voided, constrained, account->team assignments).
+    Deliberately EXCLUDES acquisition (AcquisitionReview / self_acquired), manager actions, and awards, so
+    marking a new account rep-won/house does NOT invalidate the (expensive) growth result."""
     s = get_settings(db)
     return (
         _data_version(db),
         hash(tuple(sorted((k, str(v)) for k, v in s.items()))),
         frozenset(voided_set(db)),
         frozenset(get_constrained_items(db)),
+        _assignment_version(db),
     )
+
+
+def _assignment_version(db):
+    """Signature of the manager's manual account -> team assignments (tiny table)."""
+    return frozenset((a.account, a.team) for a in db.query(M.AccountAssignment).all())
+
+
+# ---------- teams: who owns which account ----------
+def team_members(db):
+    """{team: [members]} for the PAID teams, restricted to reps actually on the active roster."""
+    from .config import TEAMS
+    _, _, roster = attribution_maps(db)
+    active = set(roster)
+    out = {}
+    for team, members in TEAMS.items():
+        present = [m for m in members if m in active]
+        if present:
+            out[team] = present
+    return out
+
+
+def team_of_rep(db):
+    """{rep name: team} across the paid teams AND the house team (house members earn no growth)."""
+    from .config import TEAMS, HOUSE_TEAM, HOUSE_MEMBERS
+    out = {m: team for team, members in TEAMS.items() for m in members}
+    out.update({m: HOUSE_TEAM for m in HOUSE_MEMBERS})
+    return out
+
+
+def account_assignments(db):
+    """Every account's team, by the 80%-of-orders rule with the manager's manual assignment on top.
+
+    An ORDER is one invoice (not a line, not a dollar): over the trailing TEAM_WINDOW_MONTHS we count each
+    account's invoices by the team of the rep who wrote them, and a team that wrote >= TEAM_OWNERSHIP_PCT of
+    them owns the account. Orders written by nobody on the roster (departed reps, unmapped batches) are left
+    OUT of the denominator so old history can't block a team from reaching the bar.
+
+    Returns rows: account, customer, orders, per-team counts/shares, auto, manual, team (final), profit/revenue
+    over the window, plus `shared` (no team at the bar). Memoized by data + assignment version."""
+    from .config import HOUSE_TEAM, HOUSE_ACCOUNTS, TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS
+
+    def _compute():
+        df = active_lines(db)
+        teams = team_members(db)
+        rep_team = team_of_rep(db)
+        all_teams = list(teams) + [HOUSE_TEAM]
+        manual = {a.account: a.team for a in db.query(M.AccountAssignment).all() if a.team}
+        names = customer_names(db)
+        if not len(df):
+            return []
+        _lo, hi = data_bounds(db)
+        window_start = hi - pd.DateOffset(months=TEAM_WINDOW_MONTHS)
+        win = df[df["document_date"] > window_start].copy()
+        win["team"] = win["associate"].map(rep_team)
+        orders = win.dropna(subset=["team"]).drop_duplicates(["account", "sop_number"])
+        counts = orders.groupby(["account", "team"]).size().unstack(fill_value=0)
+        for t in all_teams:
+            if t not in counts.columns:
+                counts[t] = 0
+        totals = counts[all_teams].sum(axis=1)
+        profit = win.groupby("account")["line_profit"].sum()
+        revenue = win.groupby("account")["extended_price"].sum()
+        rows = []
+        for account in sorted(set(win["account"]) | set(manual)):
+            n_orders = int(totals.get(account, 0))
+            by_team = {t: int(counts[t].get(account, 0)) for t in all_teams} if account in counts.index \
+                else {t: 0 for t in all_teams}
+            shares = {t: (by_team[t] / n_orders if n_orders else 0.0) for t in all_teams}
+            if account in HOUSE_ACCOUNTS:
+                auto = HOUSE_TEAM                       # house by policy, whoever writes the order
+            else:
+                auto = next((t for t in all_teams if shares[t] >= TEAM_OWNERSHIP_PCT), None)
+            team = manual.get(account) or auto
+            rows.append(dict(account=account, customer=names.get(account, account), orders=n_orders,
+                             by_team=by_team, shares=shares, auto=auto, manual=manual.get(account),
+                             team=team, shared=(team is None),
+                             profit=float(profit.get(account, 0.0)), revenue=float(revenue.get(account, 0.0)),
+                             house_by_policy=(account in HOUSE_ACCOUNTS)))
+        rows.sort(key=lambda r: -r["profit"])
+        return rows
+
+    return _memo(("assignments", _data_version(db), _assignment_version(db)), _compute)
+
+
+def unassigned_summary(db):
+    """How much book is sitting in accounts no team owns yet — the nudge to the Accounts tab (they earn
+    nothing for anyone until the manager assigns them)."""
+    rows = [r for r in account_assignments(db) if r["shared"]]
+    return dict(n=len(rows), profit=sum(r["profit"] for r in rows),
+                top=[dict(account=r["account"], customer=r["customer"], profit=r["profit"],
+                          shares=r["shares"]) for r in rows[:5]])
+
+
+def account_team_map(db):
+    """{account: team} for accounts a team owns (unassigned accounts are simply absent)."""
+    return {r["account"]: r["team"] for r in account_assignments(db) if r["team"]}
 
 
 def _awards_version(db):
@@ -608,13 +705,16 @@ def run_cumulative_growth(db, with_comparison=True):
     def _core():
         df = active_lines(db)
         _, _, team = attribution_maps(db)
-        targets = {name: float(s.get(f"growth_target::{name}", default_target)) for name in team}
+        teams = team_members(db)
+        # growth is earned by TEAMS now, so the target % is per team (Setting key 'growth_target::Team 1').
+        targets = {name: float(s.get(f"growth_target::{name}", default_target)) for name in teams}
         fiscal_start, as_of = cycle_window()
         return compute_cumulative_growth(df, fiscal_start, as_of, team, cumulative_rate=rate,
                                          accel_rate=accel, rep_targets=targets,
                                          exempt_accounts=GROWTH_EXEMPT_ACCOUNTS,
                                          young_account_pct=young_pct, young_account_months=young_months,
-                                         constrained_item_numbers=get_constrained_items(db))
+                                         constrained_item_numbers=get_constrained_items(db),
+                                         teams=teams, account_team=account_team_map(db))
 
     fiscal_start, as_of = cycle_window()
     if fiscal_start < growth_start:
@@ -638,14 +738,20 @@ def _contribution_only_growth(db, fiscal_start, as_of, rate):
     (Aug-Sep 2026): the same month spine and one all-zero row per rep, so every page renders unchanged while
     growth_active=False tells the templates to hide the growth columns."""
     _, _, team = attribution_maps(db)
+    teams = team_members(db)
+    rep_team = {m: t for t, members in teams.items() for m in members}
     months = [str(m) for m in pd.period_range(fiscal_start.to_period("M"), as_of.to_period("M"), freq="M")]
-    zero_row = lambda m: dict(month=m, pay=0.0, cum_pay=0.0, cum_growth=0.0,
-                              ty_book=0.0, ly_book=0.0, target=None)
-    return dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=rate, months=months,
-                reps=pd.DataFrame([dict(associate=r, n_accounts=0, n_young=0, cum_growth=0.0,
-                                        earned=0.0, target=None) for r in team]),
-                trajectory={r: [zero_row(m) for m in months] for r in team},
-                accounts=pd.DataFrame(), account_monthly={}, growth_active=False)
+    zero_row = lambda m: dict(month=m, pay=0.0, cum_pay=0.0, cum_growth=0.0, ty_book=0.0, ly_book=0.0,
+                              target=None, team_pay=0.0, team_cum_pay=0.0)
+    return dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=rate, months=months, team_mode=True,
+                reps=pd.DataFrame([dict(associate=r, team=rep_team.get(r), members=1, n_accounts=0,
+                                        cum_growth=0.0, earned=0.0, team_earned=0.0, target=None)
+                                   for r in team]),
+                teams=pd.DataFrame([dict(team=t, n_accounts=0, n_young=0, cum_growth=0.0, earned=0.0,
+                                         target=None) for t in teams]),
+                trajectory={t: [zero_row(m) for m in months] for t in teams},
+                rep_trajectory={r: [zero_row(m) for m in months] for r in team},
+                team_members=teams, accounts=pd.DataFrame(), account_monthly={}, growth_active=False)
 
 
 def written_off_set(db):

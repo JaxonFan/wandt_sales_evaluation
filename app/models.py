@@ -24,6 +24,17 @@ class Associate(Base):
     salary_raw = Column(String)                         # raw roster Salary string (e.g. "$23/hour"); for a future ROI view
 
 
+class AccountAssignment(Base):
+    """Manager's manual account -> team assignment. ALWAYS beats the computed 80%-of-orders rule, which is
+    what makes the genuinely shared accounts (no team over 80%) payable at all."""
+    __tablename__ = "account_assignments"
+    account = Column(String, primary_key=True)
+    team = Column(String)                              # "Team 1" | "Team 2" | "House"
+    note = Column(String)
+    user_id = Column(Integer)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class User(Base):
     __tablename__ = "users"
     user_id = Column(Integer, primary_key=True, autoincrement=True)

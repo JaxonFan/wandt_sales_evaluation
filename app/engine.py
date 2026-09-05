@@ -545,7 +545,8 @@ def compute_annual_review(df, as_of, sales_team, *, exempt_accounts=frozenset(),
 def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative_rate,
                               young_account_pct, young_account_months=12,
                               constrained_item_numbers=frozenset(), accel_rate=None,
-                              rep_targets=None, exempt_accounts=frozenset()):
+                              rep_targets=None, exempt_accounts=frozenset(),
+                              account_team=None, teams=None):
     """Cumulative profit-growth model (the 'what-if' replacement for the Growth piece).
 
     Measured PER ACCOUNT against the SAME account a year ago (not per-rep totals — 35% of the book
@@ -565,7 +566,14 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
       no target entry is treated as target=inf (=> flat base rate). exempt_accounts are dropped from growth
       entirely (house accounts run by non-reps). A brand-new account has no year-ago, so its gap == its own profit.
 
-    Pure/read-only: pays nothing, writes nothing. Returns dict(reps, trajectory, accounts, months, ...).
+    TEAM MODE (`teams` = {team: [members]} and `account_team` = {account: team}): the EARNER is the team, not
+    the rep. An account's whole gap goes to the team that owns it (the 80%-of-orders rule + the manager's
+    assignments — see service.account_assignments), no work-share split and no matter who wrote the order; an
+    account no team owns earns nothing for anyone. Everything else is identical — netting, target, two-tier
+    rate and true-up all happen at team level — and the team's pay is then split EQUALLY among its members.
+
+    Pure/read-only: pays nothing, writes nothing. Returns dict(reps, trajectory, accounts, months, ...);
+    in team mode `trajectory`/`earners` are keyed by TEAM and `reps`/`rep_trajectory` carry the equal split.
     """
     fiscal_start = pd.Timestamp(fiscal_start).normalize()
     as_of = pd.Timestamp(as_of).normalize()
@@ -573,6 +581,10 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
     accel_rate = cumulative_rate if accel_rate is None else accel_rate
     rep_targets = rep_targets or {}
     exempt_accounts = set(exempt_accounts)
+    team_mode = bool(teams)
+    teams = {t: list(members) for t, members in (teams or {}).items()}
+    account_team = account_team or {}
+    earners = sorted(teams) if team_mode else sorted(team)
 
     def tier(G, target):
         G = max(0.0, G)
@@ -600,23 +612,31 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
     first_sale = d.groupby("account")["document_date"].min()
     young_cut = as_of - pd.DateOffset(months=young_account_months)
 
-    # this-cycle profit per (account, team rep) -> work-share within each account
-    ty = d[d["ym"].isin(months) & d["associate"].isin(team)]
+    # this-cycle profit per (account, earner). In TEAM mode the owning team takes the account whole, so every
+    # account sold this cycle is in play regardless of who wrote it; otherwise it is a work-share split
+    # among the reps who sold it.
+    ty = d[d["ym"].isin(months)] if team_mode else d[d["ym"].isin(months) & d["associate"].isin(team)]
     if not len(ty):
         return empty
     rep_prof = ty.groupby(["account", "associate"])["line_profit"].sum()
 
     per_acct = {}
-    for acct in rep_prof.index.get_level_values(0).unique():
+    for acct in ty["account"].unique() if team_mode else rep_prof.index.get_level_values(0).unique():
         if acct in exempt_accounts:                              # house accounts: out of the growth calc
             continue
-        rp = rep_prof.loc[acct]                                  # Series: rep -> this-cycle profit
-        pos = rp[rp > 0]
-        if pos.sum() > 0:
-            shares = (pos / pos.sum()).to_dict()                 # work-share among reps with positive sales
+        if team_mode:
+            owner = account_team.get(acct)
+            if owner not in teams:                               # unassigned / house -> nobody earns on it
+                continue
+            shares, primary = {owner: 1.0}, owner
         else:
-            shares = {rp.idxmax(): 1.0}                          # loss account -> credit/charge the largest seller
-        primary = max(shares, key=shares.get)
+            rp = rep_prof.loc[acct]                              # Series: rep -> this-cycle profit
+            pos = rp[rp > 0]
+            if pos.sum() > 0:
+                shares = (pos / pos.sum()).to_dict()             # work-share among reps with positive sales
+            else:
+                shares = {rp.idxmax(): 1.0}                      # loss account -> credit/charge the largest seller
+            primary = max(shares, key=shares.get)
         # is_young is a DISPLAY flag only: a brand-new account has no full year-ago, so its raw gap below just
         # equals its own cumulative profit — no special case in the math.
         is_young = bool(first_sale.get(acct, as_of) > young_cut)
@@ -634,7 +654,7 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
 
     reps, trajectory = [], {}
     INF = float("inf")
-    for rep in sorted(team):
+    for rep in earners:
         held = [(a, v) for a, v in per_acct.items() if rep in v["shares"]]
         target_pct = rep_targets.get(rep)                        # None -> flat (target = inf)
         # rep-level netting + TWO-TIER true-up: earned = base x min(peak,target$) + accel x max(0,peak-target$).
@@ -664,8 +684,32 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
 
     accounts = pd.DataFrame([dict(account=a, holder=v["primary"], ty_profit=v["ty_profit"],
                                   ly_profit=v["ly_profit"], growth=v["gap"], is_young=v["is_young"])
-                             for a, v in per_acct.items()])
-    return dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=cumulative_rate,
-                months=[str(m) for m in months], reps=pd.DataFrame(reps),
-                trajectory=trajectory, accounts=accounts,
-                account_monthly=per_acct)   # per-account shares + mo_ty/mo_ly/cum arrays (drill-downs)
+                             for a, v in per_acct.items()],
+                            columns=["account", "holder", "ty_profit", "ly_profit", "growth", "is_young"])
+    out = dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=cumulative_rate,
+               months=[str(m) for m in months], reps=pd.DataFrame(reps),
+               trajectory=trajectory, accounts=accounts, team_mode=team_mode,
+               account_monthly=per_acct)   # per-account shares + mo_ty/mo_ly/cum arrays (drill-downs)
+    if not team_mode:
+        return out
+    # TEAM MODE: what was computed above is per TEAM; split each team's pay EQUALLY among its members.
+    out["teams"] = out["reps"].rename(columns={"associate": "team"})
+    out["earners"] = trajectory                                  # keyed by team
+    rep_rows, rep_traj = [], {}
+    for team_name, members in teams.items():
+        n = len(members) or 1
+        rows = trajectory.get(team_name, [])
+        for member in members:
+            rep_traj[member] = [dict(r, pay=r["pay"] / n, cum_pay=r["cum_pay"] / n, team=team_name,
+                                     team_pay=r["pay"], team_cum_pay=r["cum_pay"]) for r in rows]
+            team_row = next((x for x in reps if x["associate"] == team_name), None)
+            rep_rows.append(dict(associate=member, team=team_name, members=n,
+                                 n_accounts=(team_row or {}).get("n_accounts", 0),
+                                 cum_growth=(team_row or {}).get("cum_growth", 0.0),
+                                 earned=(team_row or {}).get("earned", 0.0) / n,
+                                 team_earned=(team_row or {}).get("earned", 0.0),
+                                 target=(team_row or {}).get("target")))
+    out["reps"] = pd.DataFrame(rep_rows)
+    out["rep_trajectory"] = rep_traj
+    out["team_members"] = teams
+    return out

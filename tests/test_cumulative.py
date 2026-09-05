@@ -186,3 +186,74 @@ def test_net_down_book_pays_zero():
     assert r["cum_growth"] < 0
     assert r["earned"] == pytest.approx(0.0)
     assert all(row["pay"] == pytest.approx(0.0) for row in res["trajectory"]["Rep A"])
+
+
+# ---------------------------------------------------------------------------------------------------
+# TEAM MODE: the earner is the team that owns the account (80%-of-orders rule + the manager's
+# assignments, resolved in service.account_assignments), and the team's pay splits equally.
+TEAMS = {"Team 1": ["Rep A", "Rep B"], "Team 2": ["Rep C"]}
+
+
+def run_teams(df, account_team, teams=None, rate=RATE, **kw):
+    return engine.compute_cumulative_growth(df, FISCAL, AS_OF, sum((teams or TEAMS).values(), []),
+                                            cumulative_rate=rate, young_account_pct=rate,
+                                            teams=(teams or TEAMS), account_team=account_team, **kw)
+
+
+def team_row(res, team):
+    t = res["teams"]; row = t[t["team"] == team]
+    return row.iloc[0].to_dict() if len(row) else dict(cum_growth=0.0, earned=0.0)
+
+
+def test_team_owns_the_account_whoever_sold_it():
+    # the account is worked by Rep C (Team 2) but ASSIGNED to Team 1 -> Team 1 earns it, Team 2 gets nothing
+    lines = (mk("G", "Rep C", "X", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("G", "Rep C", "X", FISCAL, AS_OF, 7, 125, 100))
+    res = run_teams(df_from(lines), {"G": "Team 1"})
+    assert team_row(res, "Team 1")["earned"] > 0
+    assert team_row(res, "Team 2")["earned"] == pytest.approx(0.0)
+    assert acct(res, "G")["holder"] == "Team 1"
+
+
+def test_unassigned_account_earns_nothing_for_anyone():
+    lines = (mk("SHARED", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("SHARED", "Rep A", "X", FISCAL, AS_OF, 7, 135, 100))
+    res = run_teams(df_from(lines), {})                       # no team owns it
+    assert acct(res, "SHARED") is None
+    assert all(team_row(res, t)["earned"] == pytest.approx(0.0) for t in TEAMS)
+
+
+def test_team_pay_splits_equally_among_members():
+    lines = (mk("G", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("G", "Rep A", "X", FISCAL, AS_OF, 7, 125, 100))
+    res = run_teams(df_from(lines), {"G": "Team 1"})
+    team_pay = team_row(res, "Team 1")["earned"]
+    assert team_pay > 0
+    reps = res["reps"].set_index("associate")["earned"].to_dict()
+    assert reps["Rep A"] == pytest.approx(team_pay / 2)        # Team 1 has two members
+    assert reps["Rep B"] == pytest.approx(team_pay / 2)        # the non-selling member earns the same share
+    assert sum(r["pay"] for r in res["rep_trajectory"]["Rep A"]) == pytest.approx(team_pay / 2)
+
+
+def test_team_nets_its_own_accounts():
+    # one grower + one decliner in the SAME team net against each other before anything is paid
+    up = (mk("UP", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+          + mk("UP", "Rep A", "X", FISCAL, AS_OF, 7, 125, 100))     # +$20/wk
+    down = (mk("DN", "Rep B", "Y", HIST, FISCAL - DAY, 7, 125, 100)
+            + mk("DN", "Rep B", "Y", FISCAL, AS_OF, 7, 105, 100))   # -$20/wk
+    res = run_teams(df_from(up + down), {"UP": "Team 1", "DN": "Team 1"})
+    grower_only = run_teams(df_from(up), {"UP": "Team 1"})
+    assert abs(team_row(res, "Team 1")["cum_growth"]) < 45                  # the two cancel out
+    # the decliner eats nearly all of the grower's pay (only an early peak in the netted book survives)
+    assert team_row(res, "Team 1")["earned"] < 0.1 * team_row(grower_only, "Team 1")["earned"]
+
+
+def test_house_account_is_exempt_in_team_mode():
+    keep = (mk("KEEP", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+            + mk("KEEP", "Rep A", "X", FISCAL, AS_OF, 7, 125, 100))
+    house = (mk("HOUSE", "Rep A", "Y", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("HOUSE", "Rep A", "Y", FISCAL, AS_OF, 7, 160, 100))
+    res = run_teams(df_from(keep + house), {"KEEP": "Team 1", "HOUSE": "Team 1"},
+                    exempt_accounts={"HOUSE"})
+    assert acct(res, "HOUSE") is None
+    assert acct(res, "KEEP") is not None

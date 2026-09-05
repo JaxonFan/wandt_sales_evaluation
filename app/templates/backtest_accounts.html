@@ -1,0 +1,55 @@
+{% extends "backtest_base.html" %}{% block body %}
+<div class="card">
+  <h2>Account assignment — which team owns which account</h2>
+  <p class="hint">An account belongs to the team that wrote <b>{{ '%.0f'|format(pct) }}% or more of its orders</b>
+    over the last <b>{{ months }} months</b> (an order = one invoice, whatever its size). Accounts no team owns
+    outright are <b>shared</b> — they pay <b>nobody</b> until you assign them here, and your assignment always
+    beats the computed one. Growth follows this ownership; contribution and new-account bonuses stay with the
+    individual rep who did the work.</p>
+  <div style="margin:10px 0">
+    <a class="pnav {{ 'on' if view=='shared' }}" href="/accounts?view=shared">Needs assignment ({{ counts.shared }})</a>
+    {% for t in teams %}<a class="pnav {{ 'on' if view==t }}" href="/accounts?view={{ t|urlencode }}">{{ t }} ({{ counts[t] }})</a>{% endfor %}
+    <a class="pnav {{ 'on' if view=='all' }}" href="/accounts?view=all">All ({{ counts.all }})</a>
+    <form method="get" action="/accounts" style="display:inline-block;margin-left:10px">
+      <input type="hidden" name="view" value="{{ view }}">
+      <input name="q" value="{{ q }}" placeholder="search customer…" style="padding:5px 8px;font-size:13px;border:1px solid var(--line);border-radius:6px">
+    </form>
+  </div>
+  <table>
+    <thead><tr><th>Customer</th><th class="num">Orders ({{ months }}mo)</th>
+      {% for t in teams %}<th class="num">{{ t }}</th>{% endfor %}
+      <th>Computed</th><th class="num">Profit</th><th>Owner</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.customer }}<div class="mut" style="font-size:11px">{{ r.account }}</div></td>
+        <td class="num mut">{{ r.orders }}</td>
+        {% for t in teams %}
+        <td class="num {{ '' if r.shares[t] >= 0.8 else 'mut' }}">{% if r.shares[t] > 0 %}{{ '%.0f'|format(r.shares[t]*100) }}%{% else %}—{% endif %}</td>
+        {% endfor %}
+        <td>{% if r.house_by_policy %}<span class="badge">house account</span>
+            {% elif r.auto %}{{ r.auto }}
+            {% else %}<span class="badge b-new">shared</span>{% endif %}</td>
+        <td class="num">${{ '{:,.0f}'.format(r.profit) }}</td>
+        <td>
+          <form method="post" action="/accounts/assign" style="margin:0">
+            <input type="hidden" name="account" value="{{ r.account }}">
+            <input type="hidden" name="view" value="{{ view }}">
+            <select name="team" onchange="this.form.submit()" style="padding:4px 6px;font-size:12.5px;border:1px solid var(--line);border-radius:6px">
+              <option value="" {{ 'selected' if not r.manual }}>{{ '(auto: ' + r.auto + ')' if r.auto else '(auto: unassigned)' }}</option>
+              {% for t in teams %}<option value="{{ t }}" {{ 'selected' if r.manual == t }}>{{ t }}</option>{% endfor %}
+            </select>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="{{ 5 + teams|length }}" class="mut">Nothing here.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if n_shown > rows|length %}<p class="hint">Showing the top {{ rows|length }} of {{ n_shown }} by profit — search to narrow.</p>{% endif %}
+  <p class="hint" style="margin-top:10px">Picking a team here <b>overrides</b> the computed owner and sticks until
+    you change it back to <b>(auto)</b>. <b>House</b> accounts pay no growth to anyone. A shared account left
+    unassigned pays nothing — assigning the biggest ones is where the money is.</p>
+</div>
+{% endblock %}

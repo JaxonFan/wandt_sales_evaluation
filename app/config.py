@@ -70,8 +70,29 @@ DEFAULTS = {
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)
 }
 
+# ---------------------------------------------------------------------------------------------------
+# TEAMS. Accounts are hard to pin on one person, so GROWTH is measured and paid at the TEAM level: an
+# account belongs to the team whose members wrote >= TEAM_OWNERSHIP_PCT of its ORDERS over the trailing
+# TEAM_WINDOW_MONTHS, and the team's growth pay is split EQUALLY among its members. An account no team
+# owns outright is UNASSIGNED — it earns nothing until the manager assigns it on the Accounts tab (a
+# manual assignment always beats the computed one). Contribution and acquisition stay INDIVIDUAL.
+TEAMS = {
+    "Team 1": ("An Cao", "Ting Ting"),
+    "Team 2": ("Garmi Mei", "Vanessa Wu", "Wendy Ye"),
+}
+HOUSE_TEAM = "House"                     # not paid growth: managers' own book + the house accounts below
+HOUSE_MEMBERS = ("Morgan Wu", "Cindy Chan", "Tina Ni")
+TEAM_OWNERSHIP_PCT = 0.80                # a team owns an account at >= this share of its orders
+TEAM_WINDOW_MONTHS = 12                  # ownership is measured over the trailing 12 months of orders
+
+# Accounts that are HOUSE by default whoever writes the order (still overridable on the Accounts tab).
+HOUSE_ACCOUNTS = frozenset({
+    "FIRSTIN01", "FIRSTTX01",                                        # FIRST CHOICE SEAFOOD
+    "ENSONFL01", "ENSONFL02", "ENSONGA01", "ENSONOH01", "ENSONVA01",  # ENSON MARKET / SEAFOOD
+    "CASH & CARRY",              # the bare walk-in catch-all; the NAMED variants (CANEWBK01 / CASH & CARRY01) are real accounts
+})
+
 # Accounts removed from the GROWTH calc only (house accounts run by non-reps; still fine for the raw data).
-# Could become a manager-managed list later.
-GROWTH_EXEMPT_ACCOUNTS = frozenset({"FIRSTIN01"})   # FIRST CHOICE SEAFOOD INC — 100% Cindy Chan (a manager)
+GROWTH_EXEMPT_ACCOUNTS = HOUSE_ACCOUNTS
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
