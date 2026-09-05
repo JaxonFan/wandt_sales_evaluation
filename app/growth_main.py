@@ -23,6 +23,7 @@ from . import models as M
 from .auth import verify_password, hash_password
 from .config import SECRET_KEY
 from . import service
+from . import config as cfg
 
 Base.metadata.create_all(engine)
 
@@ -797,6 +798,10 @@ def guide(request: Request, lang: str = "en", db: Session = Depends(get_db)):
     s = service.get_settings(db)
     return templates.TemplateResponse("backtest_guide.html", {
         "request": request, "user": user, "page": "guide", "lang": lang,
+        "teams": service.team_members(db), "pct": float(cfg.TEAM_OWNERSHIP_PCT) * 100,
+        "window_months": cfg.TEAM_WINDOW_MONTHS,
+        "growth_start": pd.Timestamp(s.get("growth_start", "2026-10-01")),
+        "growth_live": pd.Timestamp(s.get("program_start", "2026-08-01")) >= pd.Timestamp(s.get("growth_start", "2026-10-01")),
         "rate": float(s.get("cumulative_rate", 0.05)), "accel": float(s.get("growth_accel_rate", 0.075)),
         "default_target": float(s.get("growth_target_default", 0.06)), "item_rate": float(s["item_rate"]),
         "flat_small": int(float(s["acq_flat_small"])), "flat_medium": int(float(s["acq_flat_medium"])),
@@ -812,6 +817,11 @@ def rep_guide(request: Request, lang: str = "zh", db: Session = Depends(get_db))
     s = service.get_settings(db)
     return templates.TemplateResponse("backtest_rep_guide.html", {
         "request": request, "user": user, "page": "repguide", "lang": lang,
+        "teams": service.team_members(db),
+        "my_team": next((t for t, ms in service.team_members(db).items()
+                         if user.associate_name in ms), None),
+        "growth_start": pd.Timestamp(s.get("growth_start", "2026-10-01")),
+        "growth_live": pd.Timestamp(s.get("program_start", "2026-08-01")) >= pd.Timestamp(s.get("growth_start", "2026-10-01")),
         "rate": float(s.get("cumulative_rate", 0.05)), "accel": float(s.get("growth_accel_rate", 0.075)),
         "item_rate": float(s["item_rate"]),
         "flat_small": int(float(s["acq_flat_small"])), "flat_medium": int(float(s["acq_flat_medium"])),

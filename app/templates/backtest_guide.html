@@ -11,22 +11,38 @@
   {% if zh %}
   <p class="hint" style="margin-top:6px">一共三项，每项都是一条谁都能核对的直接公式。只按已收货款发放。</p>
 
-  <h3>1 · 增长奖 — 到目标 {{ '%.0f'|format(rate*100) }}%，超过目标 {{ '%.1f'|format(accel*100) }}%</h3>
-  <p><b>一句话规则：</b>把销售手上<b>每一个客户</b>的利润，和<b>同一个客户去年同期</b>比，全部加在一起 ——
-  总数为<b>正</b>：到<b>目标</b>之前拿 <b>{{ '%.0f'|format(rate*100) }}%</b>，超过目标的部分拿
-  <b>{{ '%.1f'|format(accel*100) }}%</b>；为<b>负</b>，$0。</p>
-  <ul><li><b>目标</b> = 每个销售的一个百分比 × 他<b>去年这些客户的利润</b>（书大的人同样的%对应更多的钱）。
-  默认 {{ '%.0f'|format(default_target*100) }}%，经理可在 <a href="/settings">Settings</a> 里逐人调整
-  （目前 Wendy 8%、An Cao 4%、其余 6%）。目标之前是 {{ '%.0f'|format(rate*100) }}%，
-  超过目标才加速到 {{ '%.1f'|format(accel*100) }}% —— 鼓励真正跑赢自己的目标。</li></ul>
+  {% if not growth_live %}
+  <div class="msg" style="background:#faf8ff;border-color:#6b46c1">
+    <b>现在（八月、九月）只发开单奖。</b>增长奖和新客户奖从 <b>{{ growth_start.strftime('%Y年%-m月%-d日') }}</b>
+    开始：周期重新开始，十月比去年十月，然后十月+十一月比去年十月+十一月，以此类推，每年十月重置。
+    以前的销售记录全部保留 —— 那是去年的对比数据，也是判断新客户、静默客户、落后客户的依据。
+  </div>
+  {% endif %}
+
+  <h3>1 · 增长奖 — 按<b>小组</b>算，到目标 {{ '%.0f'|format(rate*100) }}%，超过目标 {{ '%.1f'|format(accel*100) }}%</h3>
+  <p><b>一句话规则：</b>客户很难算在某一个人头上，所以增长奖<b>按小组</b>：把小组名下<b>每一个客户</b>的利润，
+  和<b>同一个客户去年同期</b>比，全部加在一起 —— 总数为<b>正</b>：到<b>目标</b>之前拿
+  <b>{{ '%.0f'|format(rate*100) }}%</b>，超过目标的部分拿 <b>{{ '%.1f'|format(accel*100) }}%</b>；
+  为<b>负</b>，$0。小组的增长奖<b>平分</b>给组员。</p>
+  <ul>
+    <li><b>小组：</b>{% for t, ms in teams.items() %}<b>{{ t }}</b>（{{ ms|join('、') }}）{% if not loop.last %}；{% endif %}{% endfor %}。
+      经理和 house 客户（First Choice、Enson、散客 CASH &amp; CARRY）属于 <b>House</b>，不参与增长奖。</li>
+    <li><b>客户归谁：</b>最近 <b>{{ window_months }} 个月</b>里，一个小组写了这个客户
+      <b>{{ '%.0f'|format(pct) }}% 以上的订单</b>（按<b>单数</b>算，不看金额），这个客户就归这个小组。
+      没有小组过线的客户是<b>共有客户</b>，在 <a href="/accounts">Accounts</a> 页由经理指定 ——
+      <b>没指定之前谁都拿不到它的增长奖</b>。经理指定优先于自动判断。</li>
+    <li><b>目标</b> = 每个小组的一个百分比 × 小组<b>去年这些客户的利润</b>（书大的组同样的%对应更多的钱）。
+      默认 {{ '%.0f'|format(default_target*100) }}%，可在 <a href="/settings">Settings</a> 里按组调整。
+      两个组的账本差不多大，但人数不同（2 人 vs 3 人），可以用目标%来平衡。</li>
+  </ul>
   <ul>
     <li><b>算客户，不算个人。</b>客户换人时历史跟着客户走。例子：An Cao 在 2025 年 1 月做了檳城超級市場
       $4,119 利润；2026 年这个客户转给了 Vanessa。它离开 An Cao 的账本时<b>连同基数一起离开</b>（不扣他的分），
       Vanessa 接手时<b>连同基数一起接手</b>（只有做过 $4,119 才有增长）。调客户对双方都不加分、不减分 ——
       离职员工（如 Maple Tran）的客户也一样保留历史。</li>
     <li><b>整本账一起算。</b>一个客户涨不能掩盖其它客户跌 —— 客户1 + 客户2 + … 的净和才算数。</li>
-    <li><b>共同负责的客户。</b>两个销售一起做一个客户时，这个客户的同比变化按各自当前的业务占比拆分 ——
-      这样年中换人也是中性的（客户的历史不会被重复发放）。</li>
+    <li><b>共同做的客户。</b>客户整个算给拥有它的小组 —— 不再按个人占比拆分。组内怎么配合是小组自己的事，
+      奖金平分。跨组共有的客户由经理在 <a href="/accounts">Accounts</a> 页指定归属。</li>
     <li><b>逐月累计 + 补差发放。</b>每月比较累计数（今年至今 vs 去年同期至今），只对<b>超过之前高点的
       新增部分</b>发放。跌的月份 $0，<b>永不倒扣</b>。季节性自然抵消。</li>
     <li><b>一次性大单：</b>客户偶尔下一笔特别大的订单，当年就照发 —— 是他们赚来的。第二年这笔通常不会重复，
@@ -36,7 +52,7 @@
       去年卖过的也不抬高基数。</li>
     <li><b>关店：</b>默认计入（真实的利润损失，销售是我们的预警系统）。确认无过失关店可以豁免 ——
       同样是两年都剔除。</li>
-    <li><b>周期每年八月重置</b>（计划启动时间）。本页目前按 2026 年 1–6 月运行；八月正式启动后周期锚点改为八月。</li>
+    <li><b>周期每年十月重置。</b>十月比去年十月，十月+十一月比去年十月+十一月 …… 一直累计到九月，然后重新开始。</li>
   </ul>
 
   <h3>2 · 开单奖 — 每行 ${{ '%.2f'|format(item_rate) }}</h3>
@@ -59,11 +75,22 @@
   <p>以上都是<b>目标数</b>。实际可发 = 目标 × 该销售货款回收比例（来自应收上传）。款到多少、发多少，
   差额随收款自动释放，不会多发。作废、坏账发票一律不算。</p>
 
+  <h3>落后客户 — <a href="/underperformers">Falling behind</a></h3>
+  <p>滚动看<b>最近三个月</b>的客户利润，和<b>去年同样三个月</b>比，两种标记：<b>下滑</b>（比去年少）和
+  <b>跑输同级</b>（按去年利润分五档，涨得比<b>同档中位数</b>还少）。两个都占的排在最前面，按<b>少掉的钱</b>排序 ——
+  这就是该先打的电话。销售在自己页面上只看到本组的客户。</p>
+
+  <h3>登录和密码 — <a href="/logins">Logins</a></h3>
+  <p>每人一个登录。销售只能看自己的页面。谁都可以在<b>「修改密码」</b>里自己改密码；忘了密码由经理在
+  Logins 页重置。还在用默认密码的账号会被标出来 —— 正式给销售用之前请先改掉。</p>
+
   <h3>每月流程</h3>
   <ol>
     <li>从 GP 导出并<a href="/upload">导入</a>：销售发票、已收款、作废发票。</li>
+    <li>看<a href="/accounts">Accounts</a> —— 把<b>共有客户</b>指定给小组（不指定就没人拿增长奖）。</li>
     <li>看<a href="/acquisitions">New accounts</a> —— 标注 rep-won / house。</li>
-    <li>看<a href="/">Dashboard</a>：每人净增长、当月发放、<b>现在可发</b>。</li>
+    <li>看<a href="/underperformers">Falling behind</a> —— 哪些客户在掉，安排跟进。</li>
+    <li>看<a href="/">Dashboard</a>：小组净增长、每人当月发放、<b>现在可发</b>。</li>
   </ol>
   <p class="hint">参数（比例、开单单价、新客户档位、限购清单）在主记分卡应用的 Settings 里管理 ——
   两个应用共用同一个数据库。</p>
@@ -71,15 +98,36 @@
   {% else %}
   <p class="hint" style="margin-top:6px">Three pieces, each a direct formula anyone can check. Paid only on collected money.</p>
 
-  <h3>1 · Growth — {{ '%.0f'|format(rate*100) }}% up to target, {{ '%.1f'|format(accel*100) }}% above</h3>
-  <p><b>The rule in one sentence:</b> take every account a rep works, add up how much more (or less) profit each
-  one made than <i>that same account</i> made in the same months last year — if the total is <b>positive</b>, the
-  rep earns <b>{{ '%.0f'|format(rate*100) }}%</b> up to their <b>target</b> and <b>{{ '%.1f'|format(accel*100) }}%</b>
-  on anything above it; if it's <b>negative</b>, <b>$0</b>.</p>
-  <ul><li><b>The target</b> = a per-rep percent × <b>what those accounts earned last year</b> (a bigger book needs
-  more dollars to hit the same %). Default {{ '%.0f'|format(default_target*100) }}%, editable per rep in
-  <a href="/settings">Settings</a> (currently Wendy 8%, An Cao 4%, everyone else 6%). You earn the base rate up to
-  target and only accelerate to {{ '%.1f'|format(accel*100) }}% once you truly beat it.</li></ul>
+  {% if not growth_live %}
+  <div class="msg" style="background:#faf8ff;border-color:#6b46c1">
+    <b>Right now (August and September) only Contribution pays.</b> Growth and the new-account bonus start
+    <b>{{ growth_start.strftime('%B %-d, %Y') }}</b>: the cycle resets, October is compared to last October,
+    then Oct+Nov to last Oct+Nov, and so on, resetting every October. All the sales history stays — it is the
+    year-ago side of that comparison and what makes new, quiet and falling-behind accounts detectable.
+  </div>
+  {% endif %}
+
+  <h3>1 · Growth — a <b>team</b> number: {{ '%.0f'|format(rate*100) }}% up to target, {{ '%.1f'|format(accel*100) }}% above</h3>
+  <p><b>The rule in one sentence:</b> accounts are hard to pin on one person, so growth is earned by the
+  <b>team</b>: take every account the team owns, add up how much more (or less) profit each one made than
+  <i>that same account</i> made in the same months last year — if the total is <b>positive</b>, the team earns
+  <b>{{ '%.0f'|format(rate*100) }}%</b> up to its <b>target</b> and <b>{{ '%.1f'|format(accel*100) }}%</b> on
+  anything above it; if it's <b>negative</b>, <b>$0</b>. The team's growth pay is then split <b>equally</b>
+  among its members.</p>
+  <ul>
+    <li><b>The teams:</b> {% for t, ms in teams.items() %}<b>{{ t }}</b> ({{ ms|join(', ') }}){% if not loop.last %}, {% endif %}{% endfor %}.
+      Managers and the house accounts (First Choice, Enson, the walk-in CASH &amp; CARRY) sit in <b>House</b>,
+      which earns no growth.</li>
+    <li><b>Who owns an account:</b> the team that wrote <b>{{ '%.0f'|format(pct) }}% or more of its orders</b>
+      over the last <b>{{ window_months }} months</b> — counted in <b>orders</b> (invoices), not dollars. An
+      account no team owns outright is <b>shared</b>, and you assign it on the
+      <a href="/accounts">Accounts</a> tab — <b>until you do, it pays nobody</b>. Your assignment always beats
+      the computed one.</li>
+    <li><b>The target</b> = a per-team percent × <b>what those accounts earned last year</b> (a bigger book needs
+      more dollars to hit the same %). Default {{ '%.0f'|format(default_target*100) }}%, editable per team in
+      <a href="/settings">Settings</a>. The two teams carry similar books with different headcounts (2 vs 3), so
+      the target % is the dial for balancing per-person earning power.</li>
+  </ul>
   <ul>
     <li><b>Accounts, not salespeople.</b> An account carries its history when it changes hands. Example:
       An Cao sold NEW BEN CITY $4,119 in Jan 2025; in 2026 it moved to Vanessa. It leaves his book
@@ -87,8 +135,9 @@
       (earns only above $4,119). Handoffs are neutral — including accounts from staff who left.</li>
     <li><b>Whole book, netted.</b> One growing account can't pay out while the rest of the book shrinks more —
       account 1 + account 2 + … must be net positive.</li>
-    <li><b>Shared accounts.</b> When two reps work the same account, that account's YoY change is split by each
-      rep's current share of it — so a mid-year handoff stays neutral (the account's history isn't double-paid).</li>
+    <li><b>Accounts worked by several people.</b> The account counts whole for the team that owns it — no
+      per-person split any more. How the team divides the work is theirs to sort out; the pay is split equally.
+      An account genuinely split <i>across</i> teams is assigned by you on the <a href="/accounts">Accounts</a> tab.</li>
     <li><b>Cumulative + true-up.</b> Each month we compare the running totals (this year so far vs the same
       months last year) and pay only <b>new ground above the previous peak</b>. A down month pays $0 — and is
       <b>never clawed back</b>. Seasonality cancels out by construction.</li>
@@ -101,7 +150,8 @@
     <li><b>Store closures.</b> By default a closure counts against the book (it's a real loss, and the rep is the
       early-warning system). For a confirmed no-fault closure you can exempt the account — removed from both
       years, same apples-to-apples idea.</li>
-    <li><b>The cycle resets each August</b> (program launch). This page currently runs Jan–Jun 2026; at the August launch the cycle anchor moves to August.</li>
+    <li><b>The cycle resets each October.</b> October vs last October, Oct+Nov vs last Oct+Nov, … through
+      September, then it starts over.</li>
   </ul>
 
   <h3>2 · Contribution — ${{ '%.2f'|format(item_rate) }} per line item</h3>
@@ -128,11 +178,24 @@
   that has been <b>collected</b> (from your paid-invoices upload). As money comes in, the remainder releases —
   a true-up that never overpays. Voided and written-off invoices count toward nothing.</p>
 
+  <h3>Accounts falling behind — <a href="/underperformers">the watch list</a></h3>
+  <p>A rolling look at the last <b>three months</b> of account profit against the <b>same three months last
+  year</b>, flagged two ways: <b>down</b> (below last year) and <b>below its size band</b> (it moved less than
+  the <b>median account of its own size</b> — five bands by last year's profit). Accounts carrying both flags
+  come first, ranked by <b>dollars lost</b> — that's the call list. Reps see only their own team's.</p>
+
+  <h3>Logins and passwords — <a href="/logins">Logins</a></h3>
+  <p>One login per person; reps see only their own page. Anyone can change their own password under <b>My
+  account</b>, and you can reset a forgotten one on the Logins tab. Any login still on the shared default
+  password is flagged there — change those before the reps start using the site.</p>
+
   <h3>Monthly routine</h3>
   <ol>
     <li>Export from GP and <a href="/upload">import</a>: sales invoices, paid invoices, voided invoices.</li>
+    <li>Open <a href="/accounts">Accounts</a> — assign any <b>shared</b> account to a team (unassigned pays nobody).</li>
     <li>Review the <a href="/acquisitions">New accounts</a> tab — mark rep-won vs house.</li>
-    <li>Read the <a href="/">Dashboard</a>: each rep's net gap, the month's pay, and <b>Payable now</b>.</li>
+    <li>Check <a href="/underperformers">Falling behind</a> — which accounts are slipping, and who follows up.</li>
+    <li>Read the <a href="/">Dashboard</a>: each team's net gap, each rep's pay, and <b>Payable now</b>.</li>
   </ol>
   <p class="hint">Dials (rate, item rate, acquisition tiers, limited-stock list) are managed in the main
   scorecard app's Settings — both apps read the same database. </p>
