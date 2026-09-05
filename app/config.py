@@ -62,7 +62,9 @@ DEFAULTS = {
     "growth_target_default": 0.06, # default per-rep target = this x the rep's last-year book profit (overrides in Setting keys 'growth_target::<name>')
     "young_account_pct": 0.01,     # (display/back-compat) a brand-new account's gap already equals its own profit, so it earns cumulative_rate x profit automatically; this dial is no longer used in the math
     "young_account_months": 12,    # an account younger than this is flagged "new" on the page (no full year-ago to compare)
-    "fiscal_start_month": 1,       # cumulative cycle anchor month. 1 = January (retroactive check: Jan->present vs Jan->same-last-year). Set to 8 at the Aug-2026 launch so cycles run Aug->Jul and reset each August.
+    "fiscal_start_month": 10,      # cumulative cycle anchor month. 10 = October: the cycle runs Oct->Sep and resets each October (Oct vs Oct last year, then Oct+Nov vs Oct+Nov, ...).
+    "program_start": "2026-08-01",  # the program's first day. The displayed cycle never starts before this, so nothing earned before launch shows up as pay (Aug-Sep 2026 is its own contribution-only chapter).
+    "growth_start": "2026-10-01",  # growth + acquisition begin here. Before this date the scorecard pays CONTRIBUTION ONLY; history is still kept (it is the year-ago side of the Oct comparison, and what makes new/quiet accounts detectable).
 
     # --- closure decision-support ---
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)

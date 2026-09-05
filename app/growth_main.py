@@ -164,8 +164,11 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     mi = months.index(m)
     s = service.get_settings(db)
     _, _, team = service.attribution_maps(db)
+    growth_active = r.get("growth_active", True)
     contrib = contribution_by_rep_month(db, months, team, float(s["item_rate"]))
-    acq_pay, _review = acquisition_by_rep_month(db, months, team, s)
+    # Before growth_start the program is CONTRIBUTION ONLY — no growth, no landing bonuses (an account that
+    # lands now still gets reviewed on the New accounts tab and pays once the growth cycle opens).
+    acq_pay = acquisition_by_rep_month(db, months, team, s)[0] if growth_active else {}
 
     # pay-on-collection: earned (all three pieces) is a TARGET; payable now scales by the rep's collected
     # fraction of their billing. Everything below is CUMULATIVE THROUGH THE SELECTED MONTH, so stepping the
@@ -217,7 +220,8 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
         "rows": rows, "team": team_row, "rate": r["cumulative_rate"], "page": "dash",
-        "is_latest": (mi == len(months) - 1),
+        "is_latest": (mi == len(months) - 1), "growth_active": growth_active,
+        "growth_start": r["growth_start"],
         "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
 
 
@@ -250,7 +254,8 @@ def rep_detail(request: Request, name: str, m: str = None, db: Session = Depends
         return RedirectResponse("/login", status_code=303)
     r = service.run_cumulative_growth(db, with_comparison=False)
     months = r["months"]
-    if not months or name not in r["trajectory"]:
+    # the drill-down is purely a growth view — nothing to show in the contribution-only chapter
+    if not months or name not in r["trajectory"] or not r.get("growth_active", True):
         return RedirectResponse("/", status_code=303)
     if m not in months:
         m = months[-1]
@@ -272,7 +277,8 @@ def rep_detail(request: Request, name: str, m: str = None, db: Session = Depends
     return templates.TemplateResponse("backtest_rep_detail.html", {
         "request": request, "user": user, "page": "dash", "name": name, "m": m, "months": months, "nav": nav,
         "rows": rows, "tot": tot, "pay_mo": float(t["pay"]), "cum_pay": float(t["cum_pay"]),
-        "rate": r["cumulative_rate"]})
+        "rate": r["cumulative_rate"], "growth_active": r.get("growth_active", True),
+        "growth_start": r["growth_start"]})
 
 
 # ---------- new-account review (assigned vs self-earned -> acquisition eligibility) ----------
@@ -491,11 +497,13 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     if not months or name not in r["trajectory"]:
         return templates.TemplateResponse("backtest_me.html", {
             "request": request, "user": user, "page": "me", "lang": lang, "name": name,
-            "months": [], "traj": [], "accounts": [], "k": {}})
+            "months": [], "traj": [], "accounts": [], "k": {},
+            "growth_active": r.get("growth_active", True), "growth_start": r["growth_start"]})
     s = service.get_settings(db)
     _, _, team = service.attribution_maps(db)
+    growth_active = r.get("growth_active", True)
     contrib = contribution_by_rep_month(db, months, team, float(s["item_rate"]))
-    acq_pay, _rev = acquisition_by_rep_month(db, months, team, s)
+    acq_pay = acquisition_by_rep_month(db, months, team, s)[0] if growth_active else {}
     traj = []
     for i, mm in enumerate(months):
         t = r["trajectory"][name][i]
@@ -536,7 +544,8 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     return templates.TemplateResponse("backtest_me.html", {
         "request": request, "user": user, "page": "me", "lang": lang, "name": name,
         "months": months, "traj": traj, "accounts": accounts, "k": k,
-        "rate": r["cumulative_rate"], "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
+        "rate": r["cumulative_rate"], "fiscal_start": r["fiscal_start"], "as_of": r["as_of"],
+        "growth_active": growth_active, "growth_start": r["growth_start"]})
 
 
 # ---------- quiet / silent accounts (haven't ordered in a while) ----------

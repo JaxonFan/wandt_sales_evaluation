@@ -8,6 +8,19 @@
       <a href="/me?lang=en" {% if not zh %}style="font-weight:700"{% endif %}>EN</a></span>
   </div>
   {% if months %}
+  {% if not growth_active %}
+  <p class="hint" style="margin-top:6px;border-left:3px solid #6b46c1;padding:8px 12px;background:#faf8ff">
+    {% if zh %}<b>{{ months[0] }} → {{ months[-1] }}：这两个月只算开单奖。</b>你写的每一条订单行 × 单价 ——
+    就是这段时间的全部奖金。<b>增长奖和新客户奖从 {{ growth_start.strftime('%Y年%-m月%-d日') }} 开始</b>：
+    到时候周期重新开始，每个月和去年同一个月比（十月比去年十月，然后十月+十一月比去年十月+十一月，以此类推）。
+    以前的销售记录我们都留着 —— 那就是去年的对比数据，也是判断新客户、静默客户的依据。
+    {% else %}<b>{{ months[0] }} → {{ months[-1] }} is contribution only.</b> Every line item you write × the
+    rate — that is the whole bonus for these two months. <b>Growth and new-account bonuses start
+    {{ growth_start.strftime('%B %-d, %Y') }}</b>, when the cycle resets and each month is compared to the same
+    month a year earlier (October vs October, then Oct+Nov vs Oct+Nov, and so on). Your past sales are all still
+    kept — they are the year-ago side of that comparison, and what tells us which accounts are new or quiet.
+    {% endif %}</p>
+  {% else %}
   <p class="hint" style="margin-top:6px">
     {% if zh %}周期 {{ months[0] }} → {{ months[-1] }}（和去年同期比）。我们比较的是<b>你现在负责的客户</b>，
     对比<b>同样这些客户去年的利润</b> —— 不论去年是谁负责。所有客户加在一起算：有的涨、有的跌，看<b>净增长</b>。
@@ -18,12 +31,13 @@
     All accounts count together: some up, some down — what matters is the <b>net</b>. Net positive → you earn
     <b>{{ '%.0f'|format(rate*100) }}%</b> up to your <b>target</b> and <b>7.5%</b> above it; net negative → $0
     (never clawed back). Your target is a percent of what these accounts earned last year.{% endif %}</p>
+  {% endif %}
   <div>
-    <div class="kpi"><div class="label">{{ '累计净增长' if zh else 'Cumulative net growth' }}</div>
+    {% if growth_active %}<div class="kpi"><div class="label">{{ '累计净增长' if zh else 'Cumulative net growth' }}</div>
       <div class="val {{ 'neg' if k.cum_gap < 0 }}">{{ '−$' + '{:,.0f}'.format(-k.cum_gap) if k.cum_gap < 0 else '$' + '{:,.0f}'.format(k.cum_gap) }}</div></div>
     {% if k.target %}<div class="kpi"><div class="label">{{ '目标（到此为5%）' if zh else 'Target (5% up to here)' }}</div>
-      <div class="val" style="font-size:20px">${{ '{:,.0f}'.format(k.target) }} <span class="mut" style="font-size:13px">{{ '%.0f'|format(k.target_pct) }}%</span></div></div>{% endif %}
-    <div class="kpi"><div class="label">{{ '已赚（三项合计）' if zh else 'Earned (all pieces)' }}</div>
+      <div class="val" style="font-size:20px">${{ '{:,.0f}'.format(k.target) }} <span class="mut" style="font-size:13px">{{ '%.0f'|format(k.target_pct) }}%</span></div></div>{% endif %}{% endif %}
+    <div class="kpi"><div class="label">{% if growth_active %}{{ '已赚（三项合计）' if zh else 'Earned (all pieces)' }}{% else %}{{ '已赚（开单奖）' if zh else 'Earned (contribution)' }}{% endif %}</div>
       <div class="val">${{ '{:,.0f}'.format(k.earned) }}</div></div>
     <div class="kpi"><div class="label">{{ '货款已收' if zh else 'Collected' }}</div>
       <div class="val">{{ '%.0f'|format(k.collected_pct) }}%</div></div>
@@ -41,23 +55,24 @@
   <h2>{{ '按月明细' if zh else 'Month by month' }}</h2>
   <table>
     <thead><tr><th>{{ '月份' if zh else 'Month' }}</th>
+      {% if growth_active %}
       <th class="num">{{ '我的客户利润' if zh else 'My book profit' }}</th>
       <th class="num">{{ '同批客户去年' if zh else 'Same accounts last yr' }}</th>
       <th class="num">{{ '当月净增长' if zh else 'Net gap' }}</th>
-      <th class="num">{{ '增长奖' if zh else 'Growth' }}</th>
+      <th class="num">{{ '增长奖' if zh else 'Growth' }}</th>{% endif %}
       <th class="num">{{ '开单奖' if zh else 'Contribution' }}</th>
-      <th class="num">{{ '新客户奖' if zh else 'Acquisition' }}</th>
+      {% if growth_active %}<th class="num">{{ '新客户奖' if zh else 'Acquisition' }}</th>{% endif %}
       <th class="num">{{ '当月合计' if zh else 'Total' }}</th></tr></thead>
     <tbody>
     {% for t in traj %}
       <tr>
         <td>{{ t.month }}</td>
-        <td class="num">${{ '{:,.0f}'.format(t.ty) }}</td>
+        {% if growth_active %}<td class="num">${{ '{:,.0f}'.format(t.ty) }}</td>
         <td class="num mut">${{ '{:,.0f}'.format(t.ly) }}</td>
         <td class="num {{ 'neg' if t.gap < 0 else ('pos' if t.gap > 0 else 'mut') }}">{{ '−$' + '{:,.0f}'.format(-t.gap) if t.gap < 0 else '$' + '{:,.0f}'.format(t.gap) }}</td>
-        <td class="num">${{ '{:,.0f}'.format(t.pay) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(t.pay) }}</td>{% endif %}
         <td class="num">${{ '{:,.2f}'.format(t.contrib) }} <span class="mut">({{ t.n_items }})</span></td>
-        <td class="num">{% if t.acq > 0 %}${{ '{:,.0f}'.format(t.acq) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+        {% if growth_active %}<td class="num">{% if t.acq > 0 %}${{ '{:,.0f}'.format(t.acq) }}{% else %}<span class="mut">—</span>{% endif %}</td>{% endif %}
         <td class="num"><strong>${{ '{:,.0f}'.format(t.total) }}</strong></td>
       </tr>
     {% else %}
@@ -65,11 +80,15 @@
     {% endfor %}
     </tbody>
   </table>
-  <p class="hint" style="margin-top:8px">{% if zh %}增长奖只在<b>累计净增长创新高</b>的时候发；跌下去的月份是 $0，
+  {% if growth_active %}<p class="hint" style="margin-top:8px">{% if zh %}增长奖只在<b>累计净增长创新高</b>的时候发；跌下去的月份是 $0，
     不倒扣 —— 做回来、再创新高，就继续发。{% else %}Growth pays only when your <b>cumulative net growth hits a
     new high</b>; a down month is $0, never clawed back — recover past your peak and it pays again.{% endif %}</p>
+  {% else %}<p class="hint" style="margin-top:8px">{% if zh %}开单奖 = 你这个月写的订单行数 × 单价。
+    十月起会加上增长奖和新客户奖。{% else %}Contribution = the line items you wrote this month × the rate.
+    Growth and new-account bonuses join in October.{% endif %}</p>{% endif %}
 </div>
 
+{% if growth_active %}
 <div class="card">
   <h2>{{ '我的客户 — 谁在涨、谁在跌' if zh else 'My accounts — who is up, who is down' }}</h2>
   <p class="hint">{% if zh %}每个客户对比它自己去年同期。绿色在帮你，红色在拖后腿 —— 红色客户值得先去看看。
@@ -96,6 +115,7 @@
     {% endfor %}
     </tbody>
   </table>
-  {% endif %}
 </div>
+{% endif %}
+  {% endif %}
 {% endblock %}

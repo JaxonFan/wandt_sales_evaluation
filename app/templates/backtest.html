@@ -5,7 +5,7 @@
     {% if nav.prev %}<a class="pnav" href="/?m={{ nav.prev }}">◀ prev</a>{% else %}<span class="pnav dis">◀ prev</span>{% endif %}
     <div class="mid">
       <div class="ttl">{{ m }} · month {{ nav.n }} of {{ nav.total }}</div>
-      <div class="hint" style="margin:4px 0 6px">Backtest {{ months[0] }} → {{ months[-1] }} (vs the same months a year earlier)</div>
+      <div class="hint" style="margin:4px 0 6px">{% if growth_active %}Cycle {{ months[0] }} → {{ months[-1] }} (vs the same months a year earlier){% else %}{{ months[0] }} → {{ months[-1] }} · contribution only{% endif %}</div>
       <select class="psel" onchange="location.href='/?m='+this.value">
         {% for mo in months %}<option value="{{ mo }}" {{ 'selected' if mo==m }}>{{ mo }}</option>{% endfor %}
       </select>
@@ -16,17 +16,28 @@
 
 <div class="card">
   <h2>Team — {{ m }}</h2>
+  {% if not growth_active %}
+  <p class="hint" style="border-left:3px solid #6b46c1;padding:8px 12px;background:#faf8ff">
+    <b>{{ months[0] }} → {{ months[-1] }} is a contribution-only chapter.</b> Reps earn <b>line items × rate</b>
+    and nothing else. <b>Growth and new-account bonuses start {{ growth_start.strftime('%B %-d, %Y') }}</b>, when
+    the cycle resets and every month is compared to the same month a year earlier (October vs October, then
+    Oct+Nov vs Oct+Nov, and so on). Sales history from before the launch is still kept — it is the year-ago side
+    of that comparison, and it is what makes new and quiet accounts detectable.</p>
+  {% else %}
   <p class="hint"><b>Growth:</b> a rep's growth = the profit change of <b>ALL their accounts added together</b>
     (each vs the <b>same account a year ago</b>, work-share split; limited-stock items excluded from both years).
     Net positive → <b>{{ '%.0f'|format(rate*100) }}%</b> up to the rep's <b>target</b> (a % of their last-year
     book, set in Settings) and <b>7.5%</b> on anything above it, trued up on the running peak, never clawed back;
     net negative → <b>$0</b>. Plus <b>Contribution</b> (line items × rate) and <b>Acquisition</b> (flat bonus at
     the quarter mark for confirmed rep-won new accounts — see New accounts tab).</p>
+  {% endif %}
   <table>
     <thead><tr><th>Rep</th>
+      {% if growth_active %}
       <th class="num">Book profit this month</th><th class="num">Same accounts last yr</th>
       <th class="num">Net gap this month</th><th class="num">Cumulative net gap</th>
-      <th class="num">Growth pay</th><th class="num">Contribution</th><th class="num">Acquisition</th>
+      <th class="num">Growth pay</th>{% endif %}<th class="num">Contribution</th>
+      {% if growth_active %}<th class="num">Acquisition</th>{% endif %}
       <th class="num">Total this month</th>
       <th class="num" title="Earned so far this cycle (all three pieces), through {{ m }} — the target the collection %% applies to">Earned (to {{ m }})</th>
       <th class="num" title="Share of the rep's billing through {{ m }} actually collected, per the latest receivables upload">Collected</th>
@@ -36,13 +47,13 @@
     {% for x in rows %}
       <tr>
         <td><a href="/rep/{{ x.associate }}?m={{ m }}" style="text-decoration:none;color:var(--blue)"><strong>{{ x.associate }}</strong></a></td>
-        <td class="num">${{ '{:,.0f}'.format(x.profit_mo) }}</td>
+        {% if growth_active %}<td class="num">${{ '{:,.0f}'.format(x.profit_mo) }}</td>
         <td class="num mut">${{ '{:,.0f}'.format(x.profit_mo_ly) }}</td>
         <td class="num {{ 'neg' if x.gap_mo < 0 else ('pos' if x.gap_mo > 0 else 'mut') }}">{{ '−$' + '{:,.0f}'.format(-x.gap_mo) if x.gap_mo < 0 else '$' + '{:,.0f}'.format(x.gap_mo) }}</td>
         <td class="num {{ 'neg' if x.cum_gap < 0 else '' }}">{{ '−$' + '{:,.0f}'.format(-x.cum_gap) if x.cum_gap < 0 else '$' + '{:,.0f}'.format(x.cum_gap) }}</td>
-        <td class="num">${{ '{:,.0f}'.format(x.pay_mo) }}</td>
+        <td class="num">${{ '{:,.0f}'.format(x.pay_mo) }}</td>{% endif %}
         <td class="num">${{ '{:,.2f}'.format(x.contrib_mo) }} <span class="mut">({{ '{:,}'.format(x.n_items) }})</span></td>
-        <td class="num">{% if x.acq_mo > 0 %}${{ '{:,.0f}'.format(x.acq_mo) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+        {% if growth_active %}<td class="num">{% if x.acq_mo > 0 %}${{ '{:,.0f}'.format(x.acq_mo) }}{% else %}<span class="mut">—</span>{% endif %}</td>{% endif %}
         <td class="num"><strong>${{ '{:,.0f}'.format(x.total_mo) }}</strong></td>
         <td class="num mut">${{ '{:,.0f}'.format(x.earned_cycle) }}</td>
         <td class="num mut">{{ '%.0f'|format(x.collected_pct) }}%</td>
@@ -62,13 +73,13 @@
     {% if rows %}
     <tfoot><tr>
       <th>Team</th>
-      <th class="num">${{ '{:,.0f}'.format(team.profit_mo) }}</th>
+      {% if growth_active %}<th class="num">${{ '{:,.0f}'.format(team.profit_mo) }}</th>
       <th class="num">${{ '{:,.0f}'.format(team.profit_mo_ly) }}</th>
       <th class="num {{ 'neg' if team.gap_mo < 0 }}">{{ '−$' + '{:,.0f}'.format(-team.gap_mo) if team.gap_mo < 0 else '$' + '{:,.0f}'.format(team.gap_mo) }}</th>
       <th class="num {{ 'neg' if team.cum_gap < 0 }}">{{ '−$' + '{:,.0f}'.format(-team.cum_gap) if team.cum_gap < 0 else '$' + '{:,.0f}'.format(team.cum_gap) }}</th>
-      <th class="num">${{ '{:,.0f}'.format(team.pay_mo) }}</th>
+      <th class="num">${{ '{:,.0f}'.format(team.pay_mo) }}</th>{% endif %}
       <th class="num">${{ '{:,.2f}'.format(team.contrib_mo) }} <span class="mut">({{ '{:,}'.format(team.n_items) }})</span></th>
-      <th class="num">${{ '{:,.0f}'.format(team.acq_mo) }}</th>
+      {% if growth_active %}<th class="num">${{ '{:,.0f}'.format(team.acq_mo) }}</th>{% endif %}
       <th class="num">${{ '{:,.0f}'.format(team.total_mo) }}</th>
       <th class="num">${{ '{:,.0f}'.format(team.earned_cycle) }}</th><th></th>
       <th class="num">${{ '{:,.0f}'.format(team.paid) }}</th>
@@ -76,6 +87,7 @@
     </tr></tfoot>
     {% endif %}
   </table>
+  {% if growth_active %}
   <p class="hint" style="margin-top:10px"><b>Book profit</b> = the accounts the rep works this cycle, at their
     work-share — and the <b>last-year column is those SAME accounts</b> (even if someone else sold them then), so
     every row subtracts cleanly: <b>net gap = book this yr − same accounts last yr</b>.
@@ -86,8 +98,14 @@
     billing <b>collected</b> − already <b>paid</b> (never overpays; voided/written-off never count). <b>Record
     pay</b> (latest month only) logs a payout so next month shows only the new amount. Click a rep's name for the
     account-by-account drill-down.</p>
+  {% else %}
+  <p class="hint" style="margin-top:10px"><b>Contribution</b> = the line items a rep wrote this month × the rate
+    (Settings). The <b>Earned / Collected / Paid / Payable</b> columns are <b>cumulative through {{ m }}</b>.
+    <b>Payable now</b> = earned so far × the share of billing <b>collected</b> − already <b>paid</b>.</p>
+  {% endif %}
 </div>
 
+{% if growth_active %}
 <div class="card" style="border-color:#6b46c1;background:#faf8ff">
   <h2>How to read this — we score the account, not who sold it before</h2>
   <p class="hint">Each rep is measured on <b>the accounts they work now</b>. For every account we compare its
@@ -102,4 +120,5 @@
     accounts move between reps — or when someone leaves (e.g. Maple Tran): whoever picks up the account is never
     handed free growth, and no one is blamed for losing an account.</p>
 </div>
+{% endif %}
 {% endblock %}

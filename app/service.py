@@ -579,9 +579,14 @@ def _current_growth_by_rep(db, lo, hi):
 
 
 def run_cumulative_growth(db, with_comparison=True):
-    """Read-only 'what-if': the cumulative account-level profit-growth model (see engine.compute_cumulative_growth)
-    on the current August fiscal cycle, plus today's growth number per rep for contrast. Memoized by
-    _engine_version; NEVER touches Awards / live pay."""
+    """The cumulative account-level profit-growth model (see engine.compute_cumulative_growth) on the current
+    fiscal cycle, plus today's growth number per rep for contrast. Memoized by _growth_version.
+
+    Cycle window = [fiscal_start .. data end], where fiscal_start is the fiscal_start_month anchor CLAMPED to
+    `program_start` — so the launch chapter (Aug-Sep 2026) shows only its own months, not a year of history.
+    Before `growth_start` the program pays CONTRIBUTION ONLY: the (expensive) growth engine is skipped entirely
+    and a zeroed, same-shaped result is returned with growth_active=False so the pages can hide the growth
+    columns. NEVER touches Awards / live pay."""
     from .config import GROWTH_EXEMPT_ACCOUNTS
     s = get_settings(db)
     rate = float(s.get("cumulative_rate", 0.05))
@@ -589,30 +594,58 @@ def run_cumulative_growth(db, with_comparison=True):
     default_target = float(s.get("growth_target_default", 0.06))
     young_pct = float(s.get("young_account_pct", 0.01))
     young_months = int(s.get("young_account_months", 12))
-    fmonth = int(s.get("fiscal_start_month", 8))
+    fmonth = int(s.get("fiscal_start_month", 10))
+    program_start = pd.Timestamp(s.get("program_start", "2026-08-01"))
+    growth_start = pd.Timestamp(s.get("growth_start", "2026-10-01"))
+
+    def cycle_window():
+        _lo, hi = data_bounds(db)
+        as_of = hi
+        yr = as_of.year if as_of.month >= fmonth else as_of.year - 1
+        anchor = pd.Timestamp(year=yr, month=fmonth, day=1)
+        return max(anchor, program_start), as_of
 
     def _core():
         df = active_lines(db)
         _, _, team = attribution_maps(db)
         targets = {name: float(s.get(f"growth_target::{name}", default_target)) for name in team}
-        _lo, hi = data_bounds(db)
-        as_of = hi
-        yr = as_of.year if as_of.month >= fmonth else as_of.year - 1
-        fiscal_start = pd.Timestamp(year=yr, month=fmonth, day=1)
+        fiscal_start, as_of = cycle_window()
         return compute_cumulative_growth(df, fiscal_start, as_of, team, cumulative_rate=rate,
                                          accel_rate=accel, rep_targets=targets,
                                          exempt_accounts=GROWTH_EXEMPT_ACCOUNTS,
                                          young_account_pct=young_pct, young_account_months=young_months,
                                          constrained_item_numbers=get_constrained_items(db))
 
-    # memo the EXPENSIVE engine by a growth-only key (acquisition marks don't invalidate it).
-    core = _memo(("cum_core", _growth_version(db)), _core)
-    res = dict(core)
+    fiscal_start, as_of = cycle_window()
+    if fiscal_start < growth_start:
+        # Contribution-only chapter: no growth math at all (and none of its cost) — just the month spine.
+        res = _contribution_only_growth(db, fiscal_start, as_of, rate)
+    else:
+        # memo the EXPENSIVE engine by a growth-only key (acquisition marks don't invalidate it).
+        res = dict(_memo(("cum_core", _growth_version(db)), _core))
+        res["growth_active"] = True
+    res["growth_start"] = growth_start
+    res["program_start"] = program_start
     # The "vs today's model" comparison runs the OLD period engine 10x — only the /whatif page uses it, so the
     # growth-model service skips it (with_comparison=False) to avoid that cost on every page load.
     res["current_growth"] = (_current_growth_by_rep(db, res["fiscal_start"], res["as_of"])
                              if with_comparison else {})
     return res
+
+
+def _contribution_only_growth(db, fiscal_start, as_of, rate):
+    """A zeroed growth result shaped exactly like compute_cumulative_growth's, for the pre-growth_start chapter
+    (Aug-Sep 2026): the same month spine and one all-zero row per rep, so every page renders unchanged while
+    growth_active=False tells the templates to hide the growth columns."""
+    _, _, team = attribution_maps(db)
+    months = [str(m) for m in pd.period_range(fiscal_start.to_period("M"), as_of.to_period("M"), freq="M")]
+    zero_row = lambda m: dict(month=m, pay=0.0, cum_pay=0.0, cum_growth=0.0,
+                              ty_book=0.0, ly_book=0.0, target=None)
+    return dict(fiscal_start=fiscal_start, as_of=as_of, cumulative_rate=rate, months=months,
+                reps=pd.DataFrame([dict(associate=r, n_accounts=0, n_young=0, cum_growth=0.0,
+                                        earned=0.0, target=None) for r in team]),
+                trajectory={r: [zero_row(m) for m in months] for r in team},
+                accounts=pd.DataFrame(), account_monthly={}, growth_active=False)
 
 
 def written_off_set(db):
