@@ -16,8 +16,9 @@
   <h2>Import <b>paid</b> invoices (accounts receivable)</h2>
   <p class="hint">Upload the receivables / paid export (any <b>Document / Invoice / SOP Number</b> column of invoice #s
     that have been <b>collected</b> — should <b>not</b> include voided ones). Reps are paid only on collected money.
-    <b>Cumulative snapshot</b> — each upload <b>replaces</b> the paid set, so a reversed/bounced invoice that drops
-    off claws its bonus back. Matched to reps by invoice number (the file's salesperson column is ignored).</p>
+    One month or the whole cumulative file, in any order — each upload <b>adds</b> to the paid set, and a
+    reversed/bounced invoice drops off (clawing its bonus back) when a file covering its month no longer lists it.
+    Matched to reps by invoice number (the file's salesperson column is ignored).</p>
   {% if ar_msg %}<p class="pos" style="font-size:13px">{{ ar_msg }}</p>{% endif %}
   <form method="post" action="/upload-receivables" enctype="multipart/form-data">
     <p>Paid file: <input name="ar_file" type="file" accept=".xlsx,.xls" required></p>

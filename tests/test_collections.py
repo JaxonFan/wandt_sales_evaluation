@@ -234,3 +234,64 @@ def test_unpaid_aging_buckets_and_writeoff():
     service._LINES_CACHE.clear()
     rows2, total2 = service.unpaid_accounts(db, "Rep A")
     assert len(rows2) == 2 and total2 == 200 and all(r["account"] != "ACCT_OLD" for r in rows2)
+
+
+# ---------- paid upload: one month or cumulative, in any order ----------
+def _db_two_months():
+    """10 June invoices (INV0000-0009, from _fresh_db) + 10 July invoices (JUL0000-0009)."""
+    db = _fresh_db()
+    for i in range(10):
+        db.add(M.SalesLine(sop_type="Invoice", sop_number=f"JUL{i:04d}", item_number=f"JT{i}", qty=1.0,
+                           unit_price=100.0, extended_price=100.0, unit_cost=60.0, extended_cost=60.0,
+                           line_profit=40.0, customer_number="ACCT0", customer_name="ACCT0",
+                           document_date=dt.date(2025, 7, 1 + i), batch_number="RA0701", associate="Rep A",
+                           imported_at=dt.datetime(2025, 8, 1)))
+    db.commit()
+    return db
+
+
+def _paid(sops):
+    return pd.DataFrame({"Document Number": list(sops)})
+
+
+JUNE = [f"INV{i:04d}" for i in range(10)]
+JULY = [f"JUL{i:04d}" for i in range(10)]
+
+
+def test_single_month_paid_file_adds_and_never_wipes_other_months():
+    db = _db_two_months()
+    service.apply_collected_upload(db, _paid(JUNE))                 # the earlier (June) report
+    res = service.apply_collected_upload(db, _paid(JULY))           # then a July-ONLY file
+    assert res["added"] == 10 and res["reversed"] == 0 and res["total"] == 20
+    assert service.collected_set(db) == set(JUNE) | set(JULY)       # June survived
+
+
+def test_paid_files_in_any_order_reach_the_same_set():
+    db = _db_two_months()
+    service.apply_collected_upload(db, _paid(JULY))                 # month file first...
+    service.apply_collected_upload(db, _paid(JUNE))                 # ...older report after
+    service.apply_collected_upload(db, _paid(JUNE + JULY))          # ...then the full cumulative: a no-op
+    assert service.collected_set(db) == set(JUNE) | set(JULY)
+
+
+def test_reversed_invoice_drops_out_when_its_month_is_reported_again():
+    db = _db_two_months()
+    service.apply_collected_upload(db, _paid(JUNE + JULY))
+    res = service.apply_collected_upload(db, _paid(JULY[:9]))       # July again, one invoice bounced
+    assert res["reversed"] == 1
+    assert service.collected_set(db) == set(JUNE) | set(JULY[:9])   # June untouched, the bounce is gone
+
+
+def test_partial_month_file_is_treated_as_additive_not_as_a_reversal():
+    db = _db_two_months()
+    service.apply_collected_upload(db, _paid(JUNE + JULY))
+    res = service.apply_collected_upload(db, _paid(JULY[:3] + ["NEW0001"]))   # a thin slice of July
+    assert res["reversed"] == 0 and res["added"] == 1
+    assert service.collected_set(db) == set(JUNE) | set(JULY) | {"NEW0001"}
+
+
+def test_paid_file_without_invoice_column_is_rejected_untouched():
+    db = _db_two_months()
+    service.apply_collected_upload(db, _paid(JUNE))
+    assert service.apply_collected_upload(db, pd.DataFrame({"Foo": [1]})) is None
+    assert service.collected_set(db) == set(JUNE)

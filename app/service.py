@@ -88,6 +88,60 @@ def parse_voided(raw):
     return _clean_invoices(raw.loc[is_void, col])
 
 
+PAID_FULL_MONTH_PCT = 0.80   # a paid file carrying >= this share of a month's already-collected invoices is a FULL report for that month
+
+
+def apply_collected_upload(db, raw):
+    """Fold a PAID / receivables file into the collected set, whatever it covers — one month, a few months,
+    or the whole cumulative report — in any order.
+
+    Every invoice in the file is recorded as collected (pure add; nothing outside the file's reach is touched,
+    so a September-only file can no longer wipe June-August). Reversals are still caught, month by month of
+    INVOICE date: where the file carries >= PAID_FULL_MONTH_PCT of what we already hold for a month it is a
+    full report for that month, so a held invoice it no longer lists has reversed (bounced) and drops out —
+    its bonus claws back. A month the file barely touches (or skips) is left exactly as it was.
+
+    Returns dict(in_file, added, reversed, total), or None if the file has no invoice-number column."""
+    import datetime as _dt
+    collected = parse_collected(raw)
+    if collected is None:
+        return None
+    existing = collected_set(db)
+    # each held invoice's month, from its sales lines (an invoice we can't date is never treated as reversed)
+    invoice_date = dict(db.query(M.SalesLine.sop_number, func.min(M.SalesLine.document_date))
+                        .group_by(M.SalesLine.sop_number).all())
+    held_by_month = {}
+    for sop in existing:
+        date = invoice_date.get(sop)
+        if date is not None:
+            held_by_month.setdefault((date.year, date.month), set()).add(sop)
+    reversed_invoices = set()
+    for held in held_by_month.values():
+        missing = held - collected
+        if missing and len(held) - len(missing) >= PAID_FULL_MONTH_PCT * len(held):
+            reversed_invoices |= missing
+    added = collected - existing
+    if reversed_invoices:
+        db.query(M.CollectedInvoice).filter(M.CollectedInvoice.sop_number.in_(reversed_invoices)) \
+            .delete(synchronize_session=False)
+    now = _dt.datetime.utcnow()
+    for sop in added:
+        db.add(M.CollectedInvoice(sop_number=sop, reported_at=now))
+    db.commit()
+    _ENGINE_CACHE.clear()
+    return dict(in_file=len(collected), added=len(added), reversed=len(reversed_invoices),
+                total=len(existing) + len(added) - len(reversed_invoices))
+
+
+def collected_upload_message(res):
+    """One plain sentence telling the manager what a paid upload did."""
+    msg = (f"Read {res['in_file']:,} paid invoices: {res['added']:,} new, "
+           f"{res['in_file'] - res['added']:,} already recorded")
+    if res["reversed"]:
+        msg += f", {res['reversed']:,} reversed (no longer paid) and removed"
+    return msg + f". Collected invoices on file now: {res['total']:,}."
+
+
 def import_sales_frame(db, raw):
     """Import an invoices XLSX frame (the FIXED importer, shared by both web apps).
 

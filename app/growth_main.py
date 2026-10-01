@@ -598,17 +598,11 @@ async def upload_receivables(request: Request, ar_file: UploadFile = File(...), 
     if not user:
         return RedirectResponse("/login", status_code=303)
     raw = pd.read_excel(io.BytesIO(await ar_file.read()))
-    collected = service.parse_collected(raw)
-    if collected is None:
+    res = service.apply_collected_upload(db, raw)     # one month or cumulative, any order — never wipes
+    if res is None:
         msg = "No invoice-number column (Document / Invoice / SOP Number) found in the paid file."
     else:
-        db.query(M.CollectedInvoice).delete(synchronize_session=False)
-        now = dt.datetime.utcnow()
-        for sop in collected:
-            db.add(M.CollectedInvoice(sop_number=sop, reported_at=now))
-        db.commit()
-        service._ENGINE_CACHE.clear()
-        msg = f"Recorded {len(collected):,} paid invoices (snapshot). Payable-now updates on the dashboard."
+        msg = service.collected_upload_message(res) + " Payable-now updates on the dashboard."
     return templates.TemplateResponse("backtest_upload.html", {"request": request, "user": user, "page": "upload",
         "ar_msg": msg, "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
 

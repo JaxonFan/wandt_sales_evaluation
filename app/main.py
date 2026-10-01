@@ -643,20 +643,13 @@ async def upload_receivables(request: Request, ar_file: UploadFile = File(...), 
     if not user or user.role == "rep":
         return RedirectResponse("/login", status_code=303)
     raw = pd.read_excel(io.BytesIO(await ar_file.read()))
-    collected = service.parse_collected(raw)      # deduped set (strips whitespace, drops blanks/dup rows)
-    if collected is None:
+    res = service.apply_collected_upload(db, raw)     # one month or cumulative, any order — never wipes
+    if res is None:
         return templates.TemplateResponse("upload.html", {"request": request, "user": user,
             "ar_msg": "No invoice-number column (Document / Invoice / SOP Number) found in the paid file."})
-    # snapshot semantics: the latest cumulative report REPLACES the collected set (reversed invoices drop out)
-    db.query(M.CollectedInvoice).delete(synchronize_session=False)
-    now = dt.datetime.utcnow()
-    for sop in collected:
-        db.add(M.CollectedInvoice(sop_number=sop, reported_at=now))
-    db.commit()
-    service._ENGINE_CACHE.clear()
-    audit(db, user, "upload", "collected_invoices", {"collected": len(collected)})
+    audit(db, user, "upload", "collected_invoices", res)
     return templates.TemplateResponse("upload.html", {"request": request, "user": user,
-        "ar_msg": f"Recorded {len(collected):,} paid invoices (snapshot). Reps now paid on collection."})
+        "ar_msg": service.collected_upload_message(res)})
 
 
 @app.post("/upload-voided")

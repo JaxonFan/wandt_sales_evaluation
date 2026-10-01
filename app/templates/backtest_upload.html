@@ -18,8 +18,10 @@
 
   {% if ar_msg %}<div class="msg">{{ ar_msg }}</div>{% endif %}
   <h3>2 · Paid invoices / receivables (XLSX)</h3>
-  <p class="hint">The cumulative <b>paid</b> report. Each upload replaces the collected set (a reversed payment
-    drops back out). Drives the <b>Payable now</b> column.</p>
+  <p class="hint">The <b>paid</b> report — one month or the whole cumulative file, in any order. Each upload
+    <b>adds</b> its paid invoices to what is already recorded; nothing from other months is lost. (An invoice
+    that was paid and later reversed drops back out when a file covering its month no longer lists it.) Drives
+    the <b>Payable now</b> column.</p>
   <form method="post" action="/upload-receivables" enctype="multipart/form-data" style="margin-bottom:18px">
     <input type="file" name="ar_file" accept=".xlsx,.XLSX" required>
     <button type="submit">Import paid</button>
