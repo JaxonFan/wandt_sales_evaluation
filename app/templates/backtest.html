@@ -170,10 +170,23 @@ function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('t
                 </tbody>
               </table>
               </div>
-              {% if st.n_invoices > st.invoices|length %}<p class="hint" style="margin:6px 0 0">Latest {{ st.invoices|length }} of {{ st.n_invoices }} —
-                <a href="/pay/{{ x.associate }}">full audit page</a></p>{% endif %}
+              {% if st.n_invoices > st.invoices|length %}<p class="hint" style="margin:6px 0 0">Newest {{ st.invoices|length }} of {{ st.n_invoices }} —
+                <a href="/pay/{{ x.associate }}">all invoices, every month</a></p>{% endif %}
             </div>
             {% endfor %}
+            {% if x.earlier %}
+            <table class="brk" style="margin-top:4px">
+              <thead><tr><th style="text-align:left;padding:4px 0;font-size:11.5px">Earlier months</th><th class="num" style="padding:4px 0;font-size:11.5px">Collected</th><th class="num" style="padding:4px 0;font-size:11.5px">Missing</th><th class="num" style="padding:4px 0;font-size:11.5px">Owed</th></tr></thead>
+              <tbody>
+              {% for e in x.earlier %}
+              <tr><td><a href="/pay/{{ x.associate }}" style="text-decoration:none;color:var(--accent-2)">{{ e.label }}</a></td>
+                <td class="num mut">${{ '{:,.0f}'.format(e.collected) }} <span style="opacity:.7">({{ '%.0f'|format(e.collected_pct) }}%)</span></td>
+                <td class="num" style="color:#c0392b">${{ '{:,.0f}'.format(e.unpaid_amount) }}</td>
+                <td class="num"><b>${{ '{:,.2f}'.format(e.owed) }}</b></td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% endif %}
           </div>
         </div>
       </td></tr>

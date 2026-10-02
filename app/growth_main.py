@@ -195,7 +195,10 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         x["owed_from_earlier"] = sum(m["owed"] for m in mrows if m["month"] != latest)
         x["earned_latest"] = cur["earned"] if cur else 0.0
         x["frac_latest"] = cur["collected_pct"] if cur else 0.0
-        x["statement"] = [dict(m, invoices=m["invoices"][:200]) for m in mrows]
+        # keep the inline panel light: the latest month's statement (25 newest invoices) and a one-line
+        # summary per earlier month — by December that's five months, and the audit page has the rest.
+        x["statement"] = [dict(m, invoices=m["invoices"][:25]) for m in mrows[:1]]
+        x["earlier"] = mrows[1:]
 
     # group by team for display: a colored header row per team, members beneath it
     palette = {"Team 1": "t1", "Team 2": "t2"}
