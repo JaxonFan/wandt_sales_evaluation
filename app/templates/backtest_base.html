@@ -20,7 +20,9 @@
   #sidebar .tab{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:9px;font-weight:500;color:var(--muted);text-decoration:none;margin-bottom:2px;font-size:14px;transition:background .12s,color .12s}
   #sidebar .tab:hover{background:var(--paper);color:var(--ink)}
   #sidebar .tab.on{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
-  #sidebar .navlabel{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 12px 4px}
+  #sidebar .kids{margin:2px 0 8px 14px;padding-left:10px;border-left:2px solid var(--accent-soft)}
+  #sidebar .kid{display:block;padding:6px 10px;border-radius:7px;font-size:13px;color:var(--muted);text-decoration:none}
+  #sidebar .kid:hover{color:var(--ink);background:var(--paper)} #sidebar .kid.on{color:var(--accent-2);font-weight:700;background:var(--accent-soft)}
   #sidebar .me{margin-top:auto;padding:14px 12px 0;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
   #sidebar .me b{color:var(--ink);display:block;margin-bottom:2px}
   #sidebar{display:flex;flex-direction:column}
@@ -29,6 +31,9 @@
   .topbar{display:flex;align-items:center;gap:12px;padding:16px 28px 0;flex-wrap:wrap}
   .topbar h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.01em}
   .wrap{max-width:1240px;margin:0 auto;padding:14px 28px 60px}
+  .seg{display:flex;gap:0;margin:12px 28px 0;border:1px solid var(--line-2);border-radius:12px;background:var(--card);padding:4px;width:max-content;box-shadow:var(--shadow)}
+  .seg a{padding:9px 18px;border-radius:9px;text-decoration:none;color:var(--muted);font-size:14px;font-weight:600}
+  .seg a:hover{color:var(--ink)} .seg a.on{background:var(--ink);color:#fff}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px 22px;margin-bottom:16px;box-shadow:var(--shadow);overflow-x:auto}
   h2{margin:0 0 4px;font-size:15.5px;font-weight:700} h3{margin:14px 0 6px;font-size:13.5px;font-weight:700}
   .hint{color:var(--muted);font-size:12.5px;margin:0 0 12px;line-height:1.55}
@@ -86,27 +91,32 @@
   <a href="/me/guide" class="tab {{ 'on' if page=='repguide' }}">奖金怎么算</a>
   <a href="/account" class="tab {{ 'on' if page=='account' }}">修改密码</a>
   {% else %}
-  <div class="navlabel">Pay</div>
-  <a href="/" class="tab {{ 'on' if page in ['dash','pay'] }}">Dashboard</a>
-  <div class="navlabel">Accounts</div>
-  <a href="/accounts" class="tab {{ 'on' if page=='accounts' }}">Assignment</a>
-  <a href="/underperformers" class="tab {{ 'on' if page=='under' }}">Falling behind</a>
-  <a href="/quiet" class="tab {{ 'on' if page=='quiet' }}">Quiet accounts</a>
-  <a href="/acquisitions" class="tab {{ 'on' if page=='acq' }}">New accounts</a>
-  <a href="/constrained" class="tab {{ 'on' if page=='stock' }}">Limited stock</a>
-  <div class="navlabel">Admin</div>
-  <a href="/upload" class="tab {{ 'on' if page=='upload' }}">Import</a>
-  <a href="/settings" class="tab {{ 'on' if page=='settings' }}">Pay dials</a>
-  <a href="/logins" class="tab {{ 'on' if page=='logins' }}">Logins</a>
-  <a href="/account" class="tab {{ 'on' if page=='account' }}">My password</a>
-  <div class="navlabel">Help</div>
-  <a href="/guide" class="tab {{ 'on' if page=='guide' }}">Manager guide</a>
-  <a href="/me/guide" class="tab {{ 'on' if page=='repguide' }}">What reps see</a>
+  {% set sections = [
+      ('Dashboard', '/', ['dash','pay'], []),
+      ('Accounts', '/accounts', ['accounts','under','quiet','acq','stock'],
+         [('Assignment','/accounts','accounts'),('Falling behind','/underperformers','under'),('Quiet accounts','/quiet','quiet'),('New accounts','/acquisitions','acq'),('Limited stock','/constrained','stock')]),
+      ('Import', '/upload', ['upload'], []),
+      ('Settings', '/settings', ['settings','logins','account'],
+         [('Pay dials','/settings','settings'),('Logins','/logins','logins'),('My password','/account','account')]),
+      ('Guide', '/guide', ['guide','repguide'],
+         [('Manager guide','/guide','guide'),('What reps see','/me/guide','repguide')]),
+  ] %}
+  {% for title, href, keys, kids in sections %}
+  <a href="{{ href }}" class="tab {{ 'on' if page in keys }}">{{ title }}</a>
+  {% if page in keys and kids %}
+  <div class="kids">
+    {% for ktitle, khref, kkey in kids %}<a href="{{ khref }}" class="kid {{ 'on' if page == kkey }}">{{ ktitle }}</a>{% endfor %}
+  </div>
+  {% endif %}
+  {% endfor %}
   {% endif %}
   <div class="me"><b>{{ user.username }}</b><a href="/logout">log out</a></div>
 </nav>
 <div id="content">
 <div class="topbar"><h1>{{ titles.get(page, 'W&T Scorecard') }}</h1></div>
+{% if user.role != 'rep' %}{% for title, href, keys, kids in sections %}{% if page in keys and kids %}
+<div class="seg">{% for ktitle, khref, kkey in kids %}<a href="{{ khref }}" class="{{ 'on' if page == kkey }}">{{ ktitle }}</a>{% endfor %}</div>
+{% endif %}{% endfor %}{% endif %}
 <div class="wrap">{% block body %}{% endblock %}</div>
 <footer>W&T Sales Scorecard · decision support — the manager sets the final award</footer>
 </div>

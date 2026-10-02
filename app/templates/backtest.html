@@ -43,11 +43,28 @@
   .flt a{font-size:12px;color:var(--muted);text-decoration:none;margin-right:10px;padding-bottom:2px} .flt a.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--purple)}
   .st{font-size:11px;padding:2px 8px;border-radius:9px;white-space:nowrap} .st.ok{background:#eaf7ee;color:#1e7b34} .st.miss{background:#fdecec;color:#c0392b} .st.wo{background:#eee;color:#555}
   table.stmt tr.miss td.cust,table.stmt tr.miss td.num{color:#7a2a2a}
+
+  tr.invx > td{background:#fff;padding:10px 12px 12px 40px;border-bottom:1px solid var(--line)}
+  .invbox{border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;background:#fcfcfd}
+  .invhead{font-size:12.5px;color:var(--muted);margin-bottom:8px} .invhead b{color:var(--ink)}
+  table.inv{font-size:12px;width:100%} table.inv th{text-transform:none;letter-spacing:0;font-size:11px;position:static} table.inv td,table.inv th{padding:4px 8px;white-space:normal}
+  table.inv .num{text-align:right;font-variant-numeric:tabular-nums}
 </style>
 <script>
 function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);e.hidden=!e.hidden;var t=document.getElementById('tg-'+id);if(t)t.classList.toggle('open',!e.hidden);}
 function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){r.hidden=(which!=='all'&&!r.classList.contains(which));});
   p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');}
+
+function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest('tr'),nxt=tr.nextElementSibling;
+  if(nxt&&nxt.classList.contains('invx')){nxt.remove();return;}
+  var cols=tr.children.length,x=document.createElement('tr');x.className='invx';x.innerHTML='<td colspan="'+cols+'" class="mut">loading…</td>';tr.after(x);
+  fetch('/invoice/'+encodeURIComponent(sop)+'.json').then(function(r){return r.json();}).then(function(j){
+    if(!j.ok){x.firstChild.textContent='Could not load this invoice.';return;}
+    var h=j.header,m=function(v){return '$'+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});};
+    var rows=j.lines.map(function(l,i){return '<tr><td class="mut">'+(i+1)+'</td><td>'+l.item+'</td><td>'+l.description+'</td><td class="num">'+Number(l.qty).toLocaleString()+'</td><td class="num mut">'+m(l.unit_price)+'</td><td class="num">'+m(l.extended_price)+'</td><td class="num mut">'+m(l.extended_cost)+'</td><td class="num'+(l.profit<0?' neg':'')+'">'+m(l.profit)+'</td></tr>';}).join('');
+    x.innerHTML='<td colspan="'+cols+'"><div class="invbox"><div class="invhead"><b>'+h.sop_number+'</b> · '+h.customer+' · '+h.date+' · written by '+(h.associate||'—')+' · '+h.n_lines+' lines · total '+m(h.total)+' · profit '+m(h.profit)+' <span class="st '+(h.voided?'wo':(h.collected?'ok':'miss'))+'">'+(h.voided?'voided':(h.collected?'collected':'missing'))+'</span> <a href="/invoice/'+h.sop_number+'" class="mut" style="margin-left:8px">open page</a></div>'
+      +'<table class="inv"><thead><tr><th>#</th><th>Item</th><th>Description</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Amount</th><th class="num">Cost</th><th class="num">Profit</th></tr></thead><tbody>'+rows+'</tbody></table></div></td>';
+  });}
 </script>
 
 <div class="card">
@@ -185,7 +202,7 @@ function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('t
                 <tbody>
                 {% for i in st.invoices %}
                   <tr class="{{ 'ok' if i.paid else 'miss' }}">
-                    <td class="mut">{{ i.date.strftime('%b %-d') }}</td><td><a href="/invoice/{{ i.sop_number }}" style="color:var(--accent-2);text-decoration:none;font-weight:600" title="Inspect this invoice">{{ i.sop_number }}</a></td>
+                    <td class="mut">{{ i.date.strftime('%b %-d') }}</td><td><a href="/invoice/{{ i.sop_number }}" onclick="invtog(event,'{{ i.sop_number }}')" style="color:var(--accent-2);text-decoration:none;font-weight:600" title="Click to see the lines on this invoice">{{ i.sop_number }}</a></td>
                     <td class="cust" title="{{ i.customer }}">{{ i.customer }}</td><td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
                     <td>{% if i.written_off %}<span class="st wo">written off</span>{% elif i.paid %}<span class="st ok">collected</span>{% else %}<span class="st miss">missing</span>{% endif %}</td>
                   </tr>

@@ -343,6 +343,19 @@ def pay_detail(request: Request, name: str, page_no: int = 1, db: Session = Depe
         page="pay", name=name, page_no=page_no, n_pages=n_pages))
 
 
+@app.get("/invoice/{sop_number}.json")
+def invoice_json(request: Request, sop_number: str, db: Session = Depends(get_db)):
+    """The invoice's lines for the inline expansion (same access rule as the page)."""
+    user = current_user(request, db)
+    if not user:
+        return JSONResponse({"ok": False}, status_code=401)
+    inv = service.invoice_detail(db, sop_number)
+    if inv is None or (user.role == "rep" and inv["header"]["associate"] != user.associate_name):
+        return JSONResponse({"ok": False}, status_code=404)
+    h = inv["header"]
+    return JSONResponse({"ok": True, "header": dict(h, date=str(h["date"])), "lines": inv["lines"]})
+
+
 @app.get("/invoice/{sop_number}", response_class=HTMLResponse)
 def invoice_page(request: Request, sop_number: str, db: Session = Depends(get_db)):
     """Inspect one invoice, line by line. Managers see any; a rep sees only invoices they wrote."""
@@ -364,9 +377,16 @@ def accounts_page(request: Request, view: str = "shared", q: str = "", db: Sessi
     from .config import TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS, HOUSE_TEAM
     rows = service.account_assignments(db)
     teams = list(service.team_members(db)) + [HOUSE_TEAM]
+    counts = dict(all=len(rows), shared=sum(1 for r in rows if r["shared"]))
+    for t in teams:
+        counts[t] = sum(1 for r in rows if r["team"] == t)
+    shown = [r for r in rows if (view == "all" or (view == "shared" and r["shared"]) or r["team"] == view)]
+    if q:
+        needle = q.strip().lower()
+        shown = [r for r in shown if needle in r["customer"].lower() or needle in r["account"].lower()]
     return templates.TemplateResponse("backtest_accounts.html", {
-        "request": request, "user": user, "page": "accounts", "rows": rows, "teams": teams,
-        "team_members": service.team_members(db),
+        "request": request, "user": user, "page": "accounts", "rows": shown[:400], "n_shown": len(shown),
+        "teams": teams, "team_members": service.team_members(db), "view": view, "q": q, "counts": counts,
         "pct": TEAM_OWNERSHIP_PCT * 100, "months": TEAM_WINDOW_MONTHS})
 
 
