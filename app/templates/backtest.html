@@ -69,6 +69,12 @@ function setOpen(id,on){var e=document.getElementById(id);if(!e)return;e.hidden=
   var key=id.slice(2),ids=openList().filter(function(x){return x!==key;});if(on)ids.push(key);
   history.replaceState({m:CUR},'',urlFor(CUR,ids));cache={};prefetch();}      // prefetched pages had the old open set
 function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);setOpen(id,e.hidden);}
+function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest('tr'),nxt=tr.nextElementSibling;
+  if(nxt&&nxt.classList.contains('invx')){nxt.remove();return;}
+  var cols=tr.children.length,x=document.createElement('tr');x.className='invx';x.innerHTML='<td colspan="'+cols+'" class="mut">loading…</td>';tr.after(x);
+  fetch('/invoice/'+encodeURIComponent(sop)+'.json').then(function(r){return r.json();}).then(function(j){
+    if(!j.ok){x.firstChild.textContent='Could not load this invoice.';return;}
+    var h=j.header,m=function(v){return '$'+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});};
 function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){if(r.classList.contains('invx'))return;r.hidden=(which!=='all'&&!r.classList.contains(which));});
   p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');
   p.querySelectorAll('.cap').forEach(function(c){c.textContent=c.dataset[which];});}
