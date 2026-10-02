@@ -182,21 +182,23 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         ))
     rows.sort(key=lambda z: (z["team"] is None, z["team"] or "", -z["earned_cycle"]))
 
-    # --- what's behind each rep's number, expandable on the row ---
-    # The panel follows the SELECTED month: that month's earnings, how much of its own invoices have been
-    # paid, what's been paid against it and what it still owes — plus one summary line per earlier month.
-    # The row's Owed-now column stays live (all months), and the panel says how much of it is this month's.
+    # --- each row is MONTH-SCOPED: the selected month's earnings, its own collection, what was paid against
+    # it and what it still owes. A past month is read-only (whatever it still owes rolls forward and is paid
+    # from the latest month, which is the only view with a pay button and the all-months total).
+    is_latest = (mi == len(months) - 1)
     for x in rows:
         rep = x["associate"]
         detail = service.rep_pay_detail(db, rep, show="all") or dict(months=[])
         mrows = detail["months"]                                   # newest first
         cur = next((mm for mm in mrows if mm["month"] == m), None)
         x["panel"] = cur
-        x["owed_this_month"] = cur["owed"] if cur else 0.0
-        x["owed_from_earlier"] = sum(mm["owed"] for mm in mrows if mm["month"] != m)
+        for key in ("earned", "collected_pct", "collectable", "paid", "owed", "unreleased"):
+            x["m_" + key] = cur[key] if cur else 0.0
+        x["carried"] = sum(mm["owed"] for mm in mrows if mm["month"] < m)     # unpaid from EARLIER months only
+        x["pay_total"] = x["m_owed"] + x["carried"]                            # what a payment today settles
         if cur:
             # the newest 25 of EACH status, so the Missing / Collected filter always has something to show
-            newest = cur["invoices"]                               # already newest first
+            newest = cur["invoices"]
             keep = [i for i in newest if not i["paid"]][:25] + [i for i in newest if i["paid"]][:25]
             keep.sort(key=lambda i: (i["date"], i["sop_number"]), reverse=True)
             x["statement"] = [dict(cur, invoices=keep)]
@@ -217,11 +219,13 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         g["rows"].append(x)
     for g in groups:
         g["sub"] = {k: sum(z[k] for z in g["rows"]) for k in
-                    ("pay_mo", "contrib_mo", "acq_mo", "total_mo", "earned_all", "paid", "payable_now")}
+                    ("pay_mo", "contrib_mo", "acq_mo", "total_mo", "m_earned", "m_collectable", "m_paid",
+                     "m_owed", "carried", "pay_total")}
         g["sub"]["n_items"] = sum(z["n_items"] for z in g["rows"])
     team_row = {k: sum(z[k] for z in rows) for k in
                 ("pay_mo", "cum_pay", "contrib_mo", "acq_mo", "total_mo", "earned_cycle", "earned_all",
-                 "paid", "payable_now", "carried", "unreleased")}
+                 "paid", "payable_now", "carried", "unreleased", "m_earned", "m_collectable", "m_paid",
+                 "m_owed", "m_unreleased", "pay_total")}
     team_row["n_items"] = sum(z["n_items"] for z in rows)
     for k in ("profit_mo", "profit_mo_ly", "gap_mo", "cum_gap"):
         team_row[k] = sum(z[k] for z in team_rows)

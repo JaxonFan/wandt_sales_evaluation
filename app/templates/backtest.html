@@ -5,7 +5,8 @@
   tr.grp > td{font-size:13px;padding:7px 10px;border-top:2px solid #fff}
   tr.grp.t1 > td{background:#efe9fb;color:#3b2a6e} tr.grp.t2 > td{background:#e6f0fb;color:#1e3f66} tr.grp.house > td{background:#f0f0f0;color:#444}
   tr.rep.t1 > td:first-child{box-shadow:inset 4px 0 0 var(--accent)} tr.rep.t2 > td:first-child{box-shadow:inset 4px 0 0 var(--blue)} tr.rep.house > td:first-child{box-shadow:inset 4px 0 0 #9a9a9a}
-  .tg{display:inline-block;width:14px;color:var(--muted);text-decoration:none;font-size:12px;margin-right:4px;transition:transform .15s}
+  tr.rep{cursor:pointer} tr.rep:hover > td{background:#fafafc}
+  .tg{display:inline-block;width:14px;color:var(--muted);font-size:12px;margin-right:4px;transition:transform .15s}
   .tg.open{transform:rotate(90deg)}
   /* the expanded panel */
   tr.detail > td{background:#fafafc;padding:16px 18px 18px 30px;border-bottom:2px solid var(--line)}
@@ -36,7 +37,7 @@
   table.stmt tr.miss td.cust,table.stmt tr.miss td.num{color:#7a2a2a}
 </style>
 <script>
-function tog(id,a){var e=document.getElementById(id);e.hidden=!e.hidden;a.classList.toggle('open',!e.hidden);}
+function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);e.hidden=!e.hidden;var t=document.getElementById('tg-'+id);if(t)t.classList.toggle('open',!e.hidden);}
 function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){r.hidden=(which!=='all'&&!r.classList.contains(which));});
   p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');}
 </script>
@@ -94,44 +95,50 @@ function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('t
       {% if growth_active %}<th>Team</th><th class="num">Growth share</th>{% endif %}
       <th class="num">Contribution</th>
       {% if growth_active %}<th class="num">Acquisition</th>{% endif %}
-      <th class="num">This month</th>
-      <th class="num" title="All chapters, as of today">Earned to date</th>
-      <th class="num" title="Share of the rep's billing that customers have paid, per the latest receivables upload">Collected</th>
-      <th class="num" title="Already recorded as paid">Paid</th>
-      <th class="num" title="Earned × collected − paid. Click the rep for every invoice behind it.">Owed now</th>
+      <th class="num">Earned in {{ m }}</th>
+      <th class="num" title="Share of this month's own invoices the customers have paid">Collected</th>
+      <th class="num" title="Earned × collected — how much of this month's earnings has been released">Released</th>
+      <th class="num" title="Paid against this month">Paid</th>
+      <th class="num" title="Released − paid. Unpaid money rolls forward until it is paid.">Owed on {{ m }}</th>
+      {% if is_latest %}<th class="num" title="This month's owed plus anything still unpaid from earlier months">Pay now</th>{% endif %}
     </tr></thead>
     <tbody>
-    {% set ncol = 10 if growth_active else 7 %}
+    {% set ncol = (10 if growth_active else 7) + (1 if is_latest else 0) %}
     {% for g in groups %}
       <tr class="grp {{ g.css }}"><td colspan="{{ ncol }}">
         <b>{{ g.team }}</b>{% if g.members %} <span class="mut">· {{ g.members|join(', ') }}</span>{% endif %}
-        <span class="mut" style="float:right">this month ${{ '{:,.2f}'.format(g.sub.total_mo) }} · earned to date ${{ '{:,.2f}'.format(g.sub.earned_all) }} · owed ${{ '{:,.2f}'.format(g.sub.payable_now) }}</span>
+        <span class="mut" style="float:right">earned ${{ '{:,.2f}'.format(g.sub.m_earned) }} · released ${{ '{:,.2f}'.format(g.sub.m_collectable) }} · owed ${{ '{:,.2f}'.format(g.sub.m_owed) }}{% if is_latest %} · pay now ${{ '{:,.2f}'.format(g.sub.pay_total) }}{% endif %}</span>
       </td></tr>
       {% for x in g.rows %}{% set rid = 'd' ~ loop.index ~ g.css %}
-      <tr class="rep {{ g.css }}">
-        <td><a href="javascript:void(0)" onclick="tog('{{ rid }}', this)" class="tg" title="expand">▸</a>
-          <a href="/pay/{{ x.associate }}" style="text-decoration:none;color:var(--blue)"><strong>{{ x.associate }}</strong></a></td>
+      <tr class="rep {{ g.css }}" onclick="rowtog(event,'{{ rid }}')" title="Click to see the invoices behind this">
+        <td><span class="tg" id="tg-{{ rid }}">▸</span><strong>{{ x.associate }}</strong></td>
         {% if growth_active %}<td class="mut">{{ x.team or '—' }}</td>
         <td class="num">${{ '{:,.2f}'.format(x.pay_mo) }}</td>{% endif %}
         <td class="num">${{ '{:,.2f}'.format(x.contrib_mo) }} <span class="mut">({{ '{:,}'.format(x.n_items) }})</span></td>
         {% if growth_active %}<td class="num">{% if x.acq_mo > 0 %}${{ '{:,.0f}'.format(x.acq_mo) }}{% else %}<span class="mut">—</span>{% endif %}</td>{% endif %}
-        <td class="num"><strong>${{ '{:,.2f}'.format(x.total_mo) }}</strong></td>
-        <td class="num">${{ '{:,.2f}'.format(x.earned_all) }}</td>
-        <td class="num mut">{{ '%.0f'|format(x.collected_pct) }}%</td>
-        <td class="num mut">${{ '{:,.2f}'.format(x.paid) }}</td>
-        <td class="num"><strong>${{ '{:,.2f}'.format(x.payable_now) }}</strong>
-          {% if x.payable_now >= 0.01 %}
-          <form method="post" action="/pay" style="margin:0;display:inline" onsubmit="return confirm('Record ${{ '{:,.2f}'.format(x.payable_now) }} as PAID to {{ x.associate }}?')">
+        <td class="num"><strong>${{ '{:,.2f}'.format(x.m_earned) }}</strong></td>
+        <td class="num mut">{{ '%.0f'|format(x.m_collected_pct) }}%</td>
+        <td class="num">${{ '{:,.2f}'.format(x.m_collectable) }}</td>
+        <td class="num mut">${{ '{:,.2f}'.format(x.m_paid) }}</td>
+        <td class="num"><strong>${{ '{:,.2f}'.format(x.m_owed) }}</strong></td>
+        {% if is_latest %}
+        <td class="num"><strong>${{ '{:,.2f}'.format(x.pay_total) }}</strong>
+          {% if x.pay_total >= 0.01 %}
+          <form method="post" action="/pay" style="margin:0;display:inline" onsubmit="return confirm('Record ${{ '{:,.2f}'.format(x.pay_total) }} as PAID to {{ x.associate }}?')">
             <input type="hidden" name="associate" value="{{ x.associate }}">
-            <input type="hidden" name="amount" value="{{ '%.2f'|format(x.payable_now) }}">
+            <input type="hidden" name="amount" value="{{ '%.2f'|format(x.pay_total) }}">
             <button type="submit" class="ghost" style="padding:2px 9px;font-size:11.5px;margin-left:6px">pay</button></form>
-          <div class="mut" style="font-size:11px">{{ m }} ${{ '{:,.2f}'.format(x.owed_this_month) }} · other months ${{ '{:,.2f}'.format(x.owed_from_earlier) }}</div>
-          {% endif %}</td>
+          {% endif %}
+          {% if x.carried > 0.005 %}<div class="mut" style="font-size:11px">incl. ${{ '{:,.2f}'.format(x.carried) }} unpaid from earlier months</div>{% endif %}</td>
+        {% endif %}
       </tr>
       <tr class="detail {{ g.css }}" id="{{ rid }}" hidden><td colspan="{{ ncol }}">
         <div class="dwrap">
           <div class="dcol">
-            <h4>{{ months[mi] }} for {{ x.associate }}</h4>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <h4 style="margin:0">{{ months[mi] }} for {{ x.associate }}</h4>
+              <a href="/pay/{{ x.associate }}" class="pnav" style="padding:4px 10px;font-size:12px">Full audit, every month ▸</a>
+            </div>
             {% if x.panel %}{% set pm = x.panel %}
             <table class="brk">
               <tr><td>Earned in {{ pm.label }}</td><td class="num">${{ '{:,.2f}'.format(pm.earned) }}</td></tr>
@@ -140,9 +147,13 @@ function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('t
               <tr class="sum"><td>Owed on {{ pm.label.split(' ')[0] }}</td><td class="num">${{ '{:,.2f}'.format(pm.owed) }}</td></tr>
               <tr class="note"><td>Still waiting on {{ pm.label.split(' ')[0] }}'s customers</td><td class="num">${{ '{:,.2f}'.format(pm.unreleased) }}</td></tr>
             </table>
-            <p class="hint" style="margin:10px 0 0">Owed now, all months: <b>${{ '{:,.2f}'.format(x.payable_now) }}</b>
-              {% if x.owed_from_earlier > 0.005 %}— of which ${{ '{:,.2f}'.format(x.owed_from_earlier) }} is from other months{% endif %}.
-              Anything unpaid stays here until it is paid — it never expires.</p>
+            {% if is_latest and x.carried > 0.005 %}
+            <p class="hint" style="margin:10px 0 0">Plus <b>${{ '{:,.2f}'.format(x.carried) }}</b> still unpaid from earlier months → pay now
+              <b>${{ '{:,.2f}'.format(x.pay_total) }}</b>. Unpaid money never expires; it rolls forward until it is paid.</p>
+            {% elif not is_latest %}
+            <p class="hint" style="margin:10px 0 0">{{ pm.label }} is closed to new sales but not to money: whatever it still owes
+              rolls forward and is paid from the current month.</p>
+            {% endif %}
             {% else %}<p class="hint">No activity in {{ months[mi] }}.</p>{% endif %}
           </div>
           <div class="dcol wide">
@@ -204,16 +215,19 @@ function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('t
       {% if growth_active %}<th></th><th class="num">${{ '{:,.2f}'.format(team.pay_mo) }}</th>{% endif %}
       <th class="num">${{ '{:,.2f}'.format(team.contrib_mo) }} <span class="mut">({{ '{:,}'.format(team.n_items) }})</span></th>
       {% if growth_active %}<th class="num">${{ '{:,.0f}'.format(team.acq_mo) }}</th>{% endif %}
-      <th class="num">${{ '{:,.2f}'.format(team.total_mo) }}</th>
-      <th class="num">${{ '{:,.2f}'.format(team.earned_all) }}</th><th></th>
-      <th class="num">${{ '{:,.2f}'.format(team.paid) }}</th>
-      <th class="num">${{ '{:,.2f}'.format(team.payable_now) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(team.m_earned) }}</th><th></th>
+      <th class="num">${{ '{:,.2f}'.format(team.m_collectable) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(team.m_paid) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(team.m_owed) }}</th>
+      {% if is_latest %}<th class="num">${{ '{:,.2f}'.format(team.pay_total) }}</th>{% endif %}
     </tr></tfoot>
     {% endif %}
   </table>
-  <p class="hint" style="margin-top:10px">The first columns are for <b>{{ m }}</b>; <b>Earned to date / Collected /
-    Paid / Owed</b> are live as of today and keep every period open until its invoices are collected and paid —
-    ${{ '{:,.2f}'.format(team.unreleased) }} is earned and still waiting on customer payments.
-    <b>Click a rep</b> to see it invoice by invoice.</p>
+  <p class="hint" style="margin-top:10px">Every column is for <b>{{ m }}</b> alone — its earnings, its own invoices, what was
+    paid against it. <b>Released</b> = earned × the share of this month's invoices the customers have paid;
+    <b>Owed</b> = released − paid. {% if is_latest %}<b>Pay now</b> adds anything still unpaid from earlier months,
+    because unpaid money rolls forward until it is paid.{% else %}This month is in the past, so there's nothing to
+    pay from here — whatever it still owes is included in the current month's <b>Pay now</b>.{% endif %}
+    Click a row for the invoices behind it.</p>
 </div>
 {% endblock %}
