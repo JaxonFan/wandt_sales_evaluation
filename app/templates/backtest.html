@@ -63,14 +63,17 @@
 <script data-nav>
 var PREV={{ nav.prev|tojson }}, NEXT={{ nav.next|tojson }}, CUR={{ m|tojson }};
 var cache={}, busy=false;
-function openSet(){try{return JSON.parse(localStorage.getItem('dash-open')||'[]');}catch(e){return [];}}
-function saveOpen(ids){try{localStorage.setItem('dash-open',JSON.stringify(ids));}catch(e){}}
+function openList(){return (new URLSearchParams(location.search).get('open')||'').split(',').filter(Boolean);}
+function urlFor(m,open){return '/?m='+m+(open.length?'&open='+open.join(','):'');}
 function setOpen(id,on){var e=document.getElementById(id);if(!e)return;e.hidden=!on;var t=document.getElementById('tg-'+id);if(t)t.classList.toggle('open',on);
-  var ids=openSet().filter(function(x){return x!==id;});if(on)ids.push(id);saveOpen(ids);}
+  var key=id.slice(2),ids=openList().filter(function(x){return x!==key;});if(on)ids.push(key);
+  history.replaceState({m:CUR},'',urlFor(CUR,ids));cache={};prefetch();}      // prefetched pages had the old open set
 function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);setOpen(id,e.hidden);}
-function restoreOpen(){openSet().forEach(function(id){var e=document.getElementById(id);if(e){e.hidden=false;var t=document.getElementById('tg-'+id);if(t)t.classList.add('open');}});}
-function fetchMonth(m){if(!m)return Promise.resolve(null);if(cache[m])return Promise.resolve(cache[m]);
-  return fetch('/?m='+m,{credentials:'same-origin'}).then(function(r){return r.text();}).then(function(h){cache[m]=h;return h;});}
+function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){if(r.classList.contains('invx'))return;r.hidden=(which!=='all'&&!r.classList.contains(which));});
+  p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');
+  p.querySelectorAll('.cap').forEach(function(c){c.textContent=c.dataset[which];});}
+function fetchMonth(m){if(!m)return Promise.resolve(null);var u=urlFor(m,openList());if(cache[u])return Promise.resolve(cache[u]);
+  return fetch(u,{credentials:'same-origin'}).then(function(r){return r.text();}).then(function(h){cache[u]=h;return h;});}
 function prefetch(){[PREV,NEXT].forEach(function(m){if(m&&!cache[m])fetchMonth(m);});}
 // swap the month bar + pay card in place with a slide/fade, like a page turn
 function go(m,dir){if(!m||busy)return;busy=true;dir=dir||(m<CUR?-1:1);
@@ -80,7 +83,7 @@ function go(m,dir){if(!m||busy)return;busy=true;dir=dir||(m<CUR?-1:1);
     document.getElementById('monthnav').replaceWith(doc.getElementById('monthnav'));
     var fresh=doc.getElementById('paycard');fresh.style.transition='none';fresh.style.transform='translateX('+(dir*48)+'px)';fresh.style.opacity='0';card.replaceWith(fresh);
     var sc=doc.querySelector('script[data-nav]');if(sc){var mm=sc.textContent.match(/PREV=(.*?), NEXT=(.*?), CUR=(.*?);/);if(mm){PREV=JSON.parse(mm[1]);NEXT=JSON.parse(mm[2]);CUR=JSON.parse(mm[3]);}}
-    history.pushState({m:m},'','/?m='+m);restoreOpen();wireDrag();
+    history.pushState({m:m},'',urlFor(m,openList()));wireDrag();
     requestAnimationFrame(function(){fresh.style.transition='transform .22s ease,opacity .22s ease';fresh.style.transform='';fresh.style.opacity='1';});
     var cur=document.querySelector('.mchip.on');if(cur)cur.scrollIntoView({inline:'center',block:'nearest'});
     setTimeout(function(){busy=false;prefetch();},240);});}
@@ -95,7 +98,7 @@ function wireDrag(){['monthnav','paycard'].forEach(function(id){var el=document.
   function release(e){if(sx===null)return;var dx=e.clientX-sx;sx=null;card.style.transition='transform .2s ease,opacity .2s ease';
     if(dx>90&&PREV){go(PREV,-1);}else if(dx<-90&&NEXT){go(NEXT,1);}else{card.style.transform='';card.style.opacity='1';}}
   el.addEventListener('pointerup',release);el.addEventListener('pointercancel',release);el.addEventListener('pointerleave',release);});}
-document.addEventListener('DOMContentLoaded',function(){restoreOpen();wireDrag();prefetch();history.replaceState({m:CUR},'','/?m='+CUR);
+document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();history.replaceState({m:CUR},'',urlFor(CUR,openList()));
   var cur=document.querySelector('.mchip.on');if(cur)cur.scrollIntoView({inline:'center',block:'nearest'});});
 </script>
 
@@ -165,8 +168,9 @@ document.addEventListener('DOMContentLoaded',function(){restoreOpen();wireDrag()
         <span class="mut" style="float:right">earned ${{ '{:,.2f}'.format(g.sub.m_earned) }} · released ${{ '{:,.2f}'.format(g.sub.m_collectable) }} · owed ${{ '{:,.2f}'.format(g.sub.m_owed) }}{% if is_latest %} · pay now ${{ '{:,.2f}'.format(g.sub.pay_total) }}{% endif %}</span>
       </td></tr>
       {% for x in g.rows %}{% set rid = 'r-' ~ x.associate|replace(' ','_') %}
+      {% set is_open = (rid[2:] in open_set) %}
       <tr class="rep {{ g.css }}" onclick="rowtog(event,'{{ rid }}')" title="Click to see the invoices behind this">
-        <td><span class="tg" id="tg-{{ rid }}">▸</span><strong>{{ x.associate }}</strong></td>
+        <td><span class="tg {{ 'open' if is_open }}" id="tg-{{ rid }}">▸</span><strong>{{ x.associate }}</strong></td>
         {% if growth_active %}<td class="mut">{{ x.team or '—' }}</td>
         <td class="num">${{ '{:,.2f}'.format(x.pay_mo) }}</td>{% endif %}
         <td class="num">${{ '{:,.2f}'.format(x.contrib_mo) }} <span class="mut">({{ '{:,}'.format(x.n_items) }})</span></td>
@@ -194,7 +198,7 @@ document.addEventListener('DOMContentLoaded',function(){restoreOpen();wireDrag()
           {% else %}<span class="mut">nothing owed</span>{% endif %}</td>
         {% endif %}
       </tr>
-      <tr class="detail {{ g.css }}" id="{{ rid }}" hidden><td colspan="{{ ncol }}">
+      <tr class="detail {{ g.css }}" id="{{ rid }}" {{ '' if is_open else 'hidden' }}><td colspan="{{ ncol }}">
         <div class="dwrap">
           <div class="dcol">
             <h4>{{ months[mi] }} for {{ x.associate }}</h4>

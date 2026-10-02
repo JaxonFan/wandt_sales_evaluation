@@ -114,7 +114,7 @@ def logout(request: Request):
 
 
 @app.get("/", response_class=HTMLResponse)
-def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
+def backtest(request: Request, m: str = None, open: str = "", db: Session = Depends(get_db)):
     user = current_user(request, db)
     if user and user.role == "rep":
         return RedirectResponse("/me", status_code=303)
@@ -240,6 +240,7 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
         "rows": rows, "groups": groups, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
+        "open_set": {x for x in open.split(",") if x},   # reps whose row is rendered already expanded
         "unassigned": service.unassigned_summary(db),
         "is_latest": (mi == len(months) - 1), "growth_active": growth_active,
         "ledger": ledger, "payments": [
