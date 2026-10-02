@@ -183,22 +183,26 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     rows.sort(key=lambda z: (z["team"] is None, z["team"] or "", -z["earned_cycle"]))
 
     # --- what's behind each rep's number, expandable on the row ---
-    # The ledger is per MONTH, so "owed now" splits naturally: the part from the latest month's earnings
-    # (its invoices paid so far) vs earlier months whose invoices have since been collected.
-    latest = months[-1]
+    # The panel follows the SELECTED month: that month's earnings, how much of its own invoices have been
+    # paid, what's been paid against it and what it still owes — plus one summary line per earlier month.
+    # The row's Owed-now column stays live (all months), and the panel says how much of it is this month's.
     for x in rows:
         rep = x["associate"]
         detail = service.rep_pay_detail(db, rep, show="all") or dict(months=[])
         mrows = detail["months"]                                   # newest first
-        cur = next((m for m in mrows if m["month"] == latest), None)
+        cur = next((mm for mm in mrows if mm["month"] == m), None)
+        x["panel"] = cur
         x["owed_this_month"] = cur["owed"] if cur else 0.0
-        x["owed_from_earlier"] = sum(m["owed"] for m in mrows if m["month"] != latest)
-        x["earned_latest"] = cur["earned"] if cur else 0.0
-        x["frac_latest"] = cur["collected_pct"] if cur else 0.0
-        # keep the inline panel light: the latest month's statement (25 newest invoices) and a one-line
-        # summary per earlier month — by December that's five months, and the audit page has the rest.
-        x["statement"] = [dict(m, invoices=m["invoices"][:25]) for m in mrows[:1]]
-        x["earlier"] = mrows[1:]
+        x["owed_from_earlier"] = sum(mm["owed"] for mm in mrows if mm["month"] != m)
+        if cur:
+            # the newest 25 of EACH status, so the Missing / Collected filter always has something to show
+            newest = cur["invoices"]                               # already newest first
+            keep = [i for i in newest if not i["paid"]][:25] + [i for i in newest if i["paid"]][:25]
+            keep.sort(key=lambda i: (i["date"], i["sop_number"]), reverse=True)
+            x["statement"] = [dict(cur, invoices=keep)]
+        else:
+            x["statement"] = []
+        x["earlier"] = [mm for mm in mrows if mm["month"] < m]
 
     # group by team for display: a colored header row per team, members beneath it
     palette = {"Team 1": "t1", "Team 2": "t2"}
