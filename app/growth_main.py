@@ -196,6 +196,10 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
             x["m_" + key] = cur[key] if cur else 0.0
         x["carried"] = sum(mm["owed"] for mm in mrows if mm["month"] < m)     # unpaid from EARLIER months only
         x["pay_total"] = x["m_owed"] + x["carried"]                            # what a payment today settles
+        # exactly what a payment today is for: each month with money owed, oldest first (the order it settles)
+        x["pay_breakdown"] = [dict(label=mm["label"], owed=mm["owed"], released=mm["collectable"], paid=mm["paid"])
+                              for mm in sorted(mrows, key=lambda r: r["month"])
+                              if mm["month"] <= m and mm["owed"] > 0.005]
         if cur:
             # the newest 25 of EACH status, so the Missing / Collected filter always has something to show
             newest = cur["invoices"]
