@@ -1088,6 +1088,31 @@ def rep_pay_detail(db, associate, show="all"):
                 totals=ledger["totals"].get(associate, {}), item_rate=float(s["item_rate"]))
 
 
+def invoice_detail(db, sop_number):
+    """One invoice, line by line — what the manager sees when they want to inspect a row of the statement.
+    Returns dict(header, lines) or None. Descriptions are decoded from the GP mojibake like everywhere else."""
+    rows = (db.query(M.SalesLine).filter(M.SalesLine.sop_number == str(sop_number))
+            .order_by(M.SalesLine.id).all())
+    if not rows:
+        return None
+    names = customer_names(db)
+    first = rows[0]
+    collected = str(sop_number) in {str(x) for x in collected_set(db)}
+    voided = str(sop_number) in {str(x) for x in voided_set(db)}
+    written_off = str(sop_number) in {str(x) for x in written_off_set(db)}
+    lines = [dict(item=r.item_number, description=decode_desc(r.item_description or ""),
+                  qty=float(r.qty or 0.0), unit_price=float(r.unit_price or 0.0),
+                  extended_price=float(r.extended_price or 0.0), extended_cost=float(r.extended_cost or 0.0),
+                  profit=float(r.line_profit or 0.0)) for r in rows]
+    header = dict(sop_number=str(sop_number), date=first.document_date, account=first.customer_number,
+                  customer=names.get(first.customer_number, first.customer_name), associate=first.associate,
+                  batch=first.batch_number, n_lines=len(lines),
+                  total=sum(l["extended_price"] for l in lines), cost=sum(l["extended_cost"] for l in lines),
+                  profit=sum(l["profit"] for l in lines), collected=collected, voided=voided,
+                  written_off=written_off)
+    return dict(header=header, lines=lines)
+
+
 def allocate_payment(db, associate, amount, user_id):
     """Record a payment against a rep, settling the OLDEST chapter first (so last quarter's collected money
     clears before this quarter's). Never pays a chapter beyond what it has collected. Returns the allocation."""

@@ -185,7 +185,7 @@ function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('t
                 <tbody>
                 {% for i in st.invoices %}
                   <tr class="{{ 'ok' if i.paid else 'miss' }}">
-                    <td class="mut">{{ i.date.strftime('%b %-d') }}</td><td>{{ i.sop_number }}</td>
+                    <td class="mut">{{ i.date.strftime('%b %-d') }}</td><td><a href="/invoice/{{ i.sop_number }}" style="color:var(--accent-2);text-decoration:none;font-weight:600" title="Inspect this invoice">{{ i.sop_number }}</a></td>
                     <td class="cust" title="{{ i.customer }}">{{ i.customer }}</td><td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
                     <td>{% if i.written_off %}<span class="st wo">written off</span>{% elif i.paid %}<span class="st ok">collected</span>{% else %}<span class="st miss">missing</span>{% endif %}</td>
                   </tr>

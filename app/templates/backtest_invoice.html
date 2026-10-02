@@ -1,0 +1,46 @@
+{% extends "backtest_base.html" %}{% block body %}
+<style>
+  .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 24px;margin:12px 0 4px;font-size:13px}
+  .facts .k{color:var(--muted);font-size:11.5px;letter-spacing:.03em;text-transform:uppercase} .facts .v{font-weight:600;margin-top:2px}
+  .st{font-size:12px;padding:3px 10px;border-radius:999px;font-weight:600} .st.ok{background:#eaf7ee;color:#1e7b34} .st.miss{background:#fdecec;color:#c0392b} .st.wo{background:#eee;color:#555}
+  table.lines td.num,table.lines th.num{text-align:right;font-variant-numeric:tabular-nums}
+</style>
+<div class="card">
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <a href="javascript:history.back()" class="pnav">◀ Back</a>
+    <h2 style="margin:0">Invoice {{ header.sop_number }}</h2>
+    {% if header.voided %}<span class="st wo">voided</span>{% elif header.written_off %}<span class="st wo">written off</span>
+    {% elif header.collected %}<span class="st ok">collected</span>{% else %}<span class="st miss">missing — not yet paid</span>{% endif %}
+  </div>
+  <div class="facts">
+    <div><div class="k">Customer</div><div class="v">{{ header.customer }} <span class="mut" style="font-weight:400">{{ header.account }}</span></div></div>
+    <div><div class="k">Date</div><div class="v">{{ header.date.strftime('%B %-d, %Y') }}</div></div>
+    <div><div class="k">Written by</div><div class="v">{{ header.associate or '—' }} <span class="mut" style="font-weight:400">batch {{ header.batch }}</span></div></div>
+    <div><div class="k">Lines</div><div class="v">{{ header.n_lines }} <span class="mut" style="font-weight:400">× contribution rate</span></div></div>
+    <div><div class="k">Invoice total</div><div class="v">${{ '{:,.2f}'.format(header.total) }}</div></div>
+    <div><div class="k">Profit</div><div class="v">${{ '{:,.2f}'.format(header.profit) }} <span class="mut" style="font-weight:400">({{ '%.1f'|format(100*header.profit/header.total if header.total else 0) }}%)</span></div></div>
+  </div>
+</div>
+<div class="card">
+  <h2>Line items</h2>
+  <table class="lines">
+    <thead><tr><th>#</th><th>Item</th><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th><th class="num">Cost</th><th class="num">Profit</th></tr></thead>
+    <tbody>
+    {% for l in lines %}
+      <tr><td class="mut">{{ loop.index }}</td><td>{{ l.item }}</td><td>{{ l.description }}</td>
+        <td class="num">{{ '{:,.2f}'.format(l.qty).rstrip('0').rstrip('.') }}</td>
+        <td class="num mut">${{ '{:,.2f}'.format(l.unit_price) }}</td>
+        <td class="num">${{ '{:,.2f}'.format(l.extended_price) }}</td>
+        <td class="num mut">${{ '{:,.2f}'.format(l.extended_cost) }}</td>
+        <td class="num {{ 'neg' if l.profit < 0 }}">${{ '{:,.2f}'.format(l.profit) }}</td></tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><th colspan="5">Total · {{ header.n_lines }} lines</th>
+      <th class="num">${{ '{:,.2f}'.format(header.total) }}</th><th class="num">${{ '{:,.2f}'.format(header.cost) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(header.profit) }}</th></tr></tfoot>
+  </table>
+  <p class="hint" style="margin-top:10px">Each line is one product on the invoice and earns the contribution rate once
+    the invoice is written. The whole invoice counts as collected or not — the receivables file lists invoice numbers,
+    not partial payments.</p>
+</div>
+{% endblock %}

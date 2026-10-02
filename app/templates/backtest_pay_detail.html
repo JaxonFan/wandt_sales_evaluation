@@ -1,32 +1,36 @@
 {% extends "backtest_base.html" %}{% block body %}
 <style>
-  table.audit{font-size:12.5px} table.audit th,table.audit td{padding:8px 8px;white-space:nowrap}
+  table.audit{font-size:12.5px} table.audit th,table.audit td{padding:9px 8px;white-space:nowrap}
   table.audit td.num,table.audit th.num{text-align:right;font-variant-numeric:tabular-nums}
-  table.audit tr.tot th{border-top:2px solid var(--ink)}
-  .mo{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
-  .mohead{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
-  .mohead h3{margin:0;font-size:15px}
-  .math{display:inline-flex;gap:14px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
-  .math b{color:var(--ink)}
-  .flt a{font-size:12.5px;color:var(--muted);text-decoration:none;margin-right:12px;padding-bottom:2px} .flt a.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--purple)}
-  .scroll{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+  table.audit tr.mo{cursor:pointer} table.audit tr.mo:hover > td{background:#fafafc}
+  table.audit tr.mo > td:first-child{font-weight:700}
+  .tg{display:inline-block;width:14px;color:var(--muted);font-size:12px;margin-right:4px;transition:transform .15s} .tg.open{transform:rotate(90deg)}
+  table.audit tr.ledger > td{background:#fafafc;padding:14px 18px 16px 30px;border-bottom:2px solid var(--line);white-space:normal}
+  table.audit tfoot th{font-size:13.5px;padding:11px 8px;background:var(--paper)}
+  .mohead{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px;font-size:12.5px;color:var(--muted)}
+  .mohead b{color:var(--ink)}
+  .flt a{font-size:12.5px;color:var(--muted);text-decoration:none;margin-right:12px;padding-bottom:2px} .flt a.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--accent)}
+  .scroll{max-height:440px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
   table.stmt{width:100%;border-collapse:collapse;font-size:12.5px}
-  table.stmt th{position:sticky;top:0;background:#f7f7fa;z-index:1;font-weight:600;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
+  table.stmt th{position:sticky;top:0;background:#f7f7fa;z-index:1;font-weight:600;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;text-transform:none;letter-spacing:0;font-size:11.5px}
   table.stmt td{padding:6px 10px;border-bottom:1px solid #f0f0f3;white-space:nowrap}
   table.stmt td.cust{max-width:420px;overflow:hidden;text-overflow:ellipsis}
   table.stmt .num{text-align:right;font-variant-numeric:tabular-nums}
-  table.stmt col.d{width:80px} table.stmt col.i{width:120px} table.stmt col.l{width:60px} table.stmt col.a{width:100px} table.stmt col.s{width:110px}
+  table.stmt col.d{width:80px} table.stmt col.i{width:130px} table.stmt col.l{width:70px} table.stmt col.a{width:100px} table.stmt col.s{width:110px}
+  table.stmt a{color:var(--accent-2);text-decoration:none;font-weight:600} table.stmt a:hover{text-decoration:underline}
   .st{font-size:11px;padding:2px 8px;border-radius:9px;white-space:nowrap} .st.ok{background:#eaf7ee;color:#1e7b34} .st.miss{background:#fdecec;color:#c0392b} .st.wo{background:#eee;color:#555}
   table.stmt tr.miss td.cust,table.stmt tr.miss td.num{color:#7a2a2a}
+  .pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;font-size:12.5px;color:var(--muted)}
 </style>
 <div class="card">
   <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">
     <a href="/" class="pnav">◀ Back to the pay run</a>
     <h2 style="margin:0">{{ name }} — pay audit, month by month</h2>
   </div>
-  <p class="hint">Each month stands on its own: what was earned in it, how much of <i>that month's</i> billing
-    the customers have paid, and therefore how much of that month's earnings has been released. Payments settle
-    the oldest month first. Anything unpaid carries forward until it is paid.</p>
+  <p class="hint">Each month stands on its own: what was earned in it, how much of <i>that month's</i> billing the
+    customers have paid, and therefore how much of that month's earnings has been released. Payments settle the
+    oldest month first; anything unpaid carries forward until it is paid. <b>Click a month</b> to open its invoice
+    ledger; <b>click an invoice</b> to inspect it line by line.</p>
   <div>
     <div class="kpi"><div class="label">Earned, all months</div><div class="val">${{ '{:,.2f}'.format(totals.earned) }}</div></div>
     <div class="kpi"><div class="label">Released by collection</div><div class="val">${{ '{:,.2f}'.format(totals.collectable) }}</div></div>
@@ -35,7 +39,7 @@
     <div class="kpi"><div class="label">Waiting on customers</div><div class="val">${{ '{:,.2f}'.format(totals.unreleased) }}</div></div>
   </div>
 
-  <h3 style="margin-top:14px">The math, one row per month</h3>
+  <h3 style="margin-top:14px">The math, one row per month{% if n_pages > 1 %} <span class="mut" style="font-weight:400">· page {{ page_no }} of {{ n_pages }}</span>{% endif %}</h3>
   <table class="audit">
     <thead><tr><th>Month</th>
       <th class="num" title="line items × rate">Contribution</th><th class="num">Growth share</th><th class="num">New accounts</th>
@@ -44,9 +48,9 @@
       <th class="num" title="earned × collected %">= Released</th><th class="num">− Paid</th><th class="num">= Owed</th>
       <th class="num" title="earned − released; moves to owed as invoices get paid">Waiting</th></tr></thead>
     <tbody>
-    {% for m in months %}
-      <tr>
-        <td><b>{{ m.label }}</b></td>
+    {% for m in months %}{% set rid = 'L' ~ m.month|replace('-','') %}
+      <tr class="mo" onclick="rowtog(event,'{{ rid }}')" title="Click to open this month's invoice ledger">
+        <td><span class="tg" id="tg-{{ rid }}">▸</span>{{ m.label }}</td>
         <td class="num">${{ '{:,.2f}'.format(m.contribution) }} <span class="mut">({{ '{:,}'.format(m.n_items) }} × ${{ '%.2f'|format(item_rate) }})</span></td>
         <td class="num">{% if m.growth > 0.005 %}${{ '{:,.2f}'.format(m.growth) }}{% else %}<span class="mut">—</span>{% endif %}</td>
         <td class="num">{% if m.acquisition > 0.005 %}${{ '{:,.2f}'.format(m.acquisition) }}{% else %}<span class="mut">—</span>{% endif %}</td>
@@ -58,65 +62,67 @@
         <td class="num"><b>${{ '{:,.2f}'.format(m.owed) }}</b></td>
         <td class="num mut">${{ '{:,.2f}'.format(m.unreleased) }}</td>
       </tr>
+      <tr class="ledger" id="{{ rid }}" hidden><td colspan="11">
+        <div class="mohead">
+          <b>{{ m.label }} — invoice ledger</b>
+          <span class="flt">
+            <a href="javascript:void(0)" class="on" onclick="flt('{{ rid }}','all',this)">All ({{ m.n_invoices }})</a>
+            <a href="javascript:void(0)" onclick="flt('{{ rid }}','miss',this)">Missing ({{ m.n_unpaid }})</a>
+            <a href="javascript:void(0)" onclick="flt('{{ rid }}','ok',this)">Collected ({{ m.n_paid }})</a>
+          </span>
+          <span>billed <b>${{ '{:,.0f}'.format(m.billed) }}</b></span>
+          <span>collected <b>${{ '{:,.0f}'.format(m.collected) }}</b> ({{ '%.1f'|format(m.collected_pct) }}%)</span>
+          <span>missing <b style="color:#c0392b">${{ '{:,.0f}'.format(m.unpaid_amount) }}</b></span>
+          {% if m.payment and m.paid > 0.005 %}<span>paid ${{ '{:,.2f}'.format(m.paid) }} · recorded by {{ m.payment.by }}{% if m.payment.when %} {{ m.payment.when.strftime('%b %-d') }}{% endif %}</span>{% endif %}
+        </div>
+        <div class="scroll">
+        <table class="stmt">
+          <colgroup><col class="d"><col class="i"><col><col class="l"><col class="a"><col class="s"></colgroup>
+          <thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th class="num" title="number of product lines on the invoice — each earns the contribution rate">Lines</th><th class="num">Amount</th><th>Status</th></tr></thead>
+          <tbody>
+          {% for i in m.invoices %}
+            <tr class="{{ 'ok' if i.paid else 'miss' }}">
+              <td class="mut">{{ i.date.strftime('%b %-d') }}</td>
+              <td><a href="/invoice/{{ i.sop_number }}" title="Inspect this invoice line by line">{{ i.sop_number }}</a></td>
+              <td class="cust" title="{{ i.customer }}">{{ i.customer }}</td>
+              <td class="num mut">{{ i.lines }}</td><td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
+              <td>{% if i.written_off %}<span class="st wo">written off</span>{% elif i.paid %}<span class="st ok">collected</span>{% else %}<span class="st miss">missing</span>{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="mut">No invoices this month.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      </td></tr>
     {% endfor %}
     </tbody>
-    <tfoot><tr class="tot"><th>Total</th>
-      <th class="num">${{ '{:,.2f}'.format(months|sum(attribute='contribution')) }}</th>
-      <th class="num">${{ '{:,.2f}'.format(months|sum(attribute='growth')) }}</th>
-      <th class="num">${{ '{:,.2f}'.format(months|sum(attribute='acquisition')) }}</th>
+    <tfoot><tr><th>Total{% if n_pages > 1 %} (all months){% endif %}</th>
+      <th class="num">${{ '{:,.2f}'.format(all_months|sum(attribute='contribution')) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(all_months|sum(attribute='growth')) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(all_months|sum(attribute='acquisition')) }}</th>
       <th class="num">${{ '{:,.2f}'.format(totals.earned) }}</th>
-      <th class="num">${{ '{:,.0f}'.format(months|sum(attribute='collected')) }} <span style="opacity:.6">/ ${{ '{:,.0f}'.format(months|sum(attribute='billed')) }}</span></th><th></th>
+      <th class="num">${{ '{:,.0f}'.format(all_months|sum(attribute='collected')) }} <span style="opacity:.6">/ ${{ '{:,.0f}'.format(all_months|sum(attribute='billed')) }}</span></th><th></th>
       <th class="num">${{ '{:,.2f}'.format(totals.collectable) }}</th>
       <th class="num">${{ '{:,.2f}'.format(totals.paid) }}</th>
       <th class="num">${{ '{:,.2f}'.format(totals.owed) }}</th>
       <th class="num">${{ '{:,.2f}'.format(totals.unreleased) }}</th></tr></tfoot>
   </table>
-  <p class="hint" style="margin-top:8px"><b>Released</b> = earned × the share of that month's own invoices that
-    have been paid. <b>Owed</b> = released − paid. A month with money in <b>Waiting</b> isn't finished — it keeps
-    releasing as its invoices get paid, whichever cycle we're in by then. Growth and new-account bonuses appear
-    in their own columns from October.</p>
-</div>
-
-<div class="card">
-  <div style="display:flex;align-items:baseline;gap:16px">
-    <h2 style="margin:0">Invoices, month by month</h2>
-    <span class="flt">
-      <a href="/pay/{{ name }}?show=all" class="{{ 'on' if show=='all' }}">All</a>
-      <a href="/pay/{{ name }}?show=unpaid" class="{{ 'on' if show=='unpaid' }}">Missing</a>
-      <a href="/pay/{{ name }}?show=paid" class="{{ 'on' if show=='paid' }}">Collected</a>
-    </span>
+  {% if n_pages > 1 %}
+  <div class="pager">
+    {% if page_no > 1 %}<a class="pnav" href="/pay/{{ name }}?page_no={{ page_no - 1 }}">◀ newer months</a>{% endif %}
+    <span>{{ months[-1].label }} – {{ months[0].label }}</span>
+    {% if page_no < n_pages %}<a class="pnav" href="/pay/{{ name }}?page_no={{ page_no + 1 }}">older months ▶</a>{% endif %}
   </div>
-  {% for m in months %}
-  <div class="mo">
-    <div class="mohead">
-      <h3>{{ m.label }}</h3>
-      <span class="math">
-        <span>{{ m.n_paid }} of {{ m.n_invoices }} invoices paid</span>
-        <span>billed <b>${{ '{:,.0f}'.format(m.billed) }}</b></span>
-        <span>collected <b>${{ '{:,.0f}'.format(m.collected) }}</b> ({{ '%.1f'|format(m.collected_pct) }}%)</span>
-        <span>missing <b style="color:#c0392b">${{ '{:,.0f}'.format(m.unpaid_amount) }}</b></span>
-        {% if m.payment and m.paid > 0.005 %}<span>paid ${{ '{:,.2f}'.format(m.paid) }} · recorded by {{ m.payment.by }}{% if m.payment.when %} {{ m.payment.when.strftime('%b %-d') }}{% endif %}</span>{% endif %}
-      </span>
-    </div>
-    <div class="scroll">
-    <table class="stmt">
-      <colgroup><col class="d"><col class="i"><col><col class="l"><col class="a"><col class="s"></colgroup>
-      <thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th class="num">Lines</th><th class="num">Amount</th><th>Status</th></tr></thead>
-      <tbody>
-      {% for i in m.invoices %}
-        <tr class="{{ 'ok' if i.paid else 'miss' }}">
-          <td class="mut">{{ i.date.strftime('%b %-d') }}</td><td>{{ i.sop_number }}</td>
-          <td class="cust" title="{{ i.customer }}">{{ i.customer }}</td>
-          <td class="num mut">{{ i.lines }}</td><td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
-          <td>{% if i.written_off %}<span class="st wo">written off</span>{% elif i.paid %}<span class="st ok">collected</span>{% else %}<span class="st miss">missing</span>{% endif %}</td>
-        </tr>
-      {% else %}
-        <tr><td colspan="6" class="mut">No invoices in this view.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
-  </div>
-  {% endfor %}
+  {% endif %}
+  <p class="hint" style="margin-top:10px"><b>Released</b> = earned × the share of that month's own invoices that have
+    been paid. <b>Owed</b> = released − paid. <b>Waiting</b> keeps releasing as that month's invoices get paid,
+    whichever cycle we're in by then. <b>Lines</b> = the number of product lines on an invoice — each one earns
+    the contribution rate. Growth and new-account bonuses appear in their own columns from October.</p>
 </div>
+<script>
+function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);e.hidden=!e.hidden;var t=document.getElementById('tg-'+id);if(t)t.classList.toggle('open',!e.hidden);}
+function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){r.hidden=(which!=='all'&&!r.classList.contains(which));});
+  p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');}
+</script>
 {% endblock %}

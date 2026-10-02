@@ -321,16 +321,38 @@ def ledger_page(request: Request):
 
 
 # ---------- one rep's pay, invoice by invoice: where every number came from ----------
+MONTHS_PER_PAGE = 12
+
+
 @app.get("/pay/{name}", response_class=HTMLResponse)
-def pay_detail(request: Request, name: str, show: str = "all", db: Session = Depends(get_db)):
+def pay_detail(request: Request, name: str, page_no: int = 1, db: Session = Depends(get_db)):
+    """One rep's audit: one row per month, each expanding to that month's invoice ledger. Paged by
+    MONTHS_PER_PAGE (newest first) so a rep with years of history stays readable."""
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    detail = service.rep_pay_detail(db, name, show=show)
+    detail = service.rep_pay_detail(db, name, show="all")
     if detail is None:
         return RedirectResponse("/", status_code=303)
+    months = detail["months"]                                        # newest first
+    n_pages = max(1, (len(months) + MONTHS_PER_PAGE - 1) // MONTHS_PER_PAGE)
+    page_no = min(max(1, page_no), n_pages)
+    lo = (page_no - 1) * MONTHS_PER_PAGE
     return templates.TemplateResponse("backtest_pay_detail.html", dict(
-        detail, request=request, user=user, page="pay", name=name, show=show))
+        detail, months=months[lo:lo + MONTHS_PER_PAGE], all_months=months, request=request, user=user,
+        page="pay", name=name, page_no=page_no, n_pages=n_pages))
+
+
+@app.get("/invoice/{sop_number}", response_class=HTMLResponse)
+def invoice_page(request: Request, sop_number: str, db: Session = Depends(get_db)):
+    """Inspect one invoice, line by line. Managers see any; a rep sees only invoices they wrote."""
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    inv = service.invoice_detail(db, sop_number)
+    if inv is None or (user.role == "rep" and inv["header"]["associate"] != user.associate_name):
+        return RedirectResponse("/" if user.role != "rep" else "/me", status_code=303)
+    return templates.TemplateResponse("backtest_invoice.html", dict(inv, request=request, user=user, page="pay"))
 
 
 # ---------- account assignment: which TEAM owns each account ----------
