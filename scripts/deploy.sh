@@ -8,8 +8,11 @@ SERVICE=arn:aws:ecs:us-east-1:484907506213:service/default/wandt-growth-backtest
 URL=https://wa-b5cabef5d7ee4d1dadf76e5d48ee22b4.ecs.us-east-1.on.aws
 CONTAINER=/tmp/wandt-backtest-container.json
 
-echo "[1/4] packaging HEAD ($(git rev-parse --short HEAD))"
+SHA=$(git rev-parse --short HEAD)
+echo "[1/4] packaging HEAD ($SHA)"
 git archive --format=zip -o /tmp/wandt-src.zip HEAD
+printf '%s' "$SHA" > /tmp/VERSION          # baked into the image; /healthz echoes it back
+(cd /tmp && zip -q wandt-src.zip VERSION)
 aws s3 cp /tmp/wandt-src.zip "$BUCKET" --region $REGION >/dev/null
 
 echo "[2/4] building image"
@@ -31,11 +34,17 @@ json.dump(pc, open('$CONTAINER','w'), indent=2)"
 aws ecs update-express-gateway-service --service-arn "$SERVICE" --primary-container "file://$CONTAINER" \
   --region $REGION --query 'service.status.statusCode' --output text
 
-echo "[4/4] waiting for every task to serve the new build (rolling deploys serve both for a few minutes)"
-for i in $(seq 1 30); do
-  CODES=$(for j in 1 2 3 4; do curl -s -o /dev/null -w '%{http_code} ' "$URL/healthz"; done)
-  case "$CODES" in *50*|*404*) ;; *) OK=$((${OK:-0}+1));; esac
-  [ "${OK:-0}" -ge 3 ] && { echo "LIVE: $URL"; exit 0; }
+echo "[4/4] waiting for EVERY task to report build $SHA (/healthz echoes the commit it was built from)"
+# a rolling deploy serves old and new tasks side by side for several minutes; only stop when 8 probes in a
+# row come back with the new sha, which means the old tasks have drained.
+for i in $(seq 1 40); do
+  HITS=0
+  for j in $(seq 1 8); do
+    case "$(curl -s --max-time 10 "$URL/healthz")" in *"$SHA"*) HITS=$((HITS+1));; esac
+  done
+  echo "  $(date +%H:%M:%S)  $HITS/8 tasks on $SHA"
+  [ "$HITS" -eq 8 ] && { echo "LIVE on $SHA: $URL"; exit 0; }
   sleep 20
 done
-echo "still rolling after 10 min — check $URL"
+echo "still rolling after ~13 min — check $URL/healthz"
+exit 1

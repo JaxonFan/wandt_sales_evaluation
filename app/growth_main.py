@@ -70,9 +70,24 @@ contribution_by_rep_month = service.contribution_by_rep_month
 acquisition_by_rep_month = service.acquisition_by_rep_month
 
 
+def _build_version():
+    """The commit this image was built from (written into the image by scripts/deploy.sh). Reported by
+    /healthz so a deploy can CHECK that the new code is actually serving instead of assuming it."""
+    for path in ("VERSION", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION")):
+        try:
+            with open(path) as fh:
+                return fh.read().strip()
+        except OSError:
+            continue
+    return "dev"
+
+
+BUILD_VERSION = _build_version()
+
+
 @app.get("/healthz", response_class=PlainTextResponse)
 def healthz():
-    return "ok"
+    return f"ok {BUILD_VERSION}"
 
 
 @app.get("/login", response_class=HTMLResponse)
