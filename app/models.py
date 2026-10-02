@@ -6,8 +6,8 @@ on top; audit_log records every write. Account = Customer Number. Metric = profi
 (extended_price - extended_cost), so cost columns are kept.
 """
 import datetime as dt
-from sqlalchemy import (Column, Integer, BigInteger, String, Float, Boolean, Date, DateTime,
-                        ForeignKey, JSON, UniqueConstraint, Index)
+from sqlalchemy import (Column, Integer, String, Float, Boolean, Date, DateTime,
+                        ForeignKey, JSON, UniqueConstraint)
 from .db import Base
 
 

@@ -1,13 +1,18 @@
-"""Standalone GROWTH BACKTEST service (own URL, separate ECS service via APP_MODULE=app.growth_main:app).
+"""The W&T Sales Scorecard service (APP_MODULE=app.growth_main:app — its own ECS service and URL).
 
-The next-generation scorecard, kept apart from the main app: the rep-netted cumulative profit-growth model
-plus the two retained pieces (Contribution, Acquisition), pay-on-collection, a manager guide, the new-account
-review tab, and the FIXED importer (keeps every invoice so account baselines are complete).
+What it pays, per calendar month:
+  Contribution  = the rep's own invoice line items x item_rate                  (individual)
+  Growth share  = the TEAM's cumulative profit growth pay, split equally          (team; from growth_start)
+  New accounts  = flat landing bonus for a confirmed rep-won new account          (individual; from growth_start)
+The growth cycle anchors on fiscal_start_month (October) and the launch chapter before growth_start
+(Aug-Sep 2026) is contribution only. Pay follows COLLECTION month by month: a month's earnings release as
+that month's own invoices are paid (service.pay_ledger), payments settle the oldest month first, and
+nothing unpaid ever expires. Every number is auditable down to the invoice (/pay/{rep}, /invoice/{sop}).
 
-The growth rule (the manager's): for each rep, sum the profit gap of ALL accounts they work — account 1 +
-account 2 + ..., each vs the SAME account a year ago, split by work-share. Net positive -> rate x net (trued
-up on the book's running peak, never clawed back); net negative -> $0. Backtest window: Jan-Jun 2026 vs 2025.
+Also here: team assignment (80%-of-orders rule + manual pins), the review lists (falling behind / quiet /
+new accounts), limited stock, the importer (keeps every invoice), logins and guides (EN / 中文).
 """
+
 import io
 import os
 import datetime as dt
@@ -242,7 +247,7 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
         "rows": rows, "groups": groups, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
         "open_set": {x for x in open.split(",") if x},   # reps whose row is rendered already expanded
         "unassigned": service.unassigned_summary(db),
-        "is_latest": (mi == len(months) - 1), "growth_active": growth_active,
+        "is_latest": is_latest, "growth_active": growth_active,
         "ledger": ledger, "payments": [
             dict(associate=p.associate, chapter=str(p.fiscal_start), paid=float(p.paid_cum or 0.0),
                  by={u.user_id: u.username for u in db.query(M.User).all()}.get(p.user_id, "—"),

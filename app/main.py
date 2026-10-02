@@ -13,7 +13,7 @@ import os
 from .db import get_db, engine, Base
 from . import models as M
 from .auth import verify_password
-from .config import SECRET_KEY, DEFAULTS
+from .config import SECRET_KEY
 from . import service
 
 Base.metadata.create_all(engine)

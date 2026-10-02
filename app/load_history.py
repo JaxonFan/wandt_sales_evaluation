@@ -8,7 +8,7 @@ import pandas as pd
 from .auth import hash_password
 from .db import engine, SessionLocal, Base
 from . import models as M
-from .config import DEFAULTS, SALES_ROLES
+from .config import DEFAULTS
 from .service import attribution_maps, resolve_associate
 
 ROOT = "."
