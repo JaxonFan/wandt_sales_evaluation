@@ -1,55 +1,90 @@
 {% extends "backtest_base.html" %}{% block body %}
+<style>
+  .board{display:grid;grid-template-columns:repeat(4,minmax(240px,1fr));gap:14px;align-items:start}
+  .col{border:2px solid var(--line-2);border-radius:14px;background:var(--paper);min-height:320px;display:flex;flex-direction:column}
+  .col.t1{border-color:#5A48B6} .col.t2{border-color:#2B6CB0} .col.house{border-color:#8a8f8c} .col.shared{border-color:#C0682B;border-style:dashed}
+  .col .head{padding:12px 14px 8px;font-weight:700;font-size:14px;display:flex;align-items:baseline;gap:8px;border-bottom:1px solid var(--line)}
+  .col.t1 .head{color:#3b2a6e} .col.t2 .head{color:#1e3f66} .col.house .head{color:#444} .col.shared .head{color:#8a4a1b}
+  .col .head small{font-weight:500;color:var(--muted);font-size:12px;margin-left:auto}
+  .col .members{padding:0 14px 8px;font-size:12px;color:var(--muted)}
+  .col .cards{padding:10px;display:flex;flex-direction:column;gap:8px;flex:1;max-height:70vh;overflow:auto}
+  .col.over{background:var(--accent-soft)}
+  .acct{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--line-2);border-radius:10px;padding:9px 11px;cursor:grab;box-shadow:var(--shadow);font-size:12.5px}
+  .acct:active{cursor:grabbing} .acct.drag{opacity:.45}
+  .acct.t1{border-left-color:#5A48B6} .acct.t2{border-left-color:#2B6CB0} .acct.house{border-left-color:#8a8f8c} .acct.shared{border-left-color:#C0682B}
+  .acct .nm{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .acct .meta{color:var(--muted);font-size:11.5px;margin-top:3px;display:flex;gap:8px;flex-wrap:wrap}
+  .acct .meta b{color:var(--ink);font-weight:600}
+  .acct .pin{font-size:10.5px;color:var(--accent-2);background:var(--accent-soft);border-radius:999px;padding:1px 7px}
+  .acct .pol{font-size:10.5px;color:#555;background:#eee;border-radius:999px;padding:1px 7px}
+  .toolbar{display:flex;gap:10px;align-items:center;margin:0 0 14px;flex-wrap:wrap}
+  .toolbar input{width:260px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.on{opacity:1}
+</style>
 <div class="card">
-  <h2>Account assignment — which team owns which account</h2>
+  <h2>Account assignment — drag an account to the team that owns it</h2>
   <p class="hint">An account belongs to the team that wrote <b>{{ '%.0f'|format(pct) }}% or more of its orders</b>
-    over the last <b>{{ months }} months</b> (an order = one invoice, whatever its size). Accounts no team owns
-    outright are <b>shared</b> — they pay <b>nobody</b> until you assign them here, and your assignment always
-    beats the computed one. Growth follows this ownership; contribution and new-account bonuses stay with the
-    individual rep who did the work.</p>
-  <div style="margin:10px 0">
-    <a class="pnav {{ 'on' if view=='shared' }}" href="/accounts?view=shared">Needs assignment ({{ counts.shared }})</a>
-    {% for t in teams %}<a class="pnav {{ 'on' if view==t }}" href="/accounts?view={{ t|urlencode }}">{{ t }} ({{ counts[t] }})</a>{% endfor %}
-    <a class="pnav {{ 'on' if view=='all' }}" href="/accounts?view=all">All ({{ counts.all }})</a>
-    <form method="get" action="/accounts" style="display:inline-block;margin-left:10px">
-      <input type="hidden" name="view" value="{{ view }}">
-      <input name="q" value="{{ q }}" placeholder="search customer…" style="padding:5px 8px;font-size:13px;border:1px solid var(--line);border-radius:6px">
-    </form>
+    over the last <b>{{ months }} months</b> (an order = one invoice). Accounts no team owns outright sit in
+    <b>Shared</b> and pay <b>nobody</b> until you drag them to a team. Your assignment always beats the computed one
+    (shown as <span class="pin">pinned</span>); drag a pinned account back to the column its share puts it in, or to
+    Shared, to let the rule decide again. Growth follows this ownership; contribution and new-account bonuses stay
+    with whoever did the work.</p>
+  <div class="toolbar">
+    <input id="q" placeholder="search customer…" oninput="filt(this.value)">
+    <span class="mut" id="count"></span>
   </div>
-  <table>
-    <thead><tr><th>Customer</th><th class="num">Orders ({{ months }}mo)</th>
-      {% for t in teams %}<th class="num">{{ t }}</th>{% endfor %}
-      <th>Computed</th><th class="num">Profit</th><th>Owner</th></tr></thead>
-    <tbody>
-    {% for r in rows %}
-      <tr>
-        <td>{{ r.customer }}<div class="mut" style="font-size:11px">{{ r.account }}</div></td>
-        <td class="num mut">{{ r.orders }}</td>
-        {% for t in teams %}
-        <td class="num {{ '' if r.shares[t] >= 0.8 else 'mut' }}">{% if r.shares[t] > 0 %}{{ '%.0f'|format(r.shares[t]*100) }}%{% else %}—{% endif %}</td>
+  <div class="board">
+    {% set cols = [('shared','Shared — needs a decision',None), ('t1','Team 1','Team 1'), ('t2','Team 2','Team 2'), ('house','House','House')] %}
+    {% for css, title, team in cols %}
+    <div class="col {{ css }}" data-team="{{ team or '' }}" ondragover="over(event)" ondragleave="leave(event)" ondrop="drop(event)">
+      <div class="head">{{ title }}<small id="n-{{ css }}"></small></div>
+      {% if team and team_members.get(team) %}<div class="members">{{ team_members[team]|join(', ') }}</div>
+      {% elif team == 'House' %}<div class="members">managers + house accounts · earns no growth</div>
+      {% else %}<div class="members">no team at {{ '%.0f'|format(pct) }}% — earns nothing until assigned</div>{% endif %}
+      <div class="cards" id="c-{{ css }}">
+        {% for r in rows if (r.team == team) %}
+        <div class="acct {{ css }}" draggable="true" data-account="{{ r.account }}" data-name="{{ r.customer|lower }}"
+             data-auto="{{ r.auto or '' }}" ondragstart="start(event)" ondragend="end(event)">
+          <div class="nm" title="{{ r.customer }} · {{ r.account }}">{{ r.customer }}</div>
+          <div class="meta">
+            <span><b>${{ '{:,.0f}'.format(r.profit) }}</b> profit</span>
+            <span>{{ r.orders }} orders</span>
+            {% for t in teams %}{% if r.shares[t] > 0 %}<span>{{ t.replace('Team ','T') }} {{ '%.0f'|format(r.shares[t]*100) }}%</span>{% endif %}{% endfor %}
+            {% if r.manual %}<span class="pin">pinned</span>{% elif r.house_by_policy %}<span class="pol">house account</span>{% endif %}
+          </div>
+        </div>
         {% endfor %}
-        <td>{% if r.house_by_policy %}<span class="badge">house account</span>
-            {% elif r.auto %}{{ r.auto }}
-            {% else %}<span class="badge b-new">shared</span>{% endif %}</td>
-        <td class="num">${{ '{:,.0f}'.format(r.profit) }}</td>
-        <td>
-          <form method="post" action="/accounts/assign" style="margin:0">
-            <input type="hidden" name="account" value="{{ r.account }}">
-            <input type="hidden" name="view" value="{{ view }}">
-            <select name="team" onchange="this.form.submit()" style="padding:4px 6px;font-size:12.5px;border:1px solid var(--line);border-radius:6px">
-              <option value="" {{ 'selected' if not r.manual }}>{{ '(auto: ' + r.auto + ')' if r.auto else '(auto: unassigned)' }}</option>
-              {% for t in teams %}<option value="{{ t }}" {{ 'selected' if r.manual == t }}>{{ t }}</option>{% endfor %}
-            </select>
-          </form>
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="{{ 5 + teams|length }}" class="mut">Nothing here.</td></tr>
+      </div>
+    </div>
     {% endfor %}
-    </tbody>
-  </table>
-  {% if n_shown > rows|length %}<p class="hint">Showing the top {{ rows|length }} of {{ n_shown }} by profit — search to narrow.</p>{% endif %}
-  <p class="hint" style="margin-top:10px">Picking a team here <b>overrides</b> the computed owner and sticks until
-    you change it back to <b>(auto)</b>. <b>House</b> accounts pay no growth to anyone. A shared account left
-    unassigned pays nothing — assigning the biggest ones is where the money is.</p>
+  </div>
 </div>
+<div class="toast" id="toast"></div>
+<script>
+var dragging=null;
+function start(e){dragging=e.target.closest('.acct');dragging.classList.add('drag');e.dataTransfer.effectAllowed='move';}
+function end(e){if(dragging)dragging.classList.remove('drag');dragging=null;}
+function over(e){e.preventDefault();e.currentTarget.classList.add('over');}
+function leave(e){e.currentTarget.classList.remove('over');}
+function toast(t){var x=document.getElementById('toast');x.textContent=t;x.classList.add('on');setTimeout(function(){x.classList.remove('on');},1800);}
+function recount(){['shared','t1','t2','house'].forEach(function(c){document.getElementById('n-'+c).textContent=document.querySelectorAll('#c-'+c+' .acct:not([hidden])').length;});}
+function drop(e){
+  e.preventDefault();var col=e.currentTarget;col.classList.remove('over');if(!dragging)return;
+  var team=col.dataset.team, card=dragging, acct=card.dataset.account, auto=card.dataset.auto;
+  // dropping on the column the 80% rule already puts it in = clear the override and let the rule decide
+  var pin = (team!==auto) ? team : '';
+  fetch('/accounts/assign.json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:acct,team:pin})})
+   .then(function(r){return r.json();}).then(function(j){
+     if(!j.ok){toast('Could not save');return;}
+     var cls={'':'shared','Team 1':'t1','Team 2':'t2','House':'house'}[team];
+     card.className='acct '+cls; col.querySelector('.cards').prepend(card);
+     var meta=card.querySelector('.meta'); var old=meta.querySelector('.pin'); if(old)old.remove();
+     if(pin){var s=document.createElement('span');s.className='pin';s.textContent='pinned';meta.appendChild(s);}
+     recount(); toast((pin? 'Pinned to ':'Back to the rule: ')+(team||'Shared'));
+   });
+}
+function filt(q){q=q.toLowerCase();document.querySelectorAll('.acct').forEach(function(c){c.hidden=q&&c.dataset.name.indexOf(q)<0&&c.dataset.account.toLowerCase().indexOf(q)<0;});recount();}
+recount();
+</script>
 {% endblock %}

@@ -17,7 +17,7 @@
   #sidebar{width:196px;flex-shrink:0;background:var(--card);border-right:1px solid var(--line);padding:18px 12px;position:sticky;top:0;height:100vh;overflow-y:auto}
   #sidebar .brand{font-size:16px;font-weight:800;letter-spacing:-.01em;padding:4px 10px 6px;white-space:nowrap}
   #sidebar .brandsub{font-size:11.5px;color:var(--muted);padding:0 10px 16px}
-  #sidebar .tab{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;font-weight:500;color:var(--muted);text-decoration:none;margin-bottom:2px;font-size:14px;transition:background .12s,color .12s}
+  #sidebar .tab{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:9px;font-weight:500;color:var(--muted);text-decoration:none;margin-bottom:2px;font-size:14px;transition:background .12s,color .12s}
   #sidebar .tab:hover{background:var(--paper);color:var(--ink)}
   #sidebar .tab.on{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
   #sidebar .navlabel{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 12px 4px}
@@ -73,15 +73,16 @@
   body.big .guide-body{font-size:15.5px;line-height:1.8}
   @media (max-width:820px){body{flex-direction:column} #sidebar{width:auto;height:auto;position:static;flex-direction:row;flex-wrap:wrap;gap:4px;padding:10px} #sidebar .brand,#sidebar .brandsub,#sidebar .navlabel,#sidebar .me{display:none} .wrap,.topbar{padding-left:14px;padding-right:14px}}
 </style></head><body class="{{ 'big' if user and user.role == 'rep' else '' }}">
-{% set titles = {'dash':'Dashboard','pay':'Pay audit','accounts':'Accounts','under':'Needs review','quiet':'Needs review','acq':'Needs review',
-                 'stock':'Limited stock','upload':'Import','settings':'Settings','logins':'Settings','account':'Settings','guide':'Guide','repguide':'Guide',
-                 'me':'我的奖金','mewatch':'需要跟进的客户','mequiet':'需要跟进的客户'} %}
+{% set titles = {'dash':'Dashboard','pay':'Pay audit','accounts':'Account assignment','under':'Falling behind','quiet':'Quiet accounts','acq':'New accounts',
+                 'stock':'Limited stock','upload':'Import','settings':'Pay dials','logins':'Logins','account':'My password','guide':'Manager guide','repguide':'What reps see',
+                 'me':'我的奖金','mewatch':'落后的客户','mequiet':'静默客户'} %}
 <nav id="sidebar">
   <div class="brand">W&T Scorecard</div>
   <div class="brandsub">{{ '销售奖金' if user.role == 'rep' else 'Sales incentive' }}</div>
   {% if user.role == 'rep' %}
   <a href="/me" class="tab {{ 'on' if page=='me' }}">我的奖金</a>
-  <a href="/me/watch" class="tab {{ 'on' if page in ['mewatch','mequiet'] }}">需要跟进的客户</a>
+  <a href="/me/watch" class="tab {{ 'on' if page=='mewatch' }}">落后的客户</a>
+  <a href="/me/quiet" class="tab {{ 'on' if page=='mequiet' }}">静默客户</a>
   <a href="/me/guide" class="tab {{ 'on' if page=='repguide' }}">奖金怎么算</a>
   <a href="/account" class="tab {{ 'on' if page=='account' }}">修改密码</a>
   {% else %}
@@ -89,12 +90,18 @@
   <a href="/" class="tab {{ 'on' if page in ['dash','pay'] }}">Dashboard</a>
   <div class="navlabel">Accounts</div>
   <a href="/accounts" class="tab {{ 'on' if page=='accounts' }}">Assignment</a>
-  <a href="/underperformers" class="tab {{ 'on' if page in ['under','acq','quiet'] }}">Needs review</a>
+  <a href="/underperformers" class="tab {{ 'on' if page=='under' }}">Falling behind</a>
+  <a href="/quiet" class="tab {{ 'on' if page=='quiet' }}">Quiet accounts</a>
+  <a href="/acquisitions" class="tab {{ 'on' if page=='acq' }}">New accounts</a>
   <a href="/constrained" class="tab {{ 'on' if page=='stock' }}">Limited stock</a>
   <div class="navlabel">Admin</div>
   <a href="/upload" class="tab {{ 'on' if page=='upload' }}">Import</a>
-  <a href="/settings" class="tab {{ 'on' if page in ['settings','logins','account'] }}">Settings</a>
-  <a href="/guide" class="tab {{ 'on' if page in ['guide','repguide'] }}">Guide</a>
+  <a href="/settings" class="tab {{ 'on' if page=='settings' }}">Pay dials</a>
+  <a href="/logins" class="tab {{ 'on' if page=='logins' }}">Logins</a>
+  <a href="/account" class="tab {{ 'on' if page=='account' }}">My password</a>
+  <div class="navlabel">Help</div>
+  <a href="/guide" class="tab {{ 'on' if page=='guide' }}">Manager guide</a>
+  <a href="/me/guide" class="tab {{ 'on' if page=='repguide' }}">What reps see</a>
   {% endif %}
   <div class="me"><b>{{ user.username }}</b><a href="/logout">log out</a></div>
 </nav>

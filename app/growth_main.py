@@ -13,7 +13,7 @@ import os
 import datetime as dt
 import pandas as pd
 from fastapi import FastAPI, Request, Depends, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
@@ -364,17 +364,27 @@ def accounts_page(request: Request, view: str = "shared", q: str = "", db: Sessi
     from .config import TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS, HOUSE_TEAM
     rows = service.account_assignments(db)
     teams = list(service.team_members(db)) + [HOUSE_TEAM]
-    counts = dict(all=len(rows), shared=sum(1 for r in rows if r["shared"]))
-    for t in teams:
-        counts[t] = sum(1 for r in rows if r["team"] == t)
-    shown = [r for r in rows if (view == "all" or (view == "shared" and r["shared"]) or r["team"] == view)]
-    if q:
-        needle = q.strip().lower()
-        shown = [r for r in shown if needle in r["customer"].lower() or needle in r["account"].lower()]
     return templates.TemplateResponse("backtest_accounts.html", {
-        "request": request, "user": user, "page": "accounts", "rows": shown[:400], "n_shown": len(shown),
-        "teams": teams, "view": view, "q": q, "counts": counts,
+        "request": request, "user": user, "page": "accounts", "rows": rows, "teams": teams,
+        "team_members": service.team_members(db),
         "pct": TEAM_OWNERSHIP_PCT * 100, "months": TEAM_WINDOW_MONTHS})
+
+
+@app.post("/accounts/assign.json")
+async def accounts_assign_json(request: Request, db: Session = Depends(get_db)):
+    """Drag-and-drop assignment: {account, team} -> {ok, team}. Empty team clears the override."""
+    user = _guard(request, db)
+    if not user:
+        return JSONResponse({"ok": False}, status_code=401)
+    body = await request.json()
+    account, team = str(body.get("account", "")).strip(), str(body.get("team", "")).strip()
+    from .config import HOUSE_TEAM
+    if not account or (team and team not in list(service.team_members(db)) + [HOUSE_TEAM]):
+        return JSONResponse({"ok": False}, status_code=400)
+    row = db.get(M.AccountAssignment, account) or M.AccountAssignment(account=account)
+    row.team = team or None; row.user_id = user.user_id; row.updated_at = dt.datetime.utcnow()
+    db.merge(row); db.commit()
+    return JSONResponse({"ok": True, "team": team or None})
 
 
 @app.post("/accounts/assign")
