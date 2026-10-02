@@ -75,6 +75,10 @@ function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest(
   fetch('/invoice/'+encodeURIComponent(sop)+'.json').then(function(r){return r.json();}).then(function(j){
     if(!j.ok){x.firstChild.textContent='Could not load this invoice.';return;}
     var h=j.header,m=function(v){return '$'+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});};
+    var rows=j.lines.map(function(l,i){return '<tr><td class="mut">'+(i+1)+'</td><td>'+l.item+'</td><td>'+l.description+'</td><td class="num">'+Number(l.qty).toLocaleString()+'</td><td class="num mut">'+m(l.unit_price)+'</td><td class="num">'+m(l.extended_price)+'</td><td class="num mut">'+m(l.extended_cost)+'</td><td class="num'+(l.profit<0?' neg':'')+'">'+m(l.profit)+'</td></tr>';}).join('');
+    x.innerHTML='<td colspan="'+cols+'"><div class="invbox"><div class="invhead"><b>'+h.sop_number+'</b> · '+h.customer+' · '+h.date+' · written by '+(h.associate||'—')+' · '+h.n_lines+' lines · total '+m(h.total)+' · profit '+m(h.profit)+' <span class="st '+(h.voided?'wo':(h.collected?'ok':'miss'))+'">'+(h.voided?'voided':(h.collected?'collected':'missing'))+'</span> <a href="/invoice/'+h.sop_number+'" class="mut" style="margin-left:8px">open page</a></div>'
+      +'<table class="inv"><thead><tr><th>#</th><th>Item</th><th>Description</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Amount</th><th class="num">Cost</th><th class="num">Profit</th></tr></thead><tbody>'+rows+'</tbody></table></div></td>';
+  });}
 function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){if(r.classList.contains('invx'))return;r.hidden=(which!=='all'&&!r.classList.contains(which));});
   p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');
   p.querySelectorAll('.cap').forEach(function(c){c.textContent=c.dataset[which];});}
