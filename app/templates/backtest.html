@@ -52,8 +52,9 @@
 </style>
 <script>
 function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);e.hidden=!e.hidden;var t=document.getElementById('tg-'+id);if(t)t.classList.toggle('open',!e.hidden);}
-function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){r.hidden=(which!=='all'&&!r.classList.contains(which));});
-  p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');}
+function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){if(r.classList.contains('invx'))return;r.hidden=(which!=='all'&&!r.classList.contains(which));});
+  p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');
+  p.querySelectorAll('.cap').forEach(function(c){c.textContent=c.dataset[which];});}
 
 function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest('tr'),nxt=tr.nextElementSibling;
   if(nxt&&nxt.classList.contains('invx')){nxt.remove();return;}
@@ -131,7 +132,7 @@ function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest(
     {% set ncol = (10 if growth_active else 7) + (1 if is_latest else 0) %}
     {% for g in groups %}
       <tr class="grp {{ g.css }}"><td colspan="{{ ncol }}">
-        <b>{{ g.team }}</b>{% if g.members %} <span class="mut">· {{ g.members|join(', ') }}</span>{% endif %}
+        <b>{{ g.team }}</b>
         <span class="mut" style="float:right">earned ${{ '{:,.2f}'.format(g.sub.m_earned) }} · released ${{ '{:,.2f}'.format(g.sub.m_collectable) }} · owed ${{ '{:,.2f}'.format(g.sub.m_owed) }}{% if is_latest %} · pay now ${{ '{:,.2f}'.format(g.sub.pay_total) }}{% endif %}</span>
       </td></tr>
       {% for x in g.rows %}{% set rid = 'd' ~ loop.index ~ g.css %}
@@ -155,7 +156,12 @@ function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest(
             <input type="hidden" name="amount" value="{{ '%.2f'|format(x.pay_total) }}">
             <button type="submit" class="paybtn">Pay ${{ '{:,.2f}'.format(x.pay_total) }}</button>
           </form>
-          <div class="why">{% for b in x.pay_breakdown %}<span>{{ b.label.split(' ')[0] }} ${{ '{:,.2f}'.format(b.owed) }}</span>{% endfor %}</div>
+          <div class="why">
+            {% set earlier = x.pay_breakdown|rejectattr('label', 'equalto', x.panel.label if x.panel else '')|list %}
+            {% if x.m_owed > 0.005 %}<span>{{ m }} ${{ '{:,.2f}'.format(x.m_owed) }}</span>{% endif %}
+            {% if earlier %}<span>{{ earlier|length }} earlier month{{ 's' if earlier|length > 1 }} ${{ '{:,.2f}'.format(x.carried) }}
+              <span style="opacity:.7">({{ earlier[0].label.split(' ')[0] }}{% if earlier|length > 1 %}–{{ earlier[-1].label.split(' ')[0] }}{% endif %})</span></span>{% endif %}
+          </div>
           {% else %}<span class="mut">nothing owed</span>{% endif %}</td>
         {% endif %}
       </tr>
@@ -172,8 +178,14 @@ function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest(
               <tr class="note"><td>Still waiting on {{ pm.label.split(' ')[0] }}'s customers</td><td class="num">${{ '{:,.2f}'.format(pm.unreleased) }}</td></tr>
             </table>
             {% if is_latest and x.carried > 0.005 %}
-            <p class="hint" style="margin:10px 0 0">Plus <b>${{ '{:,.2f}'.format(x.carried) }}</b> still unpaid from earlier months → pay now
-              <b>${{ '{:,.2f}'.format(x.pay_total) }}</b>. Unpaid money never expires; it rolls forward until it is paid.</p>
+            <h4 style="margin:14px 0 6px">What a payment today settles</h4>
+            <table class="brk">
+              {% for b in x.pay_breakdown %}
+              <tr><td>{{ b.label }}</td><td class="num">${{ '{:,.2f}'.format(b.owed) }}</td></tr>
+              {% endfor %}
+              <tr class="sum"><td>Pay now</td><td class="num">${{ '{:,.2f}'.format(x.pay_total) }}</td></tr>
+            </table>
+            <p class="hint" style="margin:8px 0 0">Oldest month first. Unpaid money never expires; it rolls forward until it is paid.</p>
             {% elif not is_latest %}
             <p class="hint" style="margin:10px 0 0">{{ pm.label }} is closed to new sales but not to money: whatever it still owes
               rolls forward and is paid from the current month.</p>
@@ -210,7 +222,10 @@ function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest(
                 </tbody>
               </table>
               </div>
-              {% if st.n_invoices > st.invoices|length %}<p class="hint" style="margin:6px 0 0">Newest 25 missing and 25 collected of {{ st.n_invoices }} invoices.</p>{% endif %}
+              {% if st.n_invoices > st.invoices|length %}<p class="hint cap" style="margin:6px 0 0"
+                 data-all="Newest 25 missing and 25 collected of {{ st.n_invoices }} invoices"
+                 data-miss="Newest 25 of {{ st.n_unpaid }} missing invoices"
+                 data-ok="Newest 25 of {{ st.n_paid }} collected invoices">Newest 25 missing and 25 collected of {{ st.n_invoices }} invoices</p>{% endif %}
             </div>
             {% endfor %}
             {% if x.earlier %}
