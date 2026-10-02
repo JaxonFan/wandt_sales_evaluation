@@ -807,6 +807,13 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
                          gap=float(t["ty_book"]) - float(t["ly_book"]), cum=float(t["cum_growth"]),
                          pay=my_pay, n_items=c["n_items"], contrib=c["bonus"], acq=a_mo,
                          total=my_pay + c["bonus"] + a_mo))
+    # the rep's month-by-month pay picture is the SAME ledger the manager pays from (collected / released /
+    # paid / owed per month), so a payment recorded on the dashboard shows up here on the next load
+    ledger_months = {mm["month"]: mm for mm in service.pay_ledger(db)["months"].get(name, [])}
+    for row in traj:
+        lm = ledger_months.get(row["month"], {})
+        row.update(collected_pct=lm.get("collected_pct", 0.0), released=lm.get("collectable", 0.0),
+                   paid=lm.get("paid", 0.0), owed=lm.get("owed", 0.0), waiting=lm.get("unreleased", 0.0))
     growth_cycle = float(my_traj[-1]["cum_pay"]) if my_traj else 0.0
     contrib_cycle = sum(x["contrib"] for x in traj)
     acq_cycle = sum(x["acq"] for x in traj)

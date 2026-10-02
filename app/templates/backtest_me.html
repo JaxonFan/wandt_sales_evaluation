@@ -41,11 +41,11 @@
     {% if k.target %}<div class="kpi"><div class="label">{{ '小组目标' if zh else 'Team target' }}</div>
       <div class="val" style="font-size:20px">${{ '{:,.0f}'.format(k.target) }} <span class="mut" style="font-size:13px">{{ '%.0f'|format(k.target_pct) }}%</span></div></div>{% endif %}{% endif %}
     <div class="kpi"><div class="label">{% if growth_active %}{{ '已赚（三项合计）' if zh else 'Earned (all pieces)' }}{% else %}{{ '已赚（开单奖）' if zh else 'Earned (contribution)' }}{% endif %}</div>
-      <div class="val">${{ '{:,.0f}'.format(k.earned) }}</div></div>
+      <div class="val">${{ '{:,.2f}'.format(k.earned) }}</div></div>
     <div class="kpi"><div class="label">{{ '货款已收' if zh else 'Collected' }}</div>
       <div class="val">{{ '%.0f'|format(k.collected_pct) }}%</div></div>
     <div class="kpi"><div class="label">{{ '已发放' if zh else 'Paid so far' }}</div>
-      <div class="val">${{ '{:,.0f}'.format(k.paid) }}</div></div>
+      <div class="val">${{ '{:,.2f}'.format(k.paid) }}</div></div>
     <div class="kpi primary"><div class="label">{{ '现在可发' if zh else 'Payable now' }}</div>
       <div class="val">${{ '{:,.2f}'.format(k.payable) }}</div></div>
     <div class="kpi"><div class="label">{{ '等客户付款' if zh else 'Waiting on collection' }}</div>
@@ -72,7 +72,12 @@
       <th class="num">{{ '增长奖（我的一份）' if zh else 'Growth (my share)' }}</th>{% endif %}
       <th class="num">{{ '开单奖' if zh else 'Contribution' }}</th>
       {% if growth_active %}<th class="num">{{ '新客户奖' if zh else 'Acquisition' }}</th>{% endif %}
-      <th class="num">{{ '当月合计' if zh else 'Total' }}</th></tr></thead>
+      <th class="num">{{ '当月已赚' if zh else 'Earned' }}</th>
+      <th class="num" title="{{ '当月发票客户已付的比例' if zh else 'Share of this month\'s invoices the customers have paid' }}">{{ '货款已收' if zh else 'Collected' }}</th>
+      <th class="num">{{ '已释放' if zh else 'Released' }}</th>
+      <th class="num">{{ '已发放' if zh else 'Paid' }}</th>
+      <th class="num">{{ '还欠我' if zh else 'Owed' }}</th>
+      <th class="num">{{ '等客户付款' if zh else 'Waiting' }}</th></tr></thead>
     <tbody>
     {% for t in traj %}
       <tr>
@@ -83,10 +88,15 @@
         <td class="num">${{ '{:,.0f}'.format(t.pay) }}</td>{% endif %}
         <td class="num">${{ '{:,.2f}'.format(t.contrib) }} <span class="mut">({{ t.n_items }})</span></td>
         {% if growth_active %}<td class="num">{% if t.acq > 0 %}${{ '{:,.0f}'.format(t.acq) }}{% else %}<span class="mut">—</span>{% endif %}</td>{% endif %}
-        <td class="num"><strong>${{ '{:,.0f}'.format(t.total) }}</strong></td>
+        <td class="num"><strong>${{ '{:,.2f}'.format(t.total) }}</strong></td>
+        <td class="num mut">{{ '%.0f'|format(t.collected_pct) }}%</td>
+        <td class="num">${{ '{:,.2f}'.format(t.released) }}</td>
+        <td class="num mut">${{ '{:,.2f}'.format(t.paid) }}</td>
+        <td class="num"><strong>${{ '{:,.2f}'.format(t.owed) }}</strong></td>
+        <td class="num mut">${{ '{:,.2f}'.format(t.waiting) }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="mut">{{ '暂无数据。' if zh else 'No data yet.' }}</td></tr>
+      <tr><td colspan="13" class="mut">{{ '暂无数据。' if zh else 'No data yet.' }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -94,9 +104,12 @@
     已经发的不收回 —— 做回来之后，超过已发部分的再接着发。{% else %}Growth is <b>paid once</b>: each month pays on the
     part of your cumulative growth <b>not yet paid for</b>; if the total drops, that month is $0 and nothing is taken
     back — once it climbs past what's already been paid on, the extra pays.{% endif %}</p>
-  {% else %}<p class="hint" style="margin-top:8px">{% if zh %}开单奖 = 你这个月写的订单行数 × 单价。
-    十月起会加上增长奖和新客户奖。{% else %}Contribution = the line items you wrote this month × the rate.
-    Growth and new-account bonuses join in October.{% endif %}</p>{% endif %}
+  {% else %}<p class="hint" style="margin-top:8px">{% if zh %}开单奖 = 你这个月写的订单行数 × 单价。十月起会加上增长奖和新客户奖。
+    {% else %}Contribution = the line items you wrote this month × the rate. Growth and new-account bonuses join in October.{% endif %}</p>{% endif %}
+  <p class="hint">{% if zh %}每个月单独算：<b>已释放</b> = 当月已赚 × 当月发票已收比例；<b>已发放</b>是经理已经发给你的；<b>还欠我</b> = 已释放 − 已发放；
+    <b>等客户付款</b>的部分客户付清后就会释放，不会作废。经理记录一笔发放，这里下一次打开就能看到。
+    {% else %}Each month on its own: <b>Released</b> = earned × the share of that month's invoices the customers have paid; <b>Paid</b> is what the manager
+    has recorded; <b>Owed</b> = released − paid; <b>Waiting</b> releases as those customers settle — it never expires. A payment the manager records shows here on your next visit.{% endif %}</p>
 </div>
 
 {% if growth_active %}
