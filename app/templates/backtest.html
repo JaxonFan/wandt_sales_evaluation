@@ -119,7 +119,8 @@
     nothing is stranded when a cycle rolls over. <b>Owed now</b> = earned × the share of that chapter's billing
     collected − already paid, floored at $0 (a recomputation can never claw back). <b>Not yet released</b> is
     earned money still waiting on customer payments; it pays out automatically as the receivables come in.
-    <a href="/ledger">Full ledger by chapter →</a></p>
+    <b>Click a rep</b> to see it invoice by invoice — which are paid, which are still outstanding, and the
+    arithmetic that produces their number.</p>
   <table>
     <thead><tr><th>Rep</th><th class="num">Earned (all chapters)</th><th class="num">Collected</th>
       <th class="num">Paid to date</th><th class="num" title="Owed from an EARLIER chapter that has since collected">Carried over</th>
@@ -127,7 +128,7 @@
     <tbody>
     {% for x in rows %}
       <tr>
-        <td><strong>{{ x.associate }}</strong></td>
+        <td><a href="/pay/{{ x.associate }}" style="text-decoration:none;color:var(--blue)"><strong>{{ x.associate }}</strong></a></td>
         <td class="num">${{ '{:,.2f}'.format(x.earned_all) }}</td>
         <td class="num mut">{{ '%.0f'|format(x.collected_pct) }}%</td>
         <td class="num mut">${{ '{:,.2f}'.format(x.paid) }}</td>
@@ -151,6 +152,47 @@
       <th class="num">${{ '{:,.2f}'.format(team.unreleased) }}</th>
     </tr></tfoot>
   </table>
+
+  <details style="margin-top:14px">
+    <summary style="cursor:pointer;font-size:13.5px;color:var(--blue)">Ledger by chapter — every period, open
+      until it is collected and paid</summary>
+    <table style="margin-top:10px">
+      <thead><tr><th>Rep</th><th>Chapter</th><th></th><th class="num">Line items</th><th class="num">Earned</th>
+        <th class="num">Billed</th><th class="num">Collected</th><th class="num">Collectable</th>
+        <th class="num">Paid</th><th class="num">Owed</th></tr></thead>
+      <tbody>
+      {% for rep, chapters in ledger.rows.items() %}{% for c in chapters %}
+        <tr>
+          <td>{% if loop.first %}<a href="/pay/{{ rep }}" style="text-decoration:none;color:var(--blue)">{{ rep }}</a>{% endif %}</td>
+          <td class="mut">{{ c.chapter }}</td><td class="mut">{{ 'closed' if c.closed else 'open' }}</td>
+          <td class="num mut">{{ '{:,}'.format(c.n_items) }}</td>
+          <td class="num">${{ '{:,.2f}'.format(c.earned) }}</td>
+          <td class="num mut">${{ '{:,.0f}'.format(c.billed) }}</td>
+          <td class="num mut">${{ '{:,.0f}'.format(c.collected) }} ({{ '%.0f'|format(c.collected_pct) }}%)</td>
+          <td class="num">${{ '{:,.2f}'.format(c.collectable) }}</td>
+          <td class="num mut">${{ '{:,.2f}'.format(c.paid) }}</td>
+          <td class="num"><strong>${{ '{:,.2f}'.format(c.owed) }}</strong></td>
+        </tr>
+      {% endfor %}{% endfor %}
+      </tbody>
+    </table>
+  </details>
+
+  {% if payments %}
+  <details style="margin-top:10px">
+    <summary style="cursor:pointer;font-size:13.5px;color:var(--blue)">Payments recorded ({{ payments|length }})</summary>
+    <table style="margin-top:10px;max-width:720px">
+      <thead><tr><th>Rep</th><th>Chapter starting</th><th class="num">Paid to date</th><th>Recorded by</th><th>When</th></tr></thead>
+      <tbody>
+      {% for h in payments %}
+        <tr><td>{{ h.associate }}</td><td class="mut">{{ h.chapter }}</td>
+          <td class="num">${{ '{:,.2f}'.format(h.paid) }}</td><td class="mut">{{ h.by }}</td>
+          <td class="mut">{{ h.when.strftime('%Y-%m-%d %H:%M') if h.when else '—' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
 </div>
 
 {% if growth_active %}

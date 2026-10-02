@@ -50,6 +50,9 @@
   body.big .guide-body{font-size:15.5px;line-height:1.8}
   .kpi{display:inline-block;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:0 10px 8px 0;min-width:140px;vertical-align:top}
   .kpi .label{font-size:12px;color:var(--muted)} .kpi .val{font-size:24px;font-weight:700;margin-top:3px}
+  .subtabs{margin:-4px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .subtabs a{display:inline-block;margin-right:16px;font-size:13.5px;text-decoration:none;color:var(--muted);padding-bottom:6px}
+  .subtabs a.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--purple)}
   .kpi.primary{background:#2a1d4d;border-color:#2a1d4d} .kpi.primary .label{color:#bfb3e0} .kpi.primary .val{color:#fff}
 </style></head><body class="{{ 'big' if user and user.role == 'rep' else '' }}">
 <header>
@@ -57,24 +60,17 @@
   <nav>
     {% if user.role == 'rep' %}
     <a href="/me" class="{{ 'on' if page=='me' }}">我的奖金</a>
-    <a href="/me/quiet" class="{{ 'on' if page=='mequiet' }}">静默客户</a>
-    <a href="/me/watch" class="{{ 'on' if page=='mewatch' }}">落后客户</a>
+    <a href="/me/watch" class="{{ 'on' if page in ['mewatch','mequiet'] }}">需要跟进的客户</a>
     <a href="/me/guide" class="{{ 'on' if page=='repguide' }}">奖金怎么算</a>
     <a href="/account" class="{{ 'on' if page=='account' }}">修改密码</a>
     {% else %}
-    <a href="/" class="{{ 'on' if page=='dash' }}">Dashboard</a>
+    <a href="/" class="{{ 'on' if page in ['dash','pay'] }}">Dashboard</a>
     <a href="/accounts" class="{{ 'on' if page=='accounts' }}">Accounts</a>
-    <a href="/acquisitions" class="{{ 'on' if page=='acq' }}">New accounts</a>
-    <a href="/quiet" class="{{ 'on' if page=='quiet' }}">Quiet accounts</a>
-    <a href="/underperformers" class="{{ 'on' if page=='under' }}">Falling behind</a>
-    <a href="/ledger" class="{{ 'on' if page=='ledger' }}">Pay ledger</a>
+    <a href="/underperformers" class="{{ 'on' if page in ['under','acq','quiet'] }}">Needs review</a>
     <a href="/constrained" class="{{ 'on' if page=='stock' }}">Limited stock</a>
     <a href="/upload" class="{{ 'on' if page=='upload' }}">Import</a>
-    <a href="/settings" class="{{ 'on' if page=='settings' }}">Settings</a>
-    <a href="/logins" class="{{ 'on' if page=='logins' }}">Logins</a>
-    <a href="/account" class="{{ 'on' if page=='account' }}">My account</a>
-    <a href="/guide" class="{{ 'on' if page=='guide' }}">Manager guide</a>
-    <a href="/me/guide" class="{{ 'on' if page=='repguide' }}">Rep guide</a>
+    <a href="/settings" class="{{ 'on' if page in ['settings','logins','account'] }}">Settings</a>
+    <a href="/guide" class="{{ 'on' if page in ['guide','repguide'] }}">Guide</a>
     {% endif %}
   </nav>
   <span class="right">{{ user.username }} · <a href="/logout">log out</a></span>

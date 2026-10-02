@@ -1,0 +1,89 @@
+{% extends "backtest_base.html" %}{% block body %}
+<div class="card">
+  <h2>{{ name }} — where the pay number comes from</h2>
+  <p class="hint">Every figure below is traceable to invoices. <b>Earned</b> is counted from the line items
+    written that month; <b>collected</b> is which of those invoices the receivables file says have been paid;
+    <b>owed</b> is what that makes payable right now. <a href="/">← back to the pay run</a></p>
+  <div>
+    <div class="kpi"><div class="label">Earned, all chapters</div>
+      <div class="val">${{ '{:,.2f}'.format(totals.earned) }}</div></div>
+    <div class="kpi"><div class="label">Collected share</div>
+      <div class="val">${{ '{:,.2f}'.format(totals.collectable) }}</div></div>
+    <div class="kpi"><div class="label">Paid to date</div>
+      <div class="val">${{ '{:,.2f}'.format(totals.paid) }}</div></div>
+    <div class="kpi primary"><div class="label">Owed now</div>
+      <div class="val">${{ '{:,.2f}'.format(totals.owed) }}</div></div>
+    <div class="kpi"><div class="label">Waiting on collection</div>
+      <div class="val">${{ '{:,.2f}'.format(totals.unreleased) }}</div></div>
+  </div>
+</div>
+
+{% for c in chapters %}
+<div class="card">
+  <h2>{{ c.chapter }} <span class="mut" style="font-weight:400;font-size:13px">· {{ 'closed' if c.closed else 'open' }}</span></h2>
+
+  <h3>1 · What was earned</h3>
+  <table style="max-width:620px">
+    <thead><tr><th>Month</th><th class="num">Line items</th><th class="num">× rate</th><th class="num">Earned</th></tr></thead>
+    <tbody>
+    {% for m in c.months %}
+      <tr><td>{{ m.month }}</td><td class="num">{{ '{:,}'.format(m.n_items) }}</td>
+        <td class="num mut">${{ '%.2f'|format(item_rate) }}</td>
+        <td class="num">${{ '{:,.2f}'.format(m.earned) }}</td></tr>
+    {% endfor %}
+    {% if c.growth > 0.005 %}<tr><td>Growth share (team)</td><td class="num mut">—</td><td class="num mut">—</td>
+      <td class="num">${{ '{:,.2f}'.format(c.growth) }}</td></tr>{% endif %}
+    {% if c.acquisition > 0.005 %}<tr><td>New-account bonuses</td><td class="num mut">—</td><td class="num mut">—</td>
+      <td class="num">${{ '{:,.2f}'.format(c.acquisition) }}</td></tr>{% endif %}
+    </tbody>
+    <tfoot><tr><th>Total earned</th><th class="num">{{ '{:,}'.format(c.n_items) }}</th><th></th>
+      <th class="num">${{ '{:,.2f}'.format(c.earned) }}</th></tr></tfoot>
+  </table>
+
+  <h3 style="margin-top:16px">2 · What the customers have paid</h3>
+  <p class="hint">{{ c.n_paid }} of {{ c.n_invoices }} invoices collected — <b>${{ '{:,.0f}'.format(c.collected) }}</b>
+    of <b>${{ '{:,.0f}'.format(c.billed) }}</b> billed = <b>{{ '%.1f'|format(c.collected_pct) }}%</b>.
+    <b>${{ '{:,.0f}'.format(c.unpaid_amount) }}</b> is still outstanding across {{ c.n_unpaid }} invoices.</p>
+  <div class="subtabs" style="margin-bottom:10px">
+    <a href="/pay/{{ name }}?show=unpaid" class="{{ 'on' if show=='unpaid' }}">Still unpaid ({{ c.n_unpaid }})</a>
+    <a href="/pay/{{ name }}?show=paid" class="{{ 'on' if show=='paid' }}">Collected ({{ c.n_paid }})</a>
+    <a href="/pay/{{ name }}?show=all" class="{{ 'on' if show=='all' }}">All ({{ c.n_invoices }})</a>
+  </div>
+  <table>
+    <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th class="num">Lines</th>
+      <th class="num">Amount</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for i in c.invoices %}
+      <tr>
+        <td>{{ i.sop_number }}</td>
+        <td class="mut">{{ i.date.strftime('%Y-%m-%d') }}</td>
+        <td>{{ i.customer }}</td>
+        <td class="num mut">{{ i.lines }}</td>
+        <td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
+        <td>{% if i.written_off %}<span class="badge" style="background:#fdecec;color:#c0392b">written off</span>
+            {% elif i.paid %}<span class="badge" style="background:#eaf7ee;color:#1e7b34">collected</span>
+            {% else %}<span class="badge">outstanding</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="mut">No invoices in this view.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if c.n_shown > c.invoices|length %}<p class="hint">Showing {{ c.invoices|length }} of {{ c.n_shown }}, largest first.</p>{% endif %}
+
+  <h3 style="margin-top:16px">3 · What that makes payable</h3>
+  <table style="max-width:620px">
+    <tr><td>Earned this chapter</td><td class="num">${{ '{:,.2f}'.format(c.earned) }}</td></tr>
+    <tr><td>× collected share ({{ '%.1f'|format(c.collected_pct) }}%)</td>
+      <td class="num">${{ '{:,.2f}'.format(c.collectable) }}</td></tr>
+    <tr><td>− already paid{% if c.payment %} <span class="mut">(recorded by {{ c.payment.by }}{% if c.payment.when %} on {{ c.payment.when.strftime('%Y-%m-%d') }}{% endif %})</span>{% endif %}</td>
+      <td class="num">−${{ '{:,.2f}'.format(c.paid) }}</td></tr>
+    <tr><th>= owed now</th><th class="num">${{ '{:,.2f}'.format(c.owed) }}</th></tr>
+    <tr><td class="mut">still waiting on customer payments</td>
+      <td class="num mut">${{ '{:,.2f}'.format(c.unreleased) }}</td></tr>
+  </table>
+  <p class="hint" style="margin-top:8px">The ${{ '{:,.2f}'.format(c.unreleased) }} is <b>not lost</b> — as the
+    outstanding invoices above get paid, it moves into "owed now", even after this chapter has closed.</p>
+</div>
+{% endfor %}
+{% endblock %}

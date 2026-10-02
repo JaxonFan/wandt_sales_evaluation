@@ -179,7 +179,11 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         "rows": rows, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
         "unassigned": service.unassigned_summary(db),
         "is_latest": (mi == len(months) - 1), "growth_active": growth_active,
-        "ledger": ledger,
+        "ledger": ledger, "payments": [
+            dict(associate=p.associate, chapter=str(p.fiscal_start), paid=float(p.paid_cum or 0.0),
+                 by={u.user_id: u.username for u in db.query(M.User).all()}.get(p.user_id, "—"),
+                 when=p.updated_at)
+            for p in db.query(M.GrowthPayment).order_by(M.GrowthPayment.updated_at.desc()).limit(50).all()],
         "growth_start": r["growth_start"],
         "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
 
@@ -250,18 +254,22 @@ def team_detail(request: Request, team_name: str, m: str = None, db: Session = D
 
 
 # ---------- the pay ledger: every chapter, open until collected and paid ----------
-@app.get("/ledger", response_class=HTMLResponse)
-def ledger_page(request: Request, db: Session = Depends(get_db)):
+@app.get("/ledger")
+def ledger_page(request: Request):
+    return RedirectResponse("/", status_code=303)          # the ledger now lives on the dashboard
+
+
+# ---------- one rep's pay, invoice by invoice: where every number came from ----------
+@app.get("/pay/{name}", response_class=HTMLResponse)
+def pay_detail(request: Request, name: str, show: str = "unpaid", db: Session = Depends(get_db)):
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    ledger = service.pay_ledger(db)
-    payments = (db.query(M.GrowthPayment).order_by(M.GrowthPayment.updated_at.desc()).limit(50).all())
-    users = {u.user_id: u.username for u in db.query(M.User).all()}
-    history = [dict(associate=p.associate, chapter=str(p.fiscal_start), paid=float(p.paid_cum or 0.0),
-                    by=users.get(p.user_id, "—"), when=p.updated_at) for p in payments]
-    return templates.TemplateResponse("backtest_ledger.html", {
-        "request": request, "user": user, "page": "ledger", "ledger": ledger, "history": history})
+    detail = service.rep_pay_detail(db, name, show=show)
+    if detail is None:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse("backtest_pay_detail.html", dict(
+        detail, request=request, user=user, page="pay", name=name, show=show))
 
 
 # ---------- account assignment: which TEAM owns each account ----------
@@ -417,7 +425,8 @@ def underperformers_page(request: Request, view: str = "both", db: Session = Dep
         return RedirectResponse("/login", status_code=303)
     ctx = _underperf_context(db, view)
     return templates.TemplateResponse("backtest_underperformers.html", dict(
-        ctx, request=request, user=user, page="under", lang="en", mine=False, team=None))
+        ctx, **service.review_counts(db), request=request, user=user, page="under", lang="en",
+        mine=False, team=None))
 
 
 @app.get("/me/watch", response_class=HTMLResponse)
@@ -445,8 +454,8 @@ def acquisitions_page(request: Request, db: Session = Depends(get_db)):
     s = service.get_settings(db)
     _, _, team = service.attribution_maps(db)
     _pay, review = acquisition_by_rep_month(db, r["months"], team, s) if r["months"] else ({}, [])
-    return templates.TemplateResponse("backtest_acquisitions.html", {
-        "request": request, "user": user, "rows": review, "page": "acq"})
+    return templates.TemplateResponse("backtest_acquisitions.html", dict(
+        service.review_counts(db), request=request, user=user, rows=review, page="acq", lang="en"))
 
 
 @app.post("/acquisitions/flag")
@@ -708,9 +717,9 @@ def quiet_accounts(request: Request, db: Session = Depends(get_db)):
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    return templates.TemplateResponse("backtest_quiet.html", {
-        "request": request, "user": user, "page": "quiet", "lang": "en",
-        "rows": service.flag_silent_accounts(db), "mine": False})
+    return templates.TemplateResponse("backtest_quiet.html", dict(
+        service.review_counts(db), request=request, user=user, page="quiet", lang="en",
+        rows=service.flag_silent_accounts(db), mine=False))
 
 
 @app.get("/me/quiet", response_class=HTMLResponse)

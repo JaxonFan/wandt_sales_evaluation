@@ -1,0 +1,5 @@
+<div class="subtabs">
+  <a href="/underperformers" class="{{ 'on' if page=='under' }}">Falling behind{% if n_under %} ({{ n_under }}){% endif %}</a>
+  <a href="/quiet" class="{{ 'on' if page=='quiet' }}">Quiet accounts{% if n_quiet %} ({{ n_quiet }}){% endif %}</a>
+  <a href="/acquisitions" class="{{ 'on' if page=='acq' }}">New accounts{% if n_acq %} ({{ n_acq }}){% endif %}</a>
+</div>
