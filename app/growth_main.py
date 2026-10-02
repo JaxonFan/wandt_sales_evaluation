@@ -52,6 +52,8 @@ _seed_targets()
 app = FastAPI(title="W&T Sales Scorecard (growth model)")
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=8 * 3600)
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
+templates.env.filters["month_name"] = lambda n: ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
+                                                 "Oct", "Nov", "Dec"][int(n)]
 
 
 def current_user(request: Request, db: Session):

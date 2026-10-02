@@ -1,5 +1,15 @@
 {% extends "backtest_base.html" %}{% block body %}
 <style>
+  /* month navigator */
+  .monthnav{display:flex;align-items:center;gap:10px;padding:14px 16px;user-select:none;flex-wrap:wrap}
+  .monthnav .arrow{width:40px;height:40px;border:1px solid var(--line-2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;text-decoration:none;color:var(--ink);background:var(--card);box-shadow:var(--shadow)}
+  .monthnav .arrow:hover{border-color:var(--accent);color:var(--accent-2)} .monthnav .arrow.dis{opacity:.3;pointer-events:none}
+  .monthnav .strip{flex:1;display:flex;gap:6px;overflow-x:auto;padding:2px;cursor:grab;scrollbar-width:none} .monthnav .strip::-webkit-scrollbar{display:none}
+  .monthnav .strip.dragging{cursor:grabbing}
+  .mchip{display:flex;flex-direction:column;align-items:center;min-width:76px;padding:7px 10px;border:1px solid var(--line-2);border-radius:10px;text-decoration:none;color:var(--muted);font-weight:600;font-size:13.5px;background:var(--card);white-space:nowrap}
+  .mchip small{font-weight:500;font-size:10.5px;color:var(--muted);margin-top:1px}
+  .mchip:hover{border-color:var(--accent);color:var(--accent-2)} .mchip.on{background:var(--ink);border-color:var(--ink);color:#fff} .mchip.on small{color:#b9c2bd}
+  .navhint{flex-basis:100%;font-size:12px;color:var(--muted);padding:2px 4px 0}
   /* pay cell + audit button */
   .paycell form{display:inline}
   .paybtn{background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:700;box-shadow:var(--shadow);white-space:nowrap}
@@ -51,7 +61,23 @@
   table.inv .num{text-align:right;font-variant-numeric:tabular-nums}
 </style>
 <script>
-function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);e.hidden=!e.hidden;var t=document.getElementById('tg-'+id);if(t)t.classList.toggle('open',!e.hidden);}
+var PREV={{ nav.prev|tojson }}, NEXT={{ nav.next|tojson }};
+function openSet(){try{return JSON.parse(localStorage.getItem('dash-open')||'[]');}catch(e){return [];}}
+function saveOpen(ids){try{localStorage.setItem('dash-open',JSON.stringify(ids));}catch(e){}}
+function setOpen(id,on){var e=document.getElementById(id);if(!e)return;e.hidden=!on;var t=document.getElementById('tg-'+id);if(t)t.classList.toggle('open',on);
+  var ids=openSet().filter(function(x){return x!==id;});if(on)ids.push(id);saveOpen(ids);}
+function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);setOpen(id,e.hidden);}
+function go(m){if(m)location.href='/?m='+m;}
+document.addEventListener('DOMContentLoaded',function(){
+  openSet().forEach(function(id){if(document.getElementById(id))setOpen(id,true);});           // open rows survive a month change
+  var cur=document.querySelector('.mchip.on');if(cur)cur.scrollIntoView({inline:'center',block:'nearest'});
+  document.addEventListener('keydown',function(e){if(e.target.closest('input,select,textarea'))return;if(e.key==='ArrowLeft')go(PREV);if(e.key==='ArrowRight')go(NEXT);});
+  // drag left/right (mouse or touch) on the month bar or the pay card to shift a month
+  ['monthnav','paycard'].forEach(function(id){var el=document.getElementById(id);if(!el)return;var sx=null,moved=false;
+    el.addEventListener('pointerdown',function(e){if(e.target.closest('a,button,form,input,select,.scroll'))return;sx=e.clientX;moved=false;});
+    el.addEventListener('pointermove',function(e){if(sx===null)return;var dx=e.clientX-sx;if(Math.abs(dx)>90&&!moved){moved=true;sx=null;go(dx>0?PREV:NEXT);}});
+    el.addEventListener('pointerup',function(){sx=null;});el.addEventListener('pointercancel',function(){sx=null;});});
+});
 function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){if(r.classList.contains('invx'))return;r.hidden=(which!=='all'&&!r.classList.contains(which));});
   p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');
   p.querySelectorAll('.cap').forEach(function(c){c.textContent=c.dataset[which];});}
@@ -68,18 +94,16 @@ function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest(
   });}
 </script>
 
-<div class="card">
-  <div class="pbar">
-    {% if nav.prev %}<a class="pnav" href="/?m={{ nav.prev }}">◀ prev</a>{% else %}<span class="pnav dis">◀ prev</span>{% endif %}
-    <div class="mid">
-      <div class="ttl">{{ m }} · month {{ nav.n }} of {{ nav.total }}</div>
-      <div class="hint" style="margin:4px 0 6px">{% if growth_active %}Cycle {{ months[0] }} → {{ months[-1] }} (vs the same months a year earlier){% else %}{{ months[0] }} → {{ months[-1] }} · contribution only{% endif %}</div>
-      <select class="psel" onchange="location.href='/?m='+this.value">
-        {% for mo in months %}<option value="{{ mo }}" {{ 'selected' if mo==m }}>{{ mo }}</option>{% endfor %}
-      </select>
-    </div>
-    {% if nav.next %}<a class="pnav" href="/?m={{ nav.next }}">next ▶</a>{% else %}<span class="pnav dis">next ▶</span>{% endif %}
+<div class="card monthnav" id="monthnav">
+  <a class="arrow {{ 'dis' if not nav.prev }}" href="{{ '/?m=' ~ nav.prev if nav.prev else 'javascript:void(0)' }}" title="Previous month (←)">‹</a>
+  <div class="strip" id="strip">
+    {% for mo in months %}<a href="/?m={{ mo }}" class="mchip {{ 'on' if mo==m }}">{{ mo[5:] | int | month_name }}<small>{{ mo[:4] }}</small></a>{% endfor %}
   </div>
+  <select class="psel" onchange="location.href='/?m='+this.value" title="Jump to a month">
+    {% for mo in months %}<option value="{{ mo }}" {{ 'selected' if mo==m }}>{{ mo }}</option>{% endfor %}
+  </select>
+  <a class="arrow {{ 'dis' if not nav.next }}" href="{{ '/?m=' ~ nav.next if nav.next else 'javascript:void(0)' }}" title="Next month (→)">›</a>
+  <div class="navhint">{% if growth_active %}Cycle {{ months[0] }} → {{ months[-1] }}{% else %}{{ months[0] }} → {{ months[-1] }} · contribution only{% endif %} · drag left or right, or use ← → keys, to change month — open rows stay open</div>
 </div>
 
 {% if growth_active and team_rows %}
@@ -104,7 +128,7 @@ function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest(
 </div>
 {% endif %}
 
-<div class="card">
+<div class="card" id="paycard">
   <h2>Pay — {{ m }}</h2>
   {% if not growth_active %}
   <p class="hint"><b>{{ months[0] }} → {{ months[-1] }} is contribution only</b> — line items × rate. Growth and
@@ -135,7 +159,7 @@ function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest(
         <b>{{ g.team }}</b>
         <span class="mut" style="float:right">earned ${{ '{:,.2f}'.format(g.sub.m_earned) }} · released ${{ '{:,.2f}'.format(g.sub.m_collectable) }} · owed ${{ '{:,.2f}'.format(g.sub.m_owed) }}{% if is_latest %} · pay now ${{ '{:,.2f}'.format(g.sub.pay_total) }}{% endif %}</span>
       </td></tr>
-      {% for x in g.rows %}{% set rid = 'd' ~ loop.index ~ g.css %}
+      {% for x in g.rows %}{% set rid = 'r-' ~ x.associate|replace(' ','_') %}
       <tr class="rep {{ g.css }}" onclick="rowtog(event,'{{ rid }}')" title="Click to see the invoices behind this">
         <td><span class="tg" id="tg-{{ rid }}">▸</span><strong>{{ x.associate }}</strong></td>
         {% if growth_active %}<td class="mut">{{ x.team or '—' }}</td>
