@@ -110,9 +110,13 @@ document.addEventListener('change',function(e){if(e.target.matches('#monthnav se
 document.addEventListener('keydown',function(e){if(e.target.closest('input,select,textarea'))return;if(e.key==='ArrowLeft')go(PREV,-1);if(e.key==='ArrowRight')go(NEXT,1);});
 // drag: the pay card follows the finger/mouse and fades, snaps back if released early, turns the page past 90px
 function wireDrag(){['monthnav','paycard'].forEach(function(id){var el=document.getElementById(id);if(!el||el.dataset.drag)return;el.dataset.drag='1';var sx=null,card=null;
-  el.addEventListener('pointerdown',function(e){if(e.target.closest('a,button,form,input,select,.scroll,.detail'))return;sx=e.clientX;card=document.getElementById('paycard');card.style.transition='none';});
-  el.addEventListener('pointermove',function(e){if(sx===null)return;var dx=e.clientX-sx;var lim=(dx>0&&!PREV)||(dx<0&&!NEXT)?0.25:1;card.style.transform='translateX('+(dx*0.6*lim)+'px)';card.style.opacity=String(Math.max(0.35,1-Math.abs(dx)/320));});
-  function release(e){if(sx===null)return;var dx=e.clientX-sx;sx=null;card.style.transition='transform .2s ease,opacity .2s ease';
+  // DEAD ZONE: a click always moves the mouse a pixel or two — nothing happens until a real drag (10px), so
+  // clicking a row to expand it never nudges the card.
+  var moving=false;
+  el.addEventListener('pointerdown',function(e){if(e.target.closest('a,button,form,input,select,.scroll,.detail'))return;sx=e.clientX;moving=false;card=document.getElementById('paycard');});
+  el.addEventListener('pointermove',function(e){if(sx===null)return;var dx=e.clientX-sx;if(!moving){if(Math.abs(dx)<10)return;moving=true;card.style.transition='none';}
+    var lim=(dx>0&&!PREV)||(dx<0&&!NEXT)?0.25:1;card.style.transform='translateX('+(dx*0.6*lim)+'px)';card.style.opacity=String(Math.max(0.35,1-Math.abs(dx)/320));});
+  function release(e){if(sx===null)return;var dx=e.clientX-sx;sx=null;if(!moving)return;moving=false;card.style.transition='transform .2s ease,opacity .2s ease';
     if(dx>90&&PREV){go(PREV,-1);}else if(dx<-90&&NEXT){go(NEXT,1);}else{card.style.transform='';card.style.opacity='1';}}
   el.addEventListener('pointerup',release);el.addEventListener('pointercancel',release);el.addEventListener('pointerleave',release);});}
 document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();history.replaceState({m:CUR},'',urlFor(CUR,openList()));
