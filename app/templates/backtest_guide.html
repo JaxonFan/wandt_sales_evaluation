@@ -14,7 +14,7 @@
   <p class="hint" style="margin-top:6px">一共三项，每项都是一条谁都能核对的直接公式。只按已收货款发放。</p>
 
   {% if not growth_live %}
-  <div class="msg" style="background:#faf8ff;border-color:#6b46c1">
+  <div class="msg" style="background:var(--accent-soft);border-color:var(--accent)">
     <b>现在（八月、九月）只发开单奖。</b>增长奖和新客户奖从 <b>{{ growth_start.strftime('%Y年%-m月%-d日') }}</b>
     开始：周期重新开始，十月比去年十月，然后十月+十一月比去年十月+十一月，以此类推，每年十月重置。
     以前的销售记录全部保留 —— 那是去年的对比数据，也是判断新客户、静默客户、落后客户的依据。
@@ -101,7 +101,7 @@
   <p class="hint" style="margin-top:6px">Three pieces, each a direct formula anyone can check. Paid only on collected money.</p>
 
   {% if not growth_live %}
-  <div class="msg" style="background:#faf8ff;border-color:#6b46c1">
+  <div class="msg" style="background:var(--accent-soft);border-color:var(--accent)">
     <b>Right now (August and September) only Contribution pays.</b> Growth and the new-account bonus start
     <b>{{ growth_start.strftime('%B %-d, %Y') }}</b>: the cycle resets, October is compared to last October,
     then Oct+Nov to last Oct+Nov, and so on, resetting every October. All the sales history stays — it is the

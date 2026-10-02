@@ -14,7 +14,7 @@
   <p class="hint" style="margin-top:6px">一共三项，每一项我们都可以自己算得出来。奖金只按<b>已收回的货款</b>发放。</p>
 
   {% if not growth_live %}
-  <div class="msg" style="background:#faf8ff;border-color:#6b46c1">
+  <div class="msg" style="background:var(--accent-soft);border-color:var(--accent)">
     <b>八月、九月只算开单奖</b>（写的每一行都算钱）。<b>增长奖和新客户奖从
     {{ growth_start.strftime('%Y年%-m月%-d日') }} 开始</b>：到时候重新开始算，十月比去年十月，
     十月+十一月比去年十月+十一月，以此类推。以前的记录都保留，用来做对比和判断新客户、静默客户。
@@ -69,7 +69,7 @@
   collected money.</p>
 
   {% if not growth_live %}
-  <div class="msg" style="background:#faf8ff;border-color:#6b46c1">
+  <div class="msg" style="background:var(--accent-soft);border-color:var(--accent)">
     <b>August and September pay contribution only</b> — every line you write. <b>Growth and the new-account
     bonus start {{ growth_start.strftime('%B %-d, %Y') }}</b>: the count starts fresh, October is compared to
     last October, Oct+Nov to last Oct+Nov, and so on. Your past sales stay on file — they are what we compare

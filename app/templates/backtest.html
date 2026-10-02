@@ -1,4 +1,44 @@
 {% extends "backtest_base.html" %}{% block body %}
+<style>
+  /* team grouping */
+  tr.grp > td{font-size:13px;padding:7px 10px;border-top:2px solid #fff}
+  tr.grp.t1 > td{background:#efe9fb;color:#3b2a6e} tr.grp.t2 > td{background:#e6f0fb;color:#1e3f66} tr.grp.house > td{background:#f0f0f0;color:#444}
+  tr.rep.t1 > td:first-child{box-shadow:inset 4px 0 0 var(--accent)} tr.rep.t2 > td:first-child{box-shadow:inset 4px 0 0 var(--blue)} tr.rep.house > td:first-child{box-shadow:inset 4px 0 0 #9a9a9a}
+  .tg{display:inline-block;width:14px;color:var(--muted);text-decoration:none;font-size:12px;margin-right:4px;transition:transform .15s}
+  .tg.open{transform:rotate(90deg)}
+  /* the expanded panel */
+  tr.detail > td{background:#fafafc;padding:16px 18px 18px 30px;border-bottom:2px solid var(--line)}
+  tr.detail.t1 > td{box-shadow:inset 4px 0 0 var(--accent)} tr.detail.t2 > td{box-shadow:inset 4px 0 0 var(--blue)} tr.detail.house > td{box-shadow:inset 4px 0 0 #9a9a9a}
+  .dwrap{display:flex;gap:36px;flex-wrap:wrap;align-items:flex-start}
+  .dcol{min-width:320px;max-width:380px} .dcol.wide{flex:1;min-width:520px;max-width:none}
+  .dcol h4{margin:0 0 10px;font-size:13px;color:var(--ink)}
+  /* "owed now" breakdown: a clean two-column list */
+  .brk{width:100%;border-collapse:collapse;font-size:13px}
+  .brk td{padding:6px 0;border-bottom:1px solid #eee;background:none} .brk td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .brk tr.sum td{border-top:2px solid var(--ink);border-bottom:none;font-weight:700;padding-top:8px}
+  .brk tr.sub td{color:var(--muted);padding-left:14px;font-size:12.5px}
+  .brk tr.note td{color:var(--muted);border-bottom:none;font-size:12.5px}
+  /* collection statement: summary strip + scrolling list with sticky header */
+  .strip{display:flex;gap:22px;margin:0 0 10px;font-size:13px}
+  .strip b{display:block;font-size:17px;margin-top:2px;font-variant-numeric:tabular-nums}
+  .strip .miss b{color:#c0392b}
+  .scroll{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+  table.stmt{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.stmt th{position:sticky;top:0;background:#f7f7fa;z-index:1;font-weight:600;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
+  table.stmt td{padding:6px 10px;border-bottom:1px solid #f0f0f3;background:none;white-space:nowrap}
+  table.stmt td.cust{max-width:360px;overflow:hidden;text-overflow:ellipsis}
+  table.stmt .num{text-align:right;font-variant-numeric:tabular-nums}
+  table.stmt col.d{width:70px} table.stmt col.i{width:120px} table.stmt col.a{width:100px} table.stmt col.s{width:110px}
+  .mo{margin-bottom:14px} .mohead{display:flex;gap:10px;align-items:baseline;font-size:12.5px;margin:0 0 6px;flex-wrap:wrap}
+  .flt a{font-size:12px;color:var(--muted);text-decoration:none;margin-right:10px;padding-bottom:2px} .flt a.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--purple)}
+  .st{font-size:11px;padding:2px 8px;border-radius:9px;white-space:nowrap} .st.ok{background:#eaf7ee;color:#1e7b34} .st.miss{background:#fdecec;color:#c0392b} .st.wo{background:#eee;color:#555}
+  table.stmt tr.miss td.cust,table.stmt tr.miss td.num{color:#7a2a2a}
+</style>
+<script>
+function tog(id,a){var e=document.getElementById(id);e.hidden=!e.hidden;a.classList.toggle('open',!e.hidden);}
+function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){r.hidden=(which!=='all'&&!r.classList.contains(which));});
+  p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');}
+</script>
 
 <div class="card">
   <div class="pbar">
@@ -60,9 +100,16 @@
       <th class="num" title="Earned × collected − paid. Click the rep for every invoice behind it.">Owed now</th>
     </tr></thead>
     <tbody>
-    {% for x in rows %}
-      <tr>
-        <td><a href="/pay/{{ x.associate }}" style="text-decoration:none;color:var(--blue)"><strong>{{ x.associate }}</strong></a></td>
+    {% set ncol = 10 if growth_active else 7 %}
+    {% for g in groups %}
+      <tr class="grp {{ g.css }}"><td colspan="{{ ncol }}">
+        <b>{{ g.team }}</b>{% if g.members %} <span class="mut">· {{ g.members|join(', ') }}</span>{% endif %}
+        <span class="mut" style="float:right">this month ${{ '{:,.2f}'.format(g.sub.total_mo) }} · earned to date ${{ '{:,.2f}'.format(g.sub.earned_all) }} · owed ${{ '{:,.2f}'.format(g.sub.payable_now) }}</span>
+      </td></tr>
+      {% for x in g.rows %}{% set rid = 'd' ~ loop.index ~ g.css %}
+      <tr class="rep {{ g.css }}">
+        <td><a href="javascript:void(0)" onclick="tog('{{ rid }}', this)" class="tg" title="expand">▸</a>
+          <a href="/pay/{{ x.associate }}" style="text-decoration:none;color:var(--blue)"><strong>{{ x.associate }}</strong></a></td>
         {% if growth_active %}<td class="mut">{{ x.team or '—' }}</td>
         <td class="num">${{ '{:,.2f}'.format(x.pay_mo) }}</td>{% endif %}
         <td class="num">${{ '{:,.2f}'.format(x.contrib_mo) }} <span class="mut">({{ '{:,}'.format(x.n_items) }})</span></td>
@@ -77,11 +124,60 @@
             <input type="hidden" name="associate" value="{{ x.associate }}">
             <input type="hidden" name="amount" value="{{ '%.2f'|format(x.payable_now) }}">
             <button type="submit" class="ghost" style="padding:2px 9px;font-size:11.5px;margin-left:6px">pay</button></form>
-          {% endif %}
-          {% if x.carried > 0.005 %}<div class="mut" style="font-size:11px">incl. ${{ '{:,.2f}'.format(x.carried) }} from an earlier period</div>{% endif %}</td>
+          <div class="mut" style="font-size:11px">this month ${{ '{:,.2f}'.format(x.owed_this_month) }} · collected on earlier work ${{ '{:,.2f}'.format(x.owed_from_earlier) }}</div>
+          {% endif %}</td>
       </tr>
-    {% else %}
-      <tr><td colspan="10" class="mut">No data.</td></tr>
+      <tr class="detail {{ g.css }}" id="{{ rid }}" hidden><td colspan="{{ ncol }}">
+        <div class="dwrap">
+          <div class="dcol">
+            <h4>Where "owed now" comes from</h4>
+            <table class="brk">
+              <tr><td>Earned in {{ months[-1] }}</td><td class="num">${{ '{:,.2f}'.format(x.earned_latest) }}</td></tr>
+              <tr class="sub"><td>released so far ({{ '%.0f'|format(x.frac_latest) }}% of that month's invoices paid)</td><td class="num">${{ '{:,.2f}'.format(x.owed_this_month) }}</td></tr>
+              <tr><td>Earlier months, released since the last payment</td><td class="num">${{ '{:,.2f}'.format(x.owed_from_earlier) }}</td></tr>
+              <tr class="sum"><td>Owed now</td><td class="num">${{ '{:,.2f}'.format(x.payable_now) }}</td></tr>
+              <tr class="note"><td>Earned, still waiting on customers</td><td class="num">${{ '{:,.2f}'.format(x.unreleased) }}</td></tr>
+              <tr class="note"><td>Paid to date</td><td class="num">${{ '{:,.2f}'.format(x.paid) }}</td></tr>
+            </table>
+          </div>
+          <div class="dcol wide">
+            <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:8px">
+              <h4 style="margin:0">Collection statement</h4>
+              <span class="flt" data-for="{{ rid }}">
+                <a href="javascript:void(0)" class="on" onclick="flt('{{ rid }}','all',this)">All</a>
+                <a href="javascript:void(0)" onclick="flt('{{ rid }}','miss',this)">Missing</a>
+                <a href="javascript:void(0)" onclick="flt('{{ rid }}','ok',this)">Collected</a>
+              </span>
+            </div>
+            {% for st in x.statement %}
+            <div class="mo">
+              <div class="mohead"><b>{{ st.label }}</b>
+                <span class="mut">billed ${{ '{:,.0f}'.format(st.billed) }} · collected ${{ '{:,.0f}'.format(st.collected) }} ({{ '%.0f'|format(st.collected_pct) }}%) ·
+                <span style="color:#c0392b">missing ${{ '{:,.0f}'.format(st.unpaid_amount) }}</span> in {{ st.n_unpaid }} invoices</span>
+                <span class="mut" style="margin-left:auto">earned ${{ '{:,.2f}'.format(st.earned) }} → collectable ${{ '{:,.2f}'.format(st.collectable) }} · paid ${{ '{:,.2f}'.format(st.paid) }} · <b style="color:var(--ink)">owed ${{ '{:,.2f}'.format(st.owed) }}</b></span></div>
+              <div class="scroll">
+              <table class="stmt">
+                <colgroup><col class="d"><col class="i"><col><col class="a"><col class="s"></colgroup>
+                <thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th class="num">Amount</th><th>Status</th></tr></thead>
+                <tbody>
+                {% for i in st.invoices %}
+                  <tr class="{{ 'ok' if i.paid else 'miss' }}">
+                    <td class="mut">{{ i.date.strftime('%b %-d') }}</td><td>{{ i.sop_number }}</td>
+                    <td class="cust" title="{{ i.customer }}">{{ i.customer }}</td><td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
+                    <td>{% if i.written_off %}<span class="st wo">written off</span>{% elif i.paid %}<span class="st ok">collected</span>{% else %}<span class="st miss">missing</span>{% endif %}</td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+              </div>
+              {% if st.n_invoices > st.invoices|length %}<p class="hint" style="margin:6px 0 0">Latest {{ st.invoices|length }} of {{ st.n_invoices }} —
+                <a href="/pay/{{ x.associate }}">full audit page</a></p>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </td></tr>
+      {% endfor %}
     {% endfor %}
     </tbody>
     {% if rows %}

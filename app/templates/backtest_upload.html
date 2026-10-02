@@ -1,39 +1,84 @@
 {% extends "backtest_base.html" %}{% block body %}
-<div class="card" style="max-width:680px">
-  <h2>Import — monthly data drop</h2>
-  <p class="hint">Three files, same as always (from Dynamics GP). The sales importer here keeps <b>every</b>
-    invoice — rows from staff who left carry no bonus credit but preserve each account's true history, so
-    inherited accounts never show phantom growth. Re-uploading a file safely replaces what it covers.
-    {% if imported_at %}<br>Data now: <b>{{ '{:,}'.format(n_lines) }}</b> sales lines (last import
-    {{ imported_at.strftime('%Y-%m-%d %H:%M') }} UTC) · <b>{{ '{:,}'.format(n_collected) }}</b> collected invoices.{% endif %}</p>
-
+<style>
+  .drops{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:6px}
+  .drop{border:1px solid var(--line);border-radius:12px;padding:18px 18px 16px;background:#fff;display:flex;flex-direction:column;gap:10px}
+  .drop .step{font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--purple);text-transform:uppercase}
+  .drop h3{margin:0;font-size:15px}
+  .drop .what{color:var(--muted);font-size:12.5px;line-height:1.5;margin:0;flex:1}
+  .drop .state{font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+  .drop .state b{color:var(--ink)}
+  .pick{display:flex;align-items:center;gap:10px}
+  .pick input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+  .pick label{cursor:pointer;border:1px dashed #b9b3d0;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--purple);background:var(--accent-soft);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pick label.has{border-style:solid;color:var(--ink);background:#fff}
+  .pick button{white-space:nowrap}
+  .msg{margin:0 0 14px}
+  details.how{margin-top:16px;font-size:12.5px;color:var(--muted)} details.how summary{cursor:pointer;color:var(--blue)}
+  details.how ul{margin:8px 0 0 18px;line-height:1.6}
+</style>
+<div class="card">
+  <h2>Import — the monthly data drop</h2>
+  <p class="hint">Three exports from Dynamics GP. Drop each one in its box; re-uploading is always safe.</p>
   {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
-  <h3>1 · Sales invoices (XLSX)</h3>
-  <p class="hint">The item-level invoices export. If it has a <b>Void Status</b> column, voided invoices are
-    excluded and recorded automatically.</p>
-  <form method="post" action="/upload" enctype="multipart/form-data" style="margin-bottom:18px">
-    <input type="file" name="sales_file" accept=".xlsx,.XLSX" required>
-    <button type="submit">Import sales</button>
-  </form>
-
   {% if ar_msg %}<div class="msg">{{ ar_msg }}</div>{% endif %}
-  <h3>2 · Paid invoices / receivables (XLSX)</h3>
-  <p class="hint">The <b>paid</b> report — one month or the whole cumulative file, in any order. Each upload
-    <b>adds</b> its paid invoices to what is already recorded; nothing from other months is lost. (An invoice
-    that was paid and later reversed drops back out when a file covering its month no longer lists it.) Drives
-    the <b>Payable now</b> column.</p>
-  <form method="post" action="/upload-receivables" enctype="multipart/form-data" style="margin-bottom:18px">
-    <input type="file" name="ar_file" accept=".xlsx,.XLSX" required>
-    <button type="submit">Import paid</button>
-  </form>
-
   {% if void_msg %}<div class="msg">{{ void_msg }}</div>{% endif %}
-  <h3>3 · Voided invoices (XLSX)</h3>
-  <p class="hint">Must include a <b>Void Status</b> column (a file without one is rejected). Voided invoices
-    count toward nothing.</p>
-  <form method="post" action="/upload-voided" enctype="multipart/form-data">
-    <input type="file" name="voided_file" accept=".xlsx,.XLSX" required>
-    <button type="submit">Import voided</button>
-  </form>
+
+  <div class="drops">
+    <form class="drop" method="post" action="/upload" enctype="multipart/form-data">
+      <div class="step">Step 1</div>
+      <h3>Sales invoices</h3>
+      <p class="what">The item-level invoice export. Every invoice is kept — it's each account's history — and
+        an invoice already on file is replaced by the newer copy.</p>
+      <div class="pick">
+        <input type="file" id="f1" name="sales_file" accept=".xlsx,.XLSX" required onchange="picked(this)">
+        <label for="f1">Choose the sales XLSX…</label>
+        <button type="submit">Import</button>
+      </div>
+      <div class="state">On file: <b>{{ '{:,}'.format(n_lines) }}</b> lines{% if imported_at %} · last import <b>{{ imported_at.strftime('%b %-d, %Y') }}</b>{% endif %}
+        {% if data_to %}· data through <b>{{ data_to.strftime('%b %-d, %Y') }}</b>{% endif %}</div>
+    </form>
+
+    <form class="drop" method="post" action="/upload-receivables" enctype="multipart/form-data">
+      <div class="step">Step 2</div>
+      <h3>Paid invoices</h3>
+      <p class="what">The receivables / paid report — one month or the whole cumulative file, in any order.
+        Each upload <b>adds</b> what it lists; it never erases other months. This is what releases pay.</p>
+      <div class="pick">
+        <input type="file" id="f2" name="ar_file" accept=".xlsx,.XLSX" required onchange="picked(this)">
+        <label for="f2">Choose the paid XLSX…</label>
+        <button type="submit">Import</button>
+      </div>
+      <div class="state">On file: <b>{{ '{:,}'.format(n_collected) }}</b> paid invoices{% if collected_at %} · last upload <b>{{ collected_at.strftime('%b %-d, %Y') }}</b>{% endif %}</div>
+    </form>
+
+    <form class="drop" method="post" action="/upload-voided" enctype="multipart/form-data">
+      <div class="step">Step 3</div>
+      <h3>Voided invoices</h3>
+      <p class="what">Any export with a <b>Void Status</b> column. Voided invoices count toward nothing —
+        no contribution, no growth, no collection.</p>
+      <div class="pick">
+        <input type="file" id="f3" name="voided_file" accept=".xlsx,.XLSX" required onchange="picked(this)">
+        <label for="f3">Choose the voided XLSX…</label>
+        <button type="submit">Import</button>
+      </div>
+      <div class="state">On file: <b>{{ '{:,}'.format(n_voided) }}</b> voided invoices{% if voided_at %} · last upload <b>{{ voided_at.strftime('%b %-d, %Y') }}</b>{% endif %}</div>
+    </form>
+  </div>
+
+  <details class="how">
+    <summary>What happens on import</summary>
+    <ul>
+      <li><b>Sales:</b> rows from staff who have left are kept with no bonus credit, so inherited accounts have a
+        real history and never show phantom growth. If the file has a Void Status column, voided invoices are
+        excluded and recorded in one go.</li>
+      <li><b>Paid:</b> matched to sales by invoice number. If a file fully covers a month and an invoice we held
+        as paid is no longer in it, that payment was reversed — it drops out and its bonus claws back. A month the
+        file doesn't cover is left alone.</li>
+      <li><b>After any import</b> the dashboard, pay figures and account lists recompute on the next page load.</li>
+    </ul>
+  </details>
 </div>
+<script>
+function picked(inp){var l=inp.nextElementSibling;if(inp.files&&inp.files[0]){l.textContent=inp.files[0].name;l.classList.add('has');}}
+</script>
 {% endblock %}

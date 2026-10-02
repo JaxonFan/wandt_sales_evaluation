@@ -181,6 +181,37 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
             carried=tot.get("owed_prior", 0.0), unreleased=tot.get("unreleased", 0.0),
         ))
     rows.sort(key=lambda z: (z["team"] is None, z["team"] or "", -z["earned_cycle"]))
+
+    # --- what's behind each rep's number, expandable on the row ---
+    # The ledger is per MONTH, so "owed now" splits naturally: the part from the latest month's earnings
+    # (its invoices paid so far) vs earlier months whose invoices have since been collected.
+    latest = months[-1]
+    for x in rows:
+        rep = x["associate"]
+        detail = service.rep_pay_detail(db, rep, show="all") or dict(months=[])
+        mrows = detail["months"]                                   # newest first
+        cur = next((m for m in mrows if m["month"] == latest), None)
+        x["owed_this_month"] = cur["owed"] if cur else 0.0
+        x["owed_from_earlier"] = sum(m["owed"] for m in mrows if m["month"] != latest)
+        x["earned_latest"] = cur["earned"] if cur else 0.0
+        x["frac_latest"] = cur["collected_pct"] if cur else 0.0
+        x["statement"] = [dict(m, invoices=m["invoices"][:200]) for m in mrows]
+
+    # group by team for display: a colored header row per team, members beneath it
+    palette = {"Team 1": "t1", "Team 2": "t2"}
+    groups = []
+    for x in rows:
+        key = x["team"] or "House"
+        g = next((g for g in groups if g["team"] == key), None)
+        if g is None:
+            g = dict(team=key, css=palette.get(key, "house"), rows=[],
+                     members=r.get("team_members", {}).get(key, []))
+            groups.append(g)
+        g["rows"].append(x)
+    for g in groups:
+        g["sub"] = {k: sum(z[k] for z in g["rows"]) for k in
+                    ("pay_mo", "contrib_mo", "acq_mo", "total_mo", "earned_all", "paid", "payable_now")}
+        g["sub"]["n_items"] = sum(z["n_items"] for z in g["rows"])
     team_row = {k: sum(z[k] for z in rows) for k in
                 ("pay_mo", "cum_pay", "contrib_mo", "acq_mo", "total_mo", "earned_cycle", "earned_all",
                  "paid", "payable_now", "carried", "unreleased")}
@@ -191,7 +222,7 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
                n=mi + 1, total=len(months))
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
-        "rows": rows, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
+        "rows": rows, "groups": groups, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
         "unassigned": service.unassigned_summary(db),
         "is_latest": (mi == len(months) - 1), "growth_active": growth_active,
         "ledger": ledger, "payments": [
@@ -276,7 +307,7 @@ def ledger_page(request: Request):
 
 # ---------- one rep's pay, invoice by invoice: where every number came from ----------
 @app.get("/pay/{name}", response_class=HTMLResponse)
-def pay_detail(request: Request, name: str, show: str = "unpaid", db: Session = Depends(get_db)):
+def pay_detail(request: Request, name: str, show: str = "all", db: Session = Depends(get_db)):
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
@@ -535,16 +566,24 @@ async def settings_save(request: Request, db: Session = Depends(get_db)):
 
 
 # ---------- import (the FIXED importer — keeps every invoice) + AR + voided ----------
+def _upload_state(db):
+    """Facts for the import boxes: what's on file and when it last changed, per file type."""
+    from sqlalchemy import func as F
+    lines, last_import = db.query(F.count(M.SalesLine.id), F.max(M.SalesLine.imported_at)).one()
+    data_to = db.query(F.max(M.SalesLine.document_date)).scalar()
+    n_coll, coll_at = db.query(F.count(M.CollectedInvoice.sop_number), F.max(M.CollectedInvoice.reported_at)).one()
+    n_void, void_at = db.query(F.count(M.VoidedInvoice.sop_number), F.max(M.VoidedInvoice.reported_at)).one()
+    return dict(n_lines=int(lines or 0), imported_at=last_import, data_to=data_to,
+                n_collected=int(n_coll or 0), collected_at=coll_at, n_voided=int(n_void or 0), voided_at=void_at)
+
+
 @app.get("/upload", response_class=HTMLResponse)
 def upload_form(request: Request, db: Session = Depends(get_db)):
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    last = db.query(M.SalesLine).order_by(M.SalesLine.imported_at.desc()).first()
-    return templates.TemplateResponse("backtest_upload.html", {
-        "request": request, "user": user, "page": "upload",
-        "imported_at": last.imported_at if last else None,
-        "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
+    return templates.TemplateResponse("backtest_upload.html", dict(
+        _upload_state(db), request=request, user=user, page="upload"))
 
 
 @app.post("/upload")
@@ -555,10 +594,10 @@ async def upload_sales(request: Request, sales_file: UploadFile = File(...), db:
     raw = pd.read_excel(io.BytesIO(await sales_file.read()))
     res = service.import_sales_frame(db, raw)          # shared FIXED importer
     extra = f"; excluded {res['voided']:,} voided invoices" if res["has_void_col"] else ""
-    return templates.TemplateResponse("backtest_upload.html", {"request": request, "user": user, "page": "upload",
-        "msg": f"Imported {res['lines']:,} sales lines across {res['orders']:,} orders "
-               f"({res['tracked']:,} credited to tracked reps; the rest are history-only){extra}.",
-        "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
+    return templates.TemplateResponse("backtest_upload.html", dict(
+        _upload_state(db), request=request, user=user, page="upload",
+        msg=f"Imported {res['lines']:,} sales lines across {res['orders']:,} orders "
+            f"({res['tracked']:,} credited to tracked reps; the rest are history-only){extra}."))
 
 
 @app.post("/upload-receivables")
@@ -572,8 +611,8 @@ async def upload_receivables(request: Request, ar_file: UploadFile = File(...), 
         msg = "No invoice-number column (Document / Invoice / SOP Number) found in the paid file."
     else:
         msg = service.collected_upload_message(res) + " Payable-now updates on the dashboard."
-    return templates.TemplateResponse("backtest_upload.html", {"request": request, "user": user, "page": "upload",
-        "ar_msg": msg, "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
+    return templates.TemplateResponse("backtest_upload.html", dict(
+        _upload_state(db), request=request, user=user, page="upload", ar_msg=msg))
 
 
 @app.post("/upload-voided")
@@ -596,8 +635,8 @@ async def upload_voided(request: Request, voided_file: UploadFile = File(...), d
         db.commit()
         service._ENGINE_CACHE.clear()
         msg = f"Recorded {len(voided):,} voided invoices (snapshot). They count toward nothing."
-    return templates.TemplateResponse("backtest_upload.html", {"request": request, "user": user, "page": "upload",
-        "void_msg": msg, "n_lines": db.query(M.SalesLine).count(), "n_collected": db.query(M.CollectedInvoice).count()})
+    return templates.TemplateResponse("backtest_upload.html", dict(
+        _upload_state(db), request=request, user=user, page="upload", void_msg=msg))
 
 
 # ---------- limited stock (constrained items — shared table with the main app) ----------

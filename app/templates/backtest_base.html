@@ -2,79 +2,105 @@
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>W&T Sales Scorecard</title>
 <style>
-  :root{--bg:#f4f6f9;--card:#fff;--ink:#1f2733;--muted:#6b7785;--line:#e6ebf1;
-        --green:#1a9e5c;--green-bg:#e7f6ee;--red:#d63b3b;--blue:#2b6cb0;--blue-bg:#e8f1fb;
-        --amber:#c98a00;--amber-bg:#fbf2dd;--purple:#6b46c1;--purple-bg:#efe9fb;}
-  *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
-  header{background:#2a1d4d;color:#fff;padding:13px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-  header .brand{font-weight:600;font-size:16px}
-  header .tag{background:var(--purple-bg);color:var(--purple);border-radius:20px;padding:2px 11px;font-size:11.5px;font-weight:700}
-  header nav a{color:#bfb3e0;text-decoration:none;font-size:13.5px;margin-right:14px}
-  header nav a:hover,header nav a.on{color:#fff}
-  header .right{margin-left:auto;font-size:12.5px;color:#bfb3e0}
-  header .right a{color:#bfb3e0}
-  .wrap{max-width:1220px;margin:0 auto;padding:20px 18px 60px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
-  h2{margin:0 0 4px;font-size:16px} h3{margin:14px 0 4px;font-size:14px}
+  :root{--paper:#F6F7F8;--card:#fff;--ink:#18201C;--muted:#727C77;--line:#EBEDEC;--line-2:#E1E4E3;
+        --accent:#5A48B6;--accent-2:#46379A;--accent-soft:#EFEBFA;
+        --green:#1F9D57;--green-bg:#E9F6EF;--red:#C43D3D;--red-bg:#FBEAEA;--blue:#2B6CB0;--blue-bg:#E8F1FB;
+        --warm:#C0682B;--warm-bg:#FBEEE2;--amber:#C0682B;--amber-bg:#FBEEE2;--purple:#5A48B6;--purple-bg:#EFEBFA;
+        --bg:#F6F7F8;--r:10px;--r-lg:14px;
+        --shadow:0 1px 2px rgba(20,30,24,.04),0 1px 3px rgba(20,30,24,.06);--shadow-lg:0 8px 30px rgba(20,30,24,.10)}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+       background:var(--paper);color:var(--ink);font-size:14px;line-height:1.5;display:flex;min-height:100vh}
+  a{color:var(--accent-2)}
+  /* ---- left sidebar ---- */
+  #sidebar{width:196px;flex-shrink:0;background:var(--card);border-right:1px solid var(--line);padding:18px 12px;position:sticky;top:0;height:100vh;overflow-y:auto}
+  #sidebar .brand{font-size:16px;font-weight:800;letter-spacing:-.01em;padding:4px 10px 6px;white-space:nowrap}
+  #sidebar .brandsub{font-size:11.5px;color:var(--muted);padding:0 10px 16px}
+  #sidebar .tab{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;font-weight:500;color:var(--muted);text-decoration:none;margin-bottom:2px;font-size:14px;transition:background .12s,color .12s}
+  #sidebar .tab:hover{background:var(--paper);color:var(--ink)}
+  #sidebar .tab.on{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
+  #sidebar .navlabel{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 12px 4px}
+  #sidebar .me{margin-top:auto;padding:14px 12px 0;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  #sidebar .me b{color:var(--ink);display:block;margin-bottom:2px}
+  #sidebar{display:flex;flex-direction:column}
+  /* ---- content ---- */
+  #content{flex:1;min-width:0}
+  .topbar{display:flex;align-items:center;gap:12px;padding:16px 28px 0;flex-wrap:wrap}
+  .topbar h1{font-size:18px;margin:0;font-weight:700;letter-spacing:-.01em}
+  .wrap{max-width:1240px;margin:0 auto;padding:14px 28px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px 22px;margin-bottom:16px;box-shadow:var(--shadow);overflow-x:auto}
+  h2{margin:0 0 4px;font-size:15.5px;font-weight:700} h3{margin:14px 0 6px;font-size:13.5px;font-weight:700}
   .hint{color:var(--muted);font-size:12.5px;margin:0 0 12px;line-height:1.55}
-  .card{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:13.5px}
   th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
-  th{color:var(--muted);font-weight:600;font-size:12px}
+  th{color:var(--muted);font-weight:600;font-size:11.5px;letter-spacing:.02em;text-transform:uppercase}
   td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-  tfoot th{border-top:2px solid var(--line);color:var(--ink);font-size:13px}
+  tfoot th{border-top:2px solid var(--line-2);color:var(--ink);font-size:13px;text-transform:none;letter-spacing:0}
   .pos{color:var(--green)} .neg{color:var(--red)} .mut{color:var(--muted)}
-  .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:700}
-  .b-ok{background:var(--green-bg);color:var(--green)} .b-warn{background:var(--amber-bg);color:var(--amber)}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--paper);color:var(--muted)}
+  .b-ok{background:var(--green-bg);color:var(--green)} .b-warn{background:var(--warm-bg);color:var(--warm)}
   .b-new{background:var(--blue-bg);color:var(--blue)}
   .pbar{display:flex;align-items:center;gap:14px}
-  .pbar .mid{text-align:center;flex:1} .pbar .ttl{font-size:15px;font-weight:600}
-  .pnav{display:inline-block;padding:6px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--blue);text-decoration:none;font-size:13px;font-weight:600}
-  .pnav:hover{background:var(--blue-bg)} .pnav.dis{color:#b8c2cf;background:#f7f9fb;pointer-events:none}
-  .psel{font-size:12.5px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:#fff}
-  input[type=file]{font-size:13px}
-  button{padding:6px 13px;border:1px solid var(--blue);background:var(--blue);color:#fff;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600}
-  button.ghost{background:#fff;color:#445;border-color:var(--line)}
-  button:disabled,button.ghost:disabled{background:#eef1f5;color:#aab4c0;border-color:var(--line);cursor:not-allowed;opacity:.75}
-  .msg{background:var(--green-bg);color:var(--green);border-radius:8px;padding:9px 13px;font-size:13px;margin:0 0 12px}
-  .guide-body{font-size:13.5px;line-height:1.7;max-width:800px}
-  .guide-body code{background:#f0f2f6;border-radius:4px;padding:1px 5px}
+  .pbar .mid{text-align:center;flex:1} .pbar .ttl{font-size:15px;font-weight:700}
+  .pnav{display:inline-block;padding:7px 14px;border:1px solid var(--line-2);border-radius:9px;background:var(--card);color:var(--ink);text-decoration:none;font-size:13px;font-weight:500;box-shadow:var(--shadow)}
+  .pnav:hover{border-color:var(--accent);color:var(--accent-2)} .pnav.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .pnav.dis{color:#b8c2cf;background:var(--paper);box-shadow:none;pointer-events:none}
+  .psel,select{font-size:13px;padding:6px 10px;border:1px solid var(--line-2);border-radius:9px;background:var(--card);color:var(--ink)}
+  input[type=text],input[type=password],input[type=number],input:not([type]){font-size:13.5px;padding:7px 10px;border:1px solid var(--line-2);border-radius:9px;background:var(--card);color:var(--ink)}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  button{padding:7px 14px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:var(--shadow)}
+  button:hover{background:var(--accent-2);border-color:var(--accent-2)}
+  button.ghost{background:var(--card);color:var(--ink);border-color:var(--line-2)} button.ghost:hover{border-color:var(--accent);color:var(--accent-2);background:var(--card)}
+  button:disabled,button.ghost:disabled{background:var(--paper);color:#aab4c0;border-color:var(--line);cursor:not-allowed;box-shadow:none}
+  .msg{background:var(--green-bg);color:var(--green);border-radius:var(--r);padding:9px 13px;font-size:13px;margin:0 0 12px}
+  .guide-body{font-size:13.5px;line-height:1.7;max-width:820px}
+  .guide-body code{background:var(--paper);border-radius:4px;padding:1px 5px}
   footer{color:var(--muted);font-size:11.5px;text-align:center;padding:14px}
+  .kpi{display:inline-block;border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:0 10px 8px 0;min-width:150px;vertical-align:top;background:var(--card);box-shadow:var(--shadow)}
+  .kpi .label{font-size:12px;color:var(--muted)} .kpi .val{font-size:24px;font-weight:700;margin-top:3px;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+  .kpi.primary{background:var(--ink);border-color:var(--ink)} .kpi.primary .label{color:#b9c2bd} .kpi.primary .val{color:#fff}
+  .subtabs{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
+  .subtabs a{padding:5px 13px;border:1px solid var(--line-2);border-radius:999px;font-size:12.5px;color:var(--muted);text-decoration:none;background:var(--card);transition:all .12s}
+  .subtabs a:hover{border-color:var(--accent);color:var(--accent-2)} .subtabs a.on{background:var(--ink);border-color:var(--ink);color:#fff}
   /* rep mode: larger + CJK-friendly */
-  body.big{font-size:16px;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC","Segoe UI",Roboto,Arial,sans-serif}
-  body.big .wrap{max-width:860px}
-  body.big header nav a{font-size:16px} body.big header .brand{font-size:18px}
+  body.big{font-size:16px}
+  body.big .wrap{max-width:900px}
+  body.big #sidebar .tab{font-size:15.5px}
   body.big h2{font-size:20px} body.big .hint{font-size:14.5px;line-height:1.7}
-  body.big table{font-size:15.5px} body.big th{font-size:13px}
+  body.big table{font-size:15.5px} body.big th{font-size:12.5px}
   body.big .kpi .val{font-size:28px}
   body.big .guide-body{font-size:15.5px;line-height:1.8}
-  .kpi{display:inline-block;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:0 10px 8px 0;min-width:140px;vertical-align:top}
-  .kpi .label{font-size:12px;color:var(--muted)} .kpi .val{font-size:24px;font-weight:700;margin-top:3px}
-  .subtabs{margin:-4px 0 14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
-  .subtabs a{display:inline-block;margin-right:16px;font-size:13.5px;text-decoration:none;color:var(--muted);padding-bottom:6px}
-  .subtabs a.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--purple)}
-  .kpi.primary{background:#2a1d4d;border-color:#2a1d4d} .kpi.primary .label{color:#bfb3e0} .kpi.primary .val{color:#fff}
+  @media (max-width:820px){body{flex-direction:column} #sidebar{width:auto;height:auto;position:static;flex-direction:row;flex-wrap:wrap;gap:4px;padding:10px} #sidebar .brand,#sidebar .brandsub,#sidebar .navlabel,#sidebar .me{display:none} .wrap,.topbar{padding-left:14px;padding-right:14px}}
 </style></head><body class="{{ 'big' if user and user.role == 'rep' else '' }}">
-<header>
-  <span class="brand">W&T Sales Scorecard</span>
-  <nav>
-    {% if user.role == 'rep' %}
-    <a href="/me" class="{{ 'on' if page=='me' }}">我的奖金</a>
-    <a href="/me/watch" class="{{ 'on' if page in ['mewatch','mequiet'] }}">需要跟进的客户</a>
-    <a href="/me/guide" class="{{ 'on' if page=='repguide' }}">奖金怎么算</a>
-    <a href="/account" class="{{ 'on' if page=='account' }}">修改密码</a>
-    {% else %}
-    <a href="/" class="{{ 'on' if page in ['dash','pay'] }}">Dashboard</a>
-    <a href="/accounts" class="{{ 'on' if page=='accounts' }}">Accounts</a>
-    <a href="/underperformers" class="{{ 'on' if page in ['under','acq','quiet'] }}">Needs review</a>
-    <a href="/constrained" class="{{ 'on' if page=='stock' }}">Limited stock</a>
-    <a href="/upload" class="{{ 'on' if page=='upload' }}">Import</a>
-    <a href="/settings" class="{{ 'on' if page in ['settings','logins','account'] }}">Settings</a>
-    <a href="/guide" class="{{ 'on' if page in ['guide','repguide'] }}">Guide</a>
-    {% endif %}
-  </nav>
-  <span class="right">{{ user.username }} · <a href="/logout">log out</a></span>
-</header>
+{% set titles = {'dash':'Dashboard','pay':'Pay audit','accounts':'Accounts','under':'Needs review','quiet':'Needs review','acq':'Needs review',
+                 'stock':'Limited stock','upload':'Import','settings':'Settings','logins':'Settings','account':'Settings','guide':'Guide','repguide':'Guide',
+                 'me':'我的奖金','mewatch':'需要跟进的客户','mequiet':'需要跟进的客户'} %}
+<nav id="sidebar">
+  <div class="brand">W&T Scorecard</div>
+  <div class="brandsub">{{ '销售奖金' if user.role == 'rep' else 'Sales incentive' }}</div>
+  {% if user.role == 'rep' %}
+  <a href="/me" class="tab {{ 'on' if page=='me' }}">我的奖金</a>
+  <a href="/me/watch" class="tab {{ 'on' if page in ['mewatch','mequiet'] }}">需要跟进的客户</a>
+  <a href="/me/guide" class="tab {{ 'on' if page=='repguide' }}">奖金怎么算</a>
+  <a href="/account" class="tab {{ 'on' if page=='account' }}">修改密码</a>
+  {% else %}
+  <div class="navlabel">Pay</div>
+  <a href="/" class="tab {{ 'on' if page in ['dash','pay'] }}">Dashboard</a>
+  <div class="navlabel">Accounts</div>
+  <a href="/accounts" class="tab {{ 'on' if page=='accounts' }}">Assignment</a>
+  <a href="/underperformers" class="tab {{ 'on' if page in ['under','acq','quiet'] }}">Needs review</a>
+  <a href="/constrained" class="tab {{ 'on' if page=='stock' }}">Limited stock</a>
+  <div class="navlabel">Admin</div>
+  <a href="/upload" class="tab {{ 'on' if page=='upload' }}">Import</a>
+  <a href="/settings" class="tab {{ 'on' if page in ['settings','logins','account'] }}">Settings</a>
+  <a href="/guide" class="tab {{ 'on' if page in ['guide','repguide'] }}">Guide</a>
+  {% endif %}
+  <div class="me"><b>{{ user.username }}</b><a href="/logout">log out</a></div>
+</nav>
+<div id="content">
+<div class="topbar"><h1>{{ titles.get(page, 'W&T Scorecard') }}</h1></div>
 <div class="wrap">{% block body %}{% endblock %}</div>
-<footer>W&T Sales Scorecard · profit-growth model · decision support — the manager sets the final award</footer>
+<footer>W&T Sales Scorecard · decision support — the manager sets the final award</footer>
+</div>
 </body></html>

@@ -1,89 +1,119 @@
 {% extends "backtest_base.html" %}{% block body %}
+<style>
+  table.audit{font-size:12.5px} table.audit th,table.audit td{padding:8px 8px;white-space:nowrap}
+  table.audit td.num,table.audit th.num{text-align:right;font-variant-numeric:tabular-nums}
+  table.audit tr.tot th{border-top:2px solid var(--ink)}
+  .mo{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+  .mohead{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
+  .mohead h3{margin:0;font-size:15px}
+  .math{display:inline-flex;gap:14px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+  .math b{color:var(--ink)}
+  .flt a{font-size:12.5px;color:var(--muted);text-decoration:none;margin-right:12px;padding-bottom:2px} .flt a.on{color:var(--ink);font-weight:700;border-bottom:2px solid var(--purple)}
+  .scroll{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+  table.stmt{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.stmt th{position:sticky;top:0;background:#f7f7fa;z-index:1;font-weight:600;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
+  table.stmt td{padding:6px 10px;border-bottom:1px solid #f0f0f3;white-space:nowrap}
+  table.stmt td.cust{max-width:420px;overflow:hidden;text-overflow:ellipsis}
+  table.stmt .num{text-align:right;font-variant-numeric:tabular-nums}
+  table.stmt col.d{width:80px} table.stmt col.i{width:120px} table.stmt col.l{width:60px} table.stmt col.a{width:100px} table.stmt col.s{width:110px}
+  .st{font-size:11px;padding:2px 8px;border-radius:9px;white-space:nowrap} .st.ok{background:#eaf7ee;color:#1e7b34} .st.miss{background:#fdecec;color:#c0392b} .st.wo{background:#eee;color:#555}
+  table.stmt tr.miss td.cust,table.stmt tr.miss td.num{color:#7a2a2a}
+</style>
 <div class="card">
-  <h2>{{ name }} — where the pay number comes from</h2>
-  <p class="hint">Every figure below is traceable to invoices. <b>Earned</b> is counted from the line items
-    written that month; <b>collected</b> is which of those invoices the receivables file says have been paid;
-    <b>owed</b> is what that makes payable right now. <a href="/">← back to the pay run</a></p>
+  <h2>{{ name }} — pay audit, month by month</h2>
+  <p class="hint">Each month stands on its own: what was earned in it, how much of <i>that month's</i> billing
+    the customers have paid, and therefore how much of that month's earnings has been released. Payments settle
+    the oldest month first. <a href="/">← back to the pay run</a></p>
   <div>
-    <div class="kpi"><div class="label">Earned, all chapters</div>
-      <div class="val">${{ '{:,.2f}'.format(totals.earned) }}</div></div>
-    <div class="kpi"><div class="label">Collected share</div>
-      <div class="val">${{ '{:,.2f}'.format(totals.collectable) }}</div></div>
-    <div class="kpi"><div class="label">Paid to date</div>
-      <div class="val">${{ '{:,.2f}'.format(totals.paid) }}</div></div>
-    <div class="kpi primary"><div class="label">Owed now</div>
-      <div class="val">${{ '{:,.2f}'.format(totals.owed) }}</div></div>
-    <div class="kpi"><div class="label">Waiting on collection</div>
-      <div class="val">${{ '{:,.2f}'.format(totals.unreleased) }}</div></div>
+    <div class="kpi"><div class="label">Earned, all months</div><div class="val">${{ '{:,.2f}'.format(totals.earned) }}</div></div>
+    <div class="kpi"><div class="label">Released by collection</div><div class="val">${{ '{:,.2f}'.format(totals.collectable) }}</div></div>
+    <div class="kpi"><div class="label">Paid to date</div><div class="val">${{ '{:,.2f}'.format(totals.paid) }}</div></div>
+    <div class="kpi primary"><div class="label">Owed now</div><div class="val">${{ '{:,.2f}'.format(totals.owed) }}</div></div>
+    <div class="kpi"><div class="label">Waiting on customers</div><div class="val">${{ '{:,.2f}'.format(totals.unreleased) }}</div></div>
   </div>
-</div>
 
-{% for c in chapters %}
-<div class="card">
-  <h2>{{ c.chapter }} <span class="mut" style="font-weight:400;font-size:13px">· {{ 'closed' if c.closed else 'open' }}</span></h2>
-
-  <h3>1 · What was earned</h3>
-  <table style="max-width:620px">
-    <thead><tr><th>Month</th><th class="num">Line items</th><th class="num">× rate</th><th class="num">Earned</th></tr></thead>
+  <h3 style="margin-top:14px">The math, one row per month</h3>
+  <table class="audit">
+    <thead><tr><th>Month</th>
+      <th class="num" title="line items × rate">Contribution</th><th class="num">Growth share</th><th class="num">New accounts</th>
+      <th class="num">= Earned</th>
+      <th class="num" title="collected / billed, that month's own invoices">Collected / billed</th><th class="num">%</th>
+      <th class="num" title="earned × collected %">= Released</th><th class="num">− Paid</th><th class="num">= Owed</th>
+      <th class="num" title="earned − released; moves to owed as invoices get paid">Waiting</th></tr></thead>
     <tbody>
-    {% for m in c.months %}
-      <tr><td>{{ m.month }}</td><td class="num">{{ '{:,}'.format(m.n_items) }}</td>
-        <td class="num mut">${{ '%.2f'|format(item_rate) }}</td>
-        <td class="num">${{ '{:,.2f}'.format(m.earned) }}</td></tr>
-    {% endfor %}
-    {% if c.growth > 0.005 %}<tr><td>Growth share (team)</td><td class="num mut">—</td><td class="num mut">—</td>
-      <td class="num">${{ '{:,.2f}'.format(c.growth) }}</td></tr>{% endif %}
-    {% if c.acquisition > 0.005 %}<tr><td>New-account bonuses</td><td class="num mut">—</td><td class="num mut">—</td>
-      <td class="num">${{ '{:,.2f}'.format(c.acquisition) }}</td></tr>{% endif %}
-    </tbody>
-    <tfoot><tr><th>Total earned</th><th class="num">{{ '{:,}'.format(c.n_items) }}</th><th></th>
-      <th class="num">${{ '{:,.2f}'.format(c.earned) }}</th></tr></tfoot>
-  </table>
-
-  <h3 style="margin-top:16px">2 · What the customers have paid</h3>
-  <p class="hint">{{ c.n_paid }} of {{ c.n_invoices }} invoices collected — <b>${{ '{:,.0f}'.format(c.collected) }}</b>
-    of <b>${{ '{:,.0f}'.format(c.billed) }}</b> billed = <b>{{ '%.1f'|format(c.collected_pct) }}%</b>.
-    <b>${{ '{:,.0f}'.format(c.unpaid_amount) }}</b> is still outstanding across {{ c.n_unpaid }} invoices.</p>
-  <div class="subtabs" style="margin-bottom:10px">
-    <a href="/pay/{{ name }}?show=unpaid" class="{{ 'on' if show=='unpaid' }}">Still unpaid ({{ c.n_unpaid }})</a>
-    <a href="/pay/{{ name }}?show=paid" class="{{ 'on' if show=='paid' }}">Collected ({{ c.n_paid }})</a>
-    <a href="/pay/{{ name }}?show=all" class="{{ 'on' if show=='all' }}">All ({{ c.n_invoices }})</a>
-  </div>
-  <table>
-    <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th class="num">Lines</th>
-      <th class="num">Amount</th><th>Status</th></tr></thead>
-    <tbody>
-    {% for i in c.invoices %}
+    {% for m in months %}
       <tr>
-        <td>{{ i.sop_number }}</td>
-        <td class="mut">{{ i.date.strftime('%Y-%m-%d') }}</td>
-        <td>{{ i.customer }}</td>
-        <td class="num mut">{{ i.lines }}</td>
-        <td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
-        <td>{% if i.written_off %}<span class="badge" style="background:#fdecec;color:#c0392b">written off</span>
-            {% elif i.paid %}<span class="badge" style="background:#eaf7ee;color:#1e7b34">collected</span>
-            {% else %}<span class="badge">outstanding</span>{% endif %}</td>
+        <td><b>{{ m.label }}</b></td>
+        <td class="num">${{ '{:,.2f}'.format(m.contribution) }} <span class="mut">({{ '{:,}'.format(m.n_items) }} × ${{ '%.2f'|format(item_rate) }})</span></td>
+        <td class="num">{% if m.growth > 0.005 %}${{ '{:,.2f}'.format(m.growth) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+        <td class="num">{% if m.acquisition > 0.005 %}${{ '{:,.2f}'.format(m.acquisition) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+        <td class="num"><b>${{ '{:,.2f}'.format(m.earned) }}</b></td>
+        <td class="num mut">${{ '{:,.0f}'.format(m.collected) }} <span style="opacity:.6">/ ${{ '{:,.0f}'.format(m.billed) }}</span></td>
+        <td class="num mut">{{ '%.1f'|format(m.collected_pct) }}%</td>
+        <td class="num">${{ '{:,.2f}'.format(m.collectable) }}</td>
+        <td class="num mut">${{ '{:,.2f}'.format(m.paid) }}</td>
+        <td class="num"><b>${{ '{:,.2f}'.format(m.owed) }}</b></td>
+        <td class="num mut">${{ '{:,.2f}'.format(m.unreleased) }}</td>
       </tr>
-    {% else %}
-      <tr><td colspan="6" class="mut">No invoices in this view.</td></tr>
     {% endfor %}
     </tbody>
+    <tfoot><tr class="tot"><th>Total</th>
+      <th class="num">${{ '{:,.2f}'.format(months|sum(attribute='contribution')) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(months|sum(attribute='growth')) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(months|sum(attribute='acquisition')) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(totals.earned) }}</th>
+      <th class="num">${{ '{:,.0f}'.format(months|sum(attribute='collected')) }} <span style="opacity:.6">/ ${{ '{:,.0f}'.format(months|sum(attribute='billed')) }}</span></th><th></th>
+      <th class="num">${{ '{:,.2f}'.format(totals.collectable) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(totals.paid) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(totals.owed) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(totals.unreleased) }}</th></tr></tfoot>
   </table>
-  {% if c.n_shown > c.invoices|length %}<p class="hint">Showing {{ c.invoices|length }} of {{ c.n_shown }}, largest first.</p>{% endif %}
-
-  <h3 style="margin-top:16px">3 · What that makes payable</h3>
-  <table style="max-width:620px">
-    <tr><td>Earned this chapter</td><td class="num">${{ '{:,.2f}'.format(c.earned) }}</td></tr>
-    <tr><td>× collected share ({{ '%.1f'|format(c.collected_pct) }}%)</td>
-      <td class="num">${{ '{:,.2f}'.format(c.collectable) }}</td></tr>
-    <tr><td>− already paid{% if c.payment %} <span class="mut">(recorded by {{ c.payment.by }}{% if c.payment.when %} on {{ c.payment.when.strftime('%Y-%m-%d') }}{% endif %})</span>{% endif %}</td>
-      <td class="num">−${{ '{:,.2f}'.format(c.paid) }}</td></tr>
-    <tr><th>= owed now</th><th class="num">${{ '{:,.2f}'.format(c.owed) }}</th></tr>
-    <tr><td class="mut">still waiting on customer payments</td>
-      <td class="num mut">${{ '{:,.2f}'.format(c.unreleased) }}</td></tr>
-  </table>
-  <p class="hint" style="margin-top:8px">The ${{ '{:,.2f}'.format(c.unreleased) }} is <b>not lost</b> — as the
-    outstanding invoices above get paid, it moves into "owed now", even after this chapter has closed.</p>
+  <p class="hint" style="margin-top:8px"><b>Released</b> = earned × the share of that month's own invoices that
+    have been paid. <b>Owed</b> = released − paid. A month with money in <b>Waiting</b> isn't finished — it keeps
+    releasing as its invoices get paid, whichever cycle we're in by then. Growth and new-account bonuses appear
+    in their own columns from October.</p>
 </div>
-{% endfor %}
+
+<div class="card">
+  <div style="display:flex;align-items:baseline;gap:16px">
+    <h2 style="margin:0">Invoices, month by month</h2>
+    <span class="flt">
+      <a href="/pay/{{ name }}?show=all" class="{{ 'on' if show=='all' }}">All</a>
+      <a href="/pay/{{ name }}?show=unpaid" class="{{ 'on' if show=='unpaid' }}">Missing</a>
+      <a href="/pay/{{ name }}?show=paid" class="{{ 'on' if show=='paid' }}">Collected</a>
+    </span>
+  </div>
+  {% for m in months %}
+  <div class="mo">
+    <div class="mohead">
+      <h3>{{ m.label }}</h3>
+      <span class="math">
+        <span>{{ m.n_paid }} of {{ m.n_invoices }} invoices paid</span>
+        <span>billed <b>${{ '{:,.0f}'.format(m.billed) }}</b></span>
+        <span>collected <b>${{ '{:,.0f}'.format(m.collected) }}</b> ({{ '%.1f'|format(m.collected_pct) }}%)</span>
+        <span>missing <b style="color:#c0392b">${{ '{:,.0f}'.format(m.unpaid_amount) }}</b></span>
+        {% if m.payment and m.paid > 0.005 %}<span>paid ${{ '{:,.2f}'.format(m.paid) }} · recorded by {{ m.payment.by }}{% if m.payment.when %} {{ m.payment.when.strftime('%b %-d') }}{% endif %}</span>{% endif %}
+      </span>
+    </div>
+    <div class="scroll">
+    <table class="stmt">
+      <colgroup><col class="d"><col class="i"><col><col class="l"><col class="a"><col class="s"></colgroup>
+      <thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th class="num">Lines</th><th class="num">Amount</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for i in m.invoices %}
+        <tr class="{{ 'ok' if i.paid else 'miss' }}">
+          <td class="mut">{{ i.date.strftime('%b %-d') }}</td><td>{{ i.sop_number }}</td>
+          <td class="cust" title="{{ i.customer }}">{{ i.customer }}</td>
+          <td class="num mut">{{ i.lines }}</td><td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
+          <td>{% if i.written_off %}<span class="st wo">written off</span>{% elif i.paid %}<span class="st ok">collected</span>{% else %}<span class="st miss">missing</span>{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="mut">No invoices in this view.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% endfor %}
+</div>
 {% endblock %}

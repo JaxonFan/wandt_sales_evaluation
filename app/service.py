@@ -958,23 +958,28 @@ def _chapter_growth(db, start, end, growth_active):
             young_account_months=int(s.get("young_account_months", 12)),
             constrained_item_numbers=get_constrained_items(db),
             teams=teams, account_team=account_team_map(db))
-        return {rep: float(rows[-1]["cum_pay"]) for rep, rows in res.get("rep_trajectory", {}).items() if rows}
+        return {rep: {row["month"]: float(row["pay"]) for row in rows}
+                for rep, rows in res.get("rep_trajectory", {}).items()}
 
     return _memo(("chapter_growth", _growth_version(db), str(start.date()), str(end.date())), _run)
 
 
 def pay_ledger(db):
-    """Per rep, per chapter: earned -> collectable -> paid -> still owed. The single source of truth for pay.
+    """Per rep, per MONTH: earned -> collectable -> paid -> still owed. The single source of truth for pay.
 
-    earned      = contribution (own line items) + acquisition (own landings) + growth (the rep's equal share
-                  of their team's growth pay for that chapter)
-    collected%  = the share of THAT chapter's billing by that rep which the receivables file says is paid
-    collectable = earned x collected%   (it RISES over time as old invoices pay, which is the whole point:
-                  a closed chapter keeps releasing money long after the chapter ends)
-    paid        = GrowthPayment.paid_cum for (rep, chapter start)
-    owed        = max(0, collectable - paid)       -- never negative, so a recomputation can't claw back
+    Everything is tracked by the month the sale was written in, so the manager can audit one month at a time:
+      earned_M      = contribution (own line items x rate) + acquisition (own landings) + growth (the rep's
+                      equal share of the team's growth pay for that month)
+      collected%_M  = the share of THAT MONTH's billing by that rep which the receivables file says is paid
+      collectable_M = earned_M x collected%_M   (rises as that month's invoices get paid — a month keeps
+                      releasing money long after it ends, even after the cycle rolls over)
+      paid_M        = the chapter's recorded payments spread across its months, oldest month first
+      owed_M        = max(0, collectable_M - paid_M)        -- never negative, never a clawback
+    A CHAPTER (the launch chapter, then one cycle a year) just groups months; payments are recorded per
+    chapter (GrowthPayment) and settle its months oldest-first.
 
-    Returns dict(chapters, rows={rep: [chapter rows]}, totals={rep: {...}})."""
+    Returns dict(chapters, rows={rep: [chapter rows, each with .months]}, months={rep: [month rows]},
+                 totals={rep: {...}})."""
     s = get_settings(db)
     item_rate = float(s["item_rate"])
     _, _, roster = attribution_maps(db)
@@ -984,31 +989,49 @@ def pay_ledger(db):
                  for p in db.query(M.GrowthPayment).all()}
     chapters = pay_chapters(db)
 
-    rows, totals = {rep: [] for rep in roster}, {}
+    rows, month_rows, totals = {rep: [] for rep in roster}, {rep: [] for rep in roster}, {}
     for ch in chapters:
         months = [str(m) for m in pd.period_range(ch["start"].to_period("M"), ch["end"].to_period("M"), freq="M")]
         contrib = contribution_by_rep_month(db, months, roster, item_rate)
         acq = acquisition_by_rep_month(db, months, roster, s)[0] if ch["growth_active"] else {}
         growth = _chapter_growth(db, ch["start"], ch["end"], ch["growth_active"])
         win = df[(df["document_date"] >= ch["start"]) & (df["document_date"] <= ch["end"])]
+        win = win.assign(ym=win["document_date"].dt.to_period("M").astype(str))
         for rep in roster:
             mine = win[win["associate"] == rep]
-            contribution = sum(contrib.get((rep, m), {}).get("bonus", 0.0) for m in months)
-            n_items = sum(contrib.get((rep, m), {}).get("n_items", 0) for m in months)
-            acquisition = sum(v for (r, m), v in acq.items() if r == rep and m in months)
-            earned = contribution + acquisition + float(growth.get(rep, 0.0))
-            billed = float(mine["extended_price"].sum())
-            got = float(mine[mine["sop_number"].astype(str).isin(collected)]["extended_price"].sum())
-            frac = min(1.0, got / billed) if billed > 0 else 0.0
             already = paid_rows.get((rep, ch["start"].date()), 0.0)
-            collectable = earned * frac
+            spread = already                                   # payments settle the oldest month first
+            mrows = []
+            for m in months:
+                in_month = mine[mine["ym"] == m]
+                c = contrib.get((rep, m), {})
+                contribution, n_items = c.get("bonus", 0.0), c.get("n_items", 0)
+                acquisition = acq.get((rep, m), 0.0)
+                g = float(growth.get(rep, {}).get(m, 0.0))
+                earned = contribution + acquisition + g
+                billed = float(in_month["extended_price"].sum())
+                got = float(in_month[in_month["sop_number"].astype(str).isin(collected)]["extended_price"].sum())
+                frac = min(1.0, got / billed) if billed > 0 else 0.0
+                collectable = earned * frac
+                paid_m = min(spread, collectable); spread -= paid_m
+                mrows.append(dict(month=m, chapter=ch["label"], chapter_start=ch["start"],
+                                  n_items=n_items, contribution=contribution, acquisition=acquisition,
+                                  growth=g, earned=earned, billed=billed, collected=got,
+                                  collected_pct=frac * 100.0, collectable=collectable, paid=paid_m,
+                                  owed=max(0.0, collectable - paid_m),
+                                  unreleased=max(0.0, earned - collectable)))
+            if spread > 0.005 and mrows:                        # paid more than any month can absorb (a reversal)
+                mrows[-1]["paid"] += spread
+            agg = lambda k: sum(r[k] for r in mrows)
+            collectable = agg("collectable")
             rows[rep].append(dict(
-                chapter=ch["label"], start=ch["start"], end=ch["end"], closed=ch["closed"],
-                n_items=n_items, contribution=contribution, acquisition=acquisition,
-                growth=float(growth.get(rep, 0.0)), earned=earned,
-                billed=billed, collected=got, collected_pct=frac * 100.0,
+                chapter=ch["label"], start=ch["start"], end=ch["end"], closed=ch["closed"], months=mrows,
+                n_items=agg("n_items"), contribution=agg("contribution"), acquisition=agg("acquisition"),
+                growth=agg("growth"), earned=agg("earned"), billed=agg("billed"), collected=agg("collected"),
+                collected_pct=(100.0 * agg("collected") / agg("billed")) if agg("billed") else 0.0,
                 collectable=collectable, paid=already, owed=max(0.0, collectable - already),
-                unreleased=max(0.0, earned - collectable)))
+                unreleased=agg("unreleased")))
+            month_rows[rep].extend(mrows)
     for rep in roster:
         mine = rows[rep]
         totals[rep] = dict(
@@ -1017,64 +1040,52 @@ def pay_ledger(db):
             unreleased=sum(r["unreleased"] for r in mine),
             owed_prior=sum(r["owed"] for r in mine[:-1]),          # everything but the current chapter
             owed_current=(mine[-1]["owed"] if mine else 0.0))
-    return dict(chapters=chapters, rows=rows, totals=totals)
+    return dict(chapters=chapters, rows=rows, months=month_rows, totals=totals)
 
 
-def rep_pay_detail(db, associate, show="unpaid"):
-    """Everything behind one rep's pay number, down to the invoice — so the manager can audit it, not trust it.
-
-    For each chapter: the earned side broken out by month (line items x rate, plus growth/acquisition), the
-    collected side as the ACTUAL INVOICE LIST (paid vs still outstanding, with dates, customers and amounts),
-    the payments recorded, and the arithmetic that ties them together. `show` filters the invoice list to
-    "unpaid" (the default — what is holding the money back), "paid", or "all"."""
+def rep_pay_detail(db, associate, show="all"):
+    """Everything behind one rep's pay number, month by month, down to the invoice — so the manager can audit
+    it rather than trust it. For each month: the pieces earned, the invoice list (collected vs missing, sorted
+    by date), and the arithmetic to owed. `show` filters the invoice lists: "unpaid", "paid", or "all"."""
     _, _, roster = attribution_maps(db)
     if associate not in roster:
         return None
     s = get_settings(db)
-    item_rate = float(s["item_rate"])
     ledger = pay_ledger(db)
     df = active_lines(db)
     collected = {str(x) for x in collected_set(db)}
     written_off = {str(x) for x in written_off_set(db)}
     names = customer_names(db)
-    payments = (db.query(M.GrowthPayment)
-                .filter(M.GrowthPayment.associate == associate)
-                .order_by(M.GrowthPayment.fiscal_start).all())
+    mine_all = df[df["associate"] == associate]
+    payments = {p.fiscal_start: p for p in db.query(M.GrowthPayment)
+                .filter(M.GrowthPayment.associate == associate).all()}
     users = {u.user_id: u.username for u in db.query(M.User).all()}
 
-    chapters = []
-    for row in ledger["rows"].get(associate, []):
-        window = df[(df["document_date"] >= row["start"]) & (df["document_date"] <= row["end"])
-                    & (df["associate"] == associate)]
-        months = []
-        if len(window):
-            per_month = window.assign(ym=window["document_date"].dt.to_period("M")).groupby("ym")
-            months = [dict(month=str(m), n_items=int(len(g)), earned=len(g) * item_rate,
-                           billed=float(g["extended_price"].sum()))
-                      for m, g in per_month]
+    months = []
+    for mr in ledger["months"].get(associate, []):
+        per = pd.Period(mr["month"], "M")
+        window = mine_all[(mine_all["document_date"] >= per.start_time) & (mine_all["document_date"] <= per.end_time)]
         invoices = []
         if len(window):
             per_invoice = window.groupby("sop_number").agg(
                 amount=("extended_price", "sum"), date=("document_date", "min"),
                 account=("account", "first"), lines=("sop_number", "size"))
             for sop, inv in per_invoice.iterrows():
-                paid = str(sop) in collected
                 invoices.append(dict(sop_number=str(sop), date=inv["date"], amount=float(inv["amount"]),
-                                     lines=int(inv["lines"]),
-                                     customer=names.get(inv["account"], inv["account"]),
-                                     paid=paid, written_off=(str(sop) in written_off)))
-            invoices.sort(key=lambda i: (i["paid"], -i["amount"]))
+                                     lines=int(inv["lines"]), customer=names.get(inv["account"], inv["account"]),
+                                     paid=(str(sop) in collected), written_off=(str(sop) in written_off)))
+            invoices.sort(key=lambda i: (i["date"], i["sop_number"]), reverse=True)   # newest first
         shown = [i for i in invoices
                  if show == "all" or (show == "unpaid" and not i["paid"]) or (show == "paid" and i["paid"])]
-        chapters.append(dict(row, months=months, invoices=shown[:400], n_invoices=len(invoices),
-                             n_shown=len(shown),
-                             n_paid=sum(1 for i in invoices if i["paid"]),
-                             n_unpaid=sum(1 for i in invoices if not i["paid"]),
-                             unpaid_amount=sum(i["amount"] for i in invoices if not i["paid"]),
-                             payment=next((dict(paid=float(p.paid_cum or 0.0), by=users.get(p.user_id, "—"),
-                                                when=p.updated_at)
-                                           for p in payments if p.fiscal_start == row["start"].date()), None)))
-    return dict(chapters=chapters, totals=ledger["totals"].get(associate, {}), item_rate=item_rate)
+        pay = payments.get(mr["chapter_start"].date())
+        months.append(dict(mr, label=per.strftime("%B %Y"), invoices=shown, n_invoices=len(invoices),
+                           n_paid=sum(1 for i in invoices if i["paid"]),
+                           n_unpaid=sum(1 for i in invoices if not i["paid"]),
+                           unpaid_amount=sum(i["amount"] for i in invoices if not i["paid"]),
+                           payment=(dict(by=users.get(pay.user_id, "—"), when=pay.updated_at) if pay else None)))
+    months.sort(key=lambda m: m["month"], reverse=True)       # newest month first
+    return dict(months=months, chapters=ledger["rows"].get(associate, []),
+                totals=ledger["totals"].get(associate, {}), item_rate=float(s["item_rate"]))
 
 
 def allocate_payment(db, associate, amount, user_id):

@@ -9,7 +9,7 @@
   </div>
   {% if months %}
   {% if not growth_active %}
-  <p class="hint" style="margin-top:6px;border-left:3px solid #6b46c1;padding:8px 12px;background:#faf8ff">
+  <p class="hint" style="margin-top:6px;border-left:3px solid var(--accent);padding:8px 12px;background:var(--accent-soft)">
     {% if zh %}<b>{{ months[0] }} → {{ months[-1] }}：这两个月只算开单奖。</b>你写的每一条订单行 × 单价 ——
     就是这段时间的全部奖金。<b>增长奖和新客户奖从 {{ growth_start.strftime('%Y年%-m月%-d日') }} 开始</b>：
     到时候周期重新开始，每个月和去年同一个月比（十月比去年十月，然后十月+十一月比去年十月+十一月，以此类推）。
