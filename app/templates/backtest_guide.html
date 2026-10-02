@@ -1,205 +1,281 @@
 {% extends "backtest_base.html" %}{% block body %}
-
 {% set zh = (lang == 'zh') %}
-<div class="card guide-body">
-  <div style="display:flex;align-items:center;gap:10px">
-    <h2 style="margin:0">{{ '经理指南 — 新奖金制度（大白话版）' if zh else 'Manager guide — the new bonus, in plain language' }}</h2>
-    <span class="mut" style="margin-left:auto;font-size:12.5px">
-      <a href="/guide?lang=en" {% if not zh %}style="font-weight:700"{% endif %}>EN</a> ·
-      <a href="/guide?lang=zh" {% if zh %}style="font-weight:700"{% endif %}>中文</a></span>
+<style>
+  .manual{display:grid;grid-template-columns:200px 1fr;gap:28px;align-items:start}
+  .toc{position:sticky;top:16px;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:12px 6px;box-shadow:var(--shadow)}
+  .toc a{display:block;padding:7px 12px;border-radius:8px;font-size:13px;color:var(--muted);text-decoration:none}
+  .toc a:hover{background:var(--paper);color:var(--ink)}
+  .toc a b{display:inline-block;width:20px;color:var(--accent-2)}
+  .toc .lang{margin:4px 12px 10px;font-size:12px;color:var(--muted)}
+  .ch{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:22px 26px;margin-bottom:18px;box-shadow:var(--shadow);scroll-margin-top:16px}
+  .ch h2{display:flex;align-items:center;gap:12px;font-size:17px;margin:0 0 6px}
+  .ch h2 .n{width:30px;height:30px;border-radius:9px;background:var(--accent-soft);color:var(--accent-2);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0}
+  .ch .lead{color:var(--muted);font-size:13.5px;line-height:1.6;margin:0 0 14px}
+  .ch p,.ch li{font-size:13.5px;line-height:1.7} .ch ul{margin:6px 0 10px 20px;padding:0} .ch li{margin-bottom:4px}
+  .ch h3{font-size:14px;margin:18px 0 6px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:10px 0 6px}
+  .pc{border:1px solid var(--line-2);border-radius:12px;padding:14px 16px;background:var(--paper)}
+  .pc .t{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .pc .f{font-size:15px;font-weight:700;margin:6px 0 4px;letter-spacing:-.01em}
+  .pc .d{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .pc.team{border-color:#5A48B6} .pc.me{border-color:#2B6CB0}
+  .formula{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--ink);color:#fff;border-radius:10px;padding:12px 16px;margin:10px 0;line-height:1.8;overflow-x:auto}
+  .formula .c{color:#b9c2bd}
+  .ex{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0;font-size:13px;line-height:1.65}
+  .ex b.l{display:block;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-2);margin-bottom:4px}
+  .warn{border-left:4px solid var(--warm);background:var(--warm-bg);border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0;font-size:13px;line-height:1.65}
+  table.legend{font-size:13px;margin:8px 0} table.legend th{text-transform:none;letter-spacing:0;font-size:12px} table.legend td:first-child{white-space:nowrap;font-weight:600;width:170px}
+  ol.steps{counter-reset:s;list-style:none;margin:8px 0 0;padding:0}
+  ol.steps li{counter-increment:s;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line);font-size:13.5px}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:7px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700}
+  ol.steps li a{font-weight:600}
+  .faq details{border-bottom:1px solid var(--line);padding:8px 0} .faq summary{cursor:pointer;font-weight:600;font-size:13.5px} .faq p{margin:6px 0 2px}
+  .kbd{display:inline-block;border:1px solid var(--line-2);border-bottom-width:2px;border-radius:5px;padding:0 6px;font-size:12px;background:var(--card)}
+  @media (max-width:980px){.manual{grid-template-columns:1fr} .toc{position:static}}
+</style>
+
+{% if zh %}
+<div class="manual">
+  <nav class="toc">
+    <div class="lang"><a href="/guide?lang=en" style="display:inline;padding:0">EN</a> · <b style="color:var(--ink)">中文</b></div>
+    <a href="#c0"><b>0</b>一页看懂</a><a href="#c1"><b>1</b>开单奖</a><a href="#c2"><b>2</b>增长奖（小组）</a><a href="#c3"><b>3</b>新客户奖</a>
+    <a href="#c4"><b>4</b>按收款发放</a><a href="#c5"><b>5</b>看懂 Dashboard</a><a href="#c6"><b>6</b>每月流程</a><a href="#c7"><b>7</b>特殊情况</a><a href="#c8"><b>8</b>常见问题</a>
+  </nav>
+  <div>
+    <section class="ch" id="c0">
+      <h2><span class="n">0</span>一页看懂</h2>
+      <p class="lead">奖金一共三项，每一项都是一条谁都能核对的公式。只按<b>已收回的货款</b>发放，每一分钱都能查到发票。</p>
+      {% if not growth_live %}<div class="warn"><b>现在（八月、九月）只发开单奖。</b>增长奖和新客户奖从 <b>{{ growth_start.strftime('%Y年%-m月%-d日') }}</b> 开始，
+        每年十月重置。以前的销售记录全部保留 —— 那是去年的对比数据。</div>{% endif %}
+      <div class="cards">
+        <div class="pc me"><div class="t">1 · 开单奖 — 个人</div><div class="f">订单行数 × ${{ '%.2f'|format(item_rate) }}</div><div class="d">发票上每写一行商品。每天的功夫，稳定、好核对。</div></div>
+        <div class="pc team"><div class="t">2 · 增长奖 — 小组</div><div class="f">小组净利润增长 × {{ '%.0f'|format(rate*100) }}%（超目标 {{ '%.1f'|format(accel*100) }}%）</div><div class="d">小组名下的客户，和同一批客户去年比。组员平分。</div></div>
+        <div class="pc me"><div class="t">3 · 新客户奖 — 个人</div><div class="f">${{ flat_small }} / ${{ flat_medium }} / ${{ flat_large }}</div><div class="d">自己开发的新客户，按规模一次性发。</div></div>
+      </div>
+      <div class="formula">本月可发 <span class="c">=</span> 本月已赚 <span class="c">×</span> 本月发票已收款比例 <span class="c">−</span> 已发放<br><span class="c">// 每个月单独算；没发的钱永远不会过期，一直滚到发为止</span></div>
+    </section>
+
+    <section class="ch" id="c1">
+      <h2><span class="n">1</span>开单奖 — 每行 ${{ '%.2f'|format(item_rate) }}</h2>
+      <p class="lead">酬劳的是日常铺货的功夫，和金额无关。</p>
+      <ul><li>一张发票上有几行商品，就算几行。一行 ${{ '%.2f'|format(item_rate) }}。</li>
+        <li>只算销售自己写的发票（批次号前两位决定是谁）。</li>
+        <li>作废发票不算。</li></ul>
+      <div class="ex"><b class="l">例子</b>9 月 An Cao 写了 1,256 行 → 1,256 × ${{ '%.2f'|format(item_rate) }} = <b>$125.60</b>。在「我的奖金」和 Dashboard 的 Contribution 一栏都能看到这个数和行数。</div>
+    </section>
+
+    <section class="ch" id="c2">
+      <h2><span class="n">2</span>增长奖 — 按小组算</h2>
+      <p class="lead">客户很难算在某一个人头上，所以增长奖按<b>小组</b>：把小组名下每一个客户的利润，和<b>同一个客户去年同期</b>比，全部加在一起。</p>
+      <h3>小组</h3>
+      <ul>{% for t, ms in teams.items() %}<li><b>{{ t }}</b>：{{ ms|join('、') }}</li>{% endfor %}
+        <li><b>House</b>：经理，以及 house 客户（First Choice、Enson、散客 CASH &amp; CARRY）—— 不参与增长奖。</li></ul>
+      <h3>客户归谁</h3>
+      <ul><li>最近 <b>{{ window_months }} 个月</b>里，哪个小组写了这个客户 <b>{{ '%.0f'|format(pct) }}% 以上的订单</b>（按<b>单数</b>，不看金额），客户就归哪个组。</li>
+        <li>没有小组过线的是<b>共有客户</b>，在 <a href="/accounts">Accounts</a> 页把它拖到一个小组 —— <b>没指定之前谁都拿不到它的增长奖</b>。你的指定优先于自动判断（显示「pinned」）。</li></ul>
+      <h3>怎么算</h3>
+      <div class="formula">小组净增长 <span class="c">=</span> Σ 每个客户 (今年至今利润 − 去年同期利润)<br>
+        目标 <span class="c">=</span> 目标% × 小组这些客户去年利润（默认 {{ '%.0f'|format(default_target*100) }}%，<a href="/settings" style="color:#fff">Settings</a> 按组调）<br>
+        增长奖 <span class="c">=</span> {{ '%.0f'|format(rate*100) }}% × min(净增长, 目标) <span class="c">+</span> {{ '%.1f'|format(accel*100) }}% × max(0, 净增长 − 目标)<br>
+        <span class="c">// 每月只对「超过之前高点」的部分发；跌的月份 $0，永不倒扣；小组奖金平分给组员</span></div>
+      <ul><li><b>算客户，不算个人。</b>客户换人时历史跟着客户走：接手平稳客户不算增长，被调走也不扣分。</li>
+        <li><b>整本账一起算。</b>一个客户涨不能掩盖另一个客户跌，看净和。</li>
+        <li><b>周期每年十月重置</b>：十月比去年十月，十月+十一月比去年十月+十一月，一直到九月。</li></ul>
+      <div class="ex"><b class="l">例子</b>檳城超級市場 2025 年 1 月做了 $4,119 利润（当时 An Cao 负责）。2026 年归 Team 2。Team 2 只有做到<b>超过</b> $4,119 才算增长 —— 接手不白给，An Cao 也不因此扣分。</div>
+    </section>
+
+    <section class="ch" id="c3">
+      <h2><span class="n">3</span>新客户奖 — 一次性</h2>
+      <p class="lead">销售<b>自己开发</b>的全新客户，开单约一个季度、规模看清楚后，一次性发：</p>
+      <div class="cards">
+        <div class="pc"><div class="t">小</div><div class="f">${{ flat_small }}</div><div class="d">年化 &lt; ${{ '{:,}'.format(tier_small) }}</div></div>
+        <div class="pc"><div class="t">中</div><div class="f">${{ flat_medium }}</div><div class="d">年化 &lt; ${{ '{:,}'.format(tier_medium) }}</div></div>
+        <div class="pc"><div class="t">大</div><div class="f">${{ flat_large }}</div><div class="d">年化 ≥ ${{ '{:,}'.format(tier_medium) }}</div></div>
+      </div>
+      <ul><li>在 <a href="/acquisitions">New accounts</a> 页确认「rep-won」才发；<b>默认 house（不发）</b>，电话没法查证，由销售申报、你判断。</li>
+        <li>新客户没有去年基数，它的利润同时自动计入小组增长。</li></ul>
+    </section>
+
+    <section class="ch" id="c4">
+      <h2><span class="n">4</span>按收款发放 — 按月算</h2>
+      <p class="lead">以上算出来的都是<b>已赚</b>。实际可发看客户有没有把货款付清，而且<b>每个月单独算</b>。</p>
+      <div class="formula">本月已释放 <span class="c">=</span> 本月已赚 <span class="c">×</span> (本月发票已收款 ÷ 本月发票总额)<br>
+        本月欠付 <span class="c">=</span> 已释放 <span class="c">−</span> 已对本月发放<br>
+        现在可发 <span class="c">=</span> 本月欠付 <span class="c">+</span> 以前月份还没发的</div>
+      <ul><li>八月的钱只看八月的发票，九月只看九月 —— 不混在一起算。</li>
+        <li>发放时先结清最早的月份。</li>
+        <li><b>没发的钱永远不会过期。</b>客户十一月才付九月的货款，九月的奖金就十一月发，就算已经进入下一个周期。</li>
+        <li>作废、坏账发票不算；已收款后又退票，这张发票会自动退出。</li></ul>
+      <div class="ex"><b class="l">例子</b>Ting Ting 8 月赚 $99.40，8 月发票收回 42% → 释放 $41.72；9 月赚 $91.20，收回 33% → 释放 $29.79。现在可发 $71.51。等 8 月剩下的发票收回来，8 月那部分再继续释放。</div>
+    </section>
+
+    <section class="ch" id="c5">
+      <h2><span class="n">5</span>看懂 Dashboard</h2>
+      <p class="lead">每一列都只算<b>选中的那个月</b>。点一行展开，能看到那个月每一张发票；点发票号看明细。</p>
+      <table class="legend">
+        <tr><td>Contribution</td><td>本月开单奖（括号里是行数）</td></tr>
+        <tr><td>Growth share</td><td>小组本月增长奖平分到个人（十月前为 —）</td></tr>
+        <tr><td>New accounts</td><td>本月发的新客户奖（十月前为 —）</td></tr>
+        <tr><td>Earned</td><td>三项合计 = 本月已赚</td></tr>
+        <tr><td>Collected</td><td>本月发票里客户已付的比例</td></tr>
+        <tr><td>Released</td><td>已赚 × Collected</td></tr>
+        <tr><td>Paid</td><td>已对本月发放</td></tr>
+        <tr><td>Owed</td><td>Released − Paid</td></tr>
+        <tr><td>Pay now</td><td>只在最新月份出现：本月欠付 + 以前月份未发。按钮下面写明是哪几个月的钱。</td></tr>
+      </table>
+      <p>换月：点月份、左右箭头、下拉框、键盘 <span class="kbd">←</span> <span class="kbd">→</span>，或者直接拖动表格。展开的人不会关掉。</p>
+    </section>
+
+    <section class="ch" id="c6">
+      <h2><span class="n">6</span>每月流程</h2>
+      <ol class="steps">
+        <li>从 GP 导出三个文件，在 <a href="/upload">Import</a> 逐个导入：销售发票、已收款、作废发票。</li>
+        <li>打开 <a href="/accounts">Accounts</a>，把「Needs assignment」里的共有客户拖到小组（不指定就没人拿增长奖）。</li>
+        <li>看 <a href="/acquisitions">New accounts</a>，标注 rep-won / house。</li>
+        <li>看 <a href="/underperformers">Falling behind</a> 和 <a href="/quiet">Quiet accounts</a>，安排跟进。</li>
+        <li>回到 <a href="/">Dashboard</a>，核对每个人的 Pay now（点开行看发票），然后点 Pay 记录发放。</li>
+      </ol>
+    </section>
+
+    <section class="ch" id="c7">
+      <h2><span class="n">7</span>特殊情况</h2>
+      <ul><li><b>限购商品</b>（<a href="/constrained">Limited stock</a>）：两年都剔除 —— 缺货不算销售的，去年卖过的也不抬高基数。</li>
+        <li><b>关店</b>：默认计入（真实损失）；确认无过失可豁免，同样两年都剔除。</li>
+        <li><b>一次性大单</b>：当年照发，第二年不重复也没关系，奖金永远不会低于 $0。</li>
+        <li><b>离职员工</b>（如 Maple Tran）的客户：历史保留，接手的人只有做过去年才有增长。</li>
+        <li><b>退票</b>：已收款文件里不再出现的发票会自动退出，对应奖金不再释放。</li></ul>
+    </section>
+
+    <section class="ch faq" id="c8">
+      <h2><span class="n">8</span>常见问题</h2>
+      <details><summary>为什么 An Cao 收款比例比 Wendy 低很多？</summary><p>看客户，不看人。大连锁付款周期长，小店付得快。钱不会少，只是晚点释放。</p></details>
+      <details><summary>换月份的时候，为什么以前的月份没有 Pay 按钮？</summary><p>过去的月份只读。它没发完的钱已经算进最新月份的 Pay now 里，按钮下面会写「+N earlier」。</p></details>
+      <details><summary>两个小组账本差不多大，但一个两人一个三人，公平吗？</summary><p>用 <a href="/settings">Settings</a> 里的小组目标%来平衡 —— 人多的组目标可以定低一点。</p></details>
+      <details><summary>怎么换小组成员？</summary><p>需要在周期边界（十月一日）做，因为会重算客户归属和平分比例。目前由开发者修改配置。</p></details>
+    </section>
   </div>
-
-  {% if zh %}
-  <p class="hint" style="margin-top:6px">一共三项，每项都是一条谁都能核对的直接公式。只按已收货款发放。</p>
-
-  {% if not growth_live %}
-  <div class="msg" style="background:var(--accent-soft);border-color:var(--accent)">
-    <b>现在（八月、九月）只发开单奖。</b>增长奖和新客户奖从 <b>{{ growth_start.strftime('%Y年%-m月%-d日') }}</b>
-    开始：周期重新开始，十月比去年十月，然后十月+十一月比去年十月+十一月，以此类推，每年十月重置。
-    以前的销售记录全部保留 —— 那是去年的对比数据，也是判断新客户、静默客户、落后客户的依据。
-  </div>
-  {% endif %}
-
-  <h3>1 · 增长奖 — 按<b>小组</b>算，到目标 {{ '%.0f'|format(rate*100) }}%，超过目标 {{ '%.1f'|format(accel*100) }}%</h3>
-  <p><b>一句话规则：</b>客户很难算在某一个人头上，所以增长奖<b>按小组</b>：把小组名下<b>每一个客户</b>的利润，
-  和<b>同一个客户去年同期</b>比，全部加在一起 —— 总数为<b>正</b>：到<b>目标</b>之前拿
-  <b>{{ '%.0f'|format(rate*100) }}%</b>，超过目标的部分拿 <b>{{ '%.1f'|format(accel*100) }}%</b>；
-  为<b>负</b>，$0。小组的增长奖<b>平分</b>给组员。</p>
-  <ul>
-    <li><b>小组：</b>{% for t, ms in teams.items() %}<b>{{ t }}</b>（{{ ms|join('、') }}）{% if not loop.last %}；{% endif %}{% endfor %}。
-      经理和 house 客户（First Choice、Enson、散客 CASH &amp; CARRY）属于 <b>House</b>，不参与增长奖。</li>
-    <li><b>客户归谁：</b>最近 <b>{{ window_months }} 个月</b>里，一个小组写了这个客户
-      <b>{{ '%.0f'|format(pct) }}% 以上的订单</b>（按<b>单数</b>算，不看金额），这个客户就归这个小组。
-      没有小组过线的客户是<b>共有客户</b>，在 <a href="/accounts">Accounts</a> 页由经理指定 ——
-      <b>没指定之前谁都拿不到它的增长奖</b>。经理指定优先于自动判断。</li>
-    <li><b>目标</b> = 每个小组的一个百分比 × 小组<b>去年这些客户的利润</b>（书大的组同样的%对应更多的钱）。
-      默认 {{ '%.0f'|format(default_target*100) }}%，可在 <a href="/settings">Settings</a> 里按组调整。
-      两个组的账本差不多大，但人数不同（2 人 vs 3 人），可以用目标%来平衡。</li>
-  </ul>
-  <ul>
-    <li><b>算客户，不算个人。</b>客户换人时历史跟着客户走。例子：An Cao 在 2025 年 1 月做了檳城超級市場
-      $4,119 利润；2026 年这个客户转给了 Vanessa。它离开 An Cao 的账本时<b>连同基数一起离开</b>（不扣他的分），
-      Vanessa 接手时<b>连同基数一起接手</b>（只有做过 $4,119 才有增长）。调客户对双方都不加分、不减分 ——
-      离职员工（如 Maple Tran）的客户也一样保留历史。</li>
-    <li><b>整本账一起算。</b>一个客户涨不能掩盖其它客户跌 —— 客户1 + 客户2 + … 的净和才算数。</li>
-    <li><b>共同做的客户。</b>客户整个算给拥有它的小组 —— 不再按个人占比拆分。组内怎么配合是小组自己的事，
-      奖金平分。跨组共有的客户由经理在 <a href="/accounts">Accounts</a> 页指定归属。</li>
-    <li><b>逐月累计 + 补差发放。</b>每月比较累计数（今年至今 vs 去年同期至今），只对<b>超过之前高点的
-      新增部分</b>发放。跌的月份 $0，<b>永不倒扣</b>。季节性自然抵消。</li>
-    <li><b>一次性大单：</b>客户偶尔下一笔特别大的订单，当年就照发 —— 是他们赚来的。第二年这笔通常不会重复，
-      账面会显得低一些；没关系，销售只是不会为同一笔生意再拿一次钱。而且奖金永远不会低于 $0，
-      所以一次性大单只会帮到销售，绝不会让他们倒亏。</li>
-    <li><b>限购商品</b>（<a href="/constrained">Limited stock</a>）：两年都剔除 —— 缺货造成的下滑不算销售的，
-      去年卖过的也不抬高基数。</li>
-    <li><b>关店：</b>默认计入（真实的利润损失，销售是我们的预警系统）。确认无过失关店可以豁免 ——
-      同样是两年都剔除。</li>
-    <li><b>周期每年十月重置。</b>十月比去年十月，十月+十一月比去年十月+十一月 …… 一直累计到九月，然后重新开始。</li>
-  </ul>
-
-  <h3>2 · 开单奖 — 每行 ${{ '%.2f'|format(item_rate) }}</h3>
-  <p>发票每一行 ${{ '%.2f'|format(item_rate) }}。奖励日常铺货的功夫，稳定、好核对。</p>
-
-  <h3>3 · 新客户奖 — 开发新客户的一次性奖励</h3>
-  <p>销售<b>自己开发</b>的全新客户（在<a href="/acquisitions">New accounts</a>页确认「rep-won」），
-  约一个季度后按规模一次性发：</p>
-  <ul>
-    <li>小（年化 &lt; ${{ '{:,}'.format(tier_small) }}）→ <b>${{ flat_small }}</b></li>
-    <li>中（年化 &lt; ${{ '{:,}'.format(tier_medium) }}）→ <b>${{ flat_medium }}</b></li>
-    <li>大（年化 ≥ ${{ '{:,}'.format(tier_medium) }}）→ <b>${{ flat_large }}</b></li>
-  </ul>
-  <p>新客户没有去年基数，它的全部利润同时自动计入增长 —— 一次性奖励酬<b>开发</b>，增长奖酬<b>经营</b>。</p>
-  <p class="hint"><b>怎么区分是销售开发的还是客户自己打电话来的？</b>电话没法查证，所以我们不去猜。
-  <b>默认按 house（不发）</b>—— 需要销售主动申报一个真实的开发，由经理判断是否合理（是否在他的片区、
-  是否是他已经在做的连锁店的分店等）。影响很小：金额不大，而且不管算不算，客户的利润照样计入增长和开单。</p>
-
-  <h3>按收款发放</h3>
-  <p>以上都是<b>目标数</b>。实际可发 = 目标 × 该销售货款回收比例（来自应收上传）。款到多少、发多少，
-  差额随收款自动释放，不会多发。作废、坏账发票一律不算。</p>
-
-  <h3>落后客户 — <a href="/underperformers">Falling behind</a></h3>
-  <p>滚动看<b>最近三个月</b>的客户利润，和<b>去年同样三个月</b>比，两种标记：<b>下滑</b>（比去年少）和
-  <b>跑输同级</b>（按去年利润分五档，涨得比<b>同档中位数</b>还少）。两个都占的排在最前面，按<b>少掉的钱</b>排序 ——
-  这就是该先打的电话。销售在自己页面上只看到本组的客户。</p>
-
-  <h3>登录和密码 — <a href="/logins">Logins</a></h3>
-  <p>每人一个登录。销售只能看自己的页面。谁都可以在<b>「修改密码」</b>里自己改密码；忘了密码由经理在
-  Logins 页重置。还在用默认密码的账号会被标出来 —— 正式给销售用之前请先改掉。</p>
-
-  <h3>每月流程</h3>
-  <ol>
-    <li>从 GP 导出并<a href="/upload">导入</a>：销售发票、已收款、作废发票。</li>
-    <li>看<a href="/accounts">Accounts</a> —— 把<b>共有客户</b>指定给小组（不指定就没人拿增长奖）。</li>
-    <li>看<a href="/acquisitions">New accounts</a> —— 标注 rep-won / house。</li>
-    <li>看<a href="/underperformers">Falling behind</a> —— 哪些客户在掉，安排跟进。</li>
-    <li>看<a href="/">Dashboard</a>：小组净增长、每人当月发放、<b>现在可发</b>。</li>
-  </ol>
-  <p class="hint">参数（比例、开单单价、新客户档位、限购清单）在主记分卡应用的 Settings 里管理 ——
-  两个应用共用同一个数据库。</p>
-
-  {% else %}
-  <p class="hint" style="margin-top:6px">Three pieces, each a direct formula anyone can check. Paid only on collected money.</p>
-
-  {% if not growth_live %}
-  <div class="msg" style="background:var(--accent-soft);border-color:var(--accent)">
-    <b>Right now (August and September) only Contribution pays.</b> Growth and the new-account bonus start
-    <b>{{ growth_start.strftime('%B %-d, %Y') }}</b>: the cycle resets, October is compared to last October,
-    then Oct+Nov to last Oct+Nov, and so on, resetting every October. All the sales history stays — it is the
-    year-ago side of that comparison and what makes new, quiet and falling-behind accounts detectable.
-  </div>
-  {% endif %}
-
-  <h3>1 · Growth — a <b>team</b> number: {{ '%.0f'|format(rate*100) }}% up to target, {{ '%.1f'|format(accel*100) }}% above</h3>
-  <p><b>The rule in one sentence:</b> accounts are hard to pin on one person, so growth is earned by the
-  <b>team</b>: take every account the team owns, add up how much more (or less) profit each one made than
-  <i>that same account</i> made in the same months last year — if the total is <b>positive</b>, the team earns
-  <b>{{ '%.0f'|format(rate*100) }}%</b> up to its <b>target</b> and <b>{{ '%.1f'|format(accel*100) }}%</b> on
-  anything above it; if it's <b>negative</b>, <b>$0</b>. The team's growth pay is then split <b>equally</b>
-  among its members.</p>
-  <ul>
-    <li><b>The teams:</b> {% for t, ms in teams.items() %}<b>{{ t }}</b> ({{ ms|join(', ') }}){% if not loop.last %}, {% endif %}{% endfor %}.
-      Managers and the house accounts (First Choice, Enson, the walk-in CASH &amp; CARRY) sit in <b>House</b>,
-      which earns no growth.</li>
-    <li><b>Who owns an account:</b> the team that wrote <b>{{ '%.0f'|format(pct) }}% or more of its orders</b>
-      over the last <b>{{ window_months }} months</b> — counted in <b>orders</b> (invoices), not dollars. An
-      account no team owns outright is <b>shared</b>, and you assign it on the
-      <a href="/accounts">Accounts</a> tab — <b>until you do, it pays nobody</b>. Your assignment always beats
-      the computed one.</li>
-    <li><b>The target</b> = a per-team percent × <b>what those accounts earned last year</b> (a bigger book needs
-      more dollars to hit the same %). Default {{ '%.0f'|format(default_target*100) }}%, editable per team in
-      <a href="/settings">Settings</a>. The two teams carry similar books with different headcounts (2 vs 3), so
-      the target % is the dial for balancing per-person earning power.</li>
-  </ul>
-  <ul>
-    <li><b>Accounts, not salespeople.</b> An account carries its history when it changes hands. Example:
-      An Cao sold NEW BEN CITY $4,119 in Jan 2025; in 2026 it moved to Vanessa. It leaves his book
-      <i>with</i> its baseline (doesn't count against him) and she inherits it <i>with</i> the baseline
-      (earns only above $4,119). Handoffs are neutral — including accounts from staff who left.</li>
-    <li><b>Whole book, netted.</b> One growing account can't pay out while the rest of the book shrinks more —
-      account 1 + account 2 + … must be net positive.</li>
-    <li><b>Accounts worked by several people.</b> The account counts whole for the team that owns it — no
-      per-person split any more. How the team divides the work is theirs to sort out; the pay is split equally.
-      An account genuinely split <i>across</i> teams is assigned by you on the <a href="/accounts">Accounts</a> tab.</li>
-    <li><b>Cumulative + true-up.</b> Each month we compare the running totals (this year so far vs the same
-      months last year) and pay only <b>new ground above the previous peak</b>. A down month pays $0 — and is
-      <b>never clawed back</b>. Seasonality cancels out by construction.</li>
-    <li><b>One-time big orders.</b> If a customer places one unusually large order, the rep is paid on it that
-      year — they earned it. The next year that order usually won't repeat, so the account looks lower; that's
-      fine — the rep just isn't paid <i>again</i> for a sale that only happened once. Because a rep's bonus can
-      never drop below $0, a one-off can only ever help them, never cost them.</li>
-    <li><b>Limited stock</b> (<a href="/constrained">tab</a>): flagged items are removed from <b>both</b> years —
-      a "couldn't ship it" decline is not charged to the rep, and last year's sales of it don't raise the bar.</li>
-    <li><b>Store closures.</b> By default a closure counts against the book (it's a real loss, and the rep is the
-      early-warning system). For a confirmed no-fault closure you can exempt the account — removed from both
-      years, same apples-to-apples idea.</li>
-    <li><b>The cycle resets each October.</b> October vs last October, Oct+Nov vs last Oct+Nov, … through
-      September, then it starts over.</li>
-  </ul>
-
-  <h3>2 · Contribution — ${{ '%.2f'|format(item_rate) }} per line item</h3>
-  <p>Every invoice line the rep writes earns ${{ '%.2f'|format(item_rate) }}. Rewards the everyday work of
-  placing products — steady, effort-based, easy to verify.</p>
-
-  <h3>3 · Acquisition — a flat bonus for landing a new account</h3>
-  <p>When a rep <b>wins</b> a brand-new account (you confirm rep-won vs house on the <a href="/acquisitions">New
-  accounts</a> tab), they get a one-time flat bonus at the ~quarter mark, once the account's size is clear:</p>
-  <ul>
-    <li>Small (&lt; ${{ '{:,}'.format(tier_small) }}/yr run-rate) → <b>${{ flat_small }}</b></li>
-    <li>Medium (&lt; ${{ '{:,}'.format(tier_medium) }}/yr) → <b>${{ flat_medium }}</b></li>
-    <li>Large (≥ ${{ '{:,}'.format(tier_medium) }}/yr) → <b>${{ flat_large }}</b></li>
-  </ul>
-  <p>The new account's profit also feeds the growth net automatically (it has no year-ago, so its whole profit
-  is its gap) — the flat bonus rewards the <i>landing</i>, growth rewards the <i>building</i>.</p>
-  <p class="hint"><b>How to tell rep-won from a call-in?</b> There's no way to verify a phone call, so we don't
-  try. The <b>default is house</b> (no bonus) — the rep must claim a genuine win and you decide if it's
-  plausible (their territory, a sister store they already serve, etc.). It's low-stakes on purpose: the amount is
-  small and the account earns growth + contribution regardless.</p>
-
-  <h3>Pay on collection</h3>
-  <p>Everything above is a <b>target</b>. What's actually payable scales with the share of the rep's billing
-  that has been <b>collected</b> (from your paid-invoices upload). As money comes in, the remainder releases —
-  a true-up that never overpays. Voided and written-off invoices count toward nothing.</p>
-
-  <h3>Accounts falling behind — <a href="/underperformers">the watch list</a></h3>
-  <p>A rolling look at the last <b>three months</b> of account profit against the <b>same three months last
-  year</b>, flagged two ways: <b>down</b> (below last year) and <b>below its size band</b> (it moved less than
-  the <b>median account of its own size</b> — five bands by last year's profit). Accounts carrying both flags
-  come first, ranked by <b>dollars lost</b> — that's the call list. Reps see only their own team's.</p>
-
-  <h3>Logins and passwords — <a href="/logins">Logins</a></h3>
-  <p>One login per person; reps see only their own page. Anyone can change their own password under <b>My
-  account</b>, and you can reset a forgotten one on the Logins tab. Any login still on the shared default
-  password is flagged there — change those before the reps start using the site.</p>
-
-  <h3>Monthly routine</h3>
-  <ol>
-    <li>Export from GP and <a href="/upload">import</a>: sales invoices, paid invoices, voided invoices.</li>
-    <li>Open <a href="/accounts">Accounts</a> — assign any <b>shared</b> account to a team (unassigned pays nobody).</li>
-    <li>Review the <a href="/acquisitions">New accounts</a> tab — mark rep-won vs house.</li>
-    <li>Check <a href="/underperformers">Falling behind</a> — which accounts are slipping, and who follows up.</li>
-    <li>Read the <a href="/">Dashboard</a>: each team's net gap, each rep's pay, and <b>Payable now</b>.</li>
-  </ol>
-  <p class="hint">Dials (rate, item rate, acquisition tiers, limited-stock list) are managed in the main
-  scorecard app's Settings — both apps read the same database. </p>
-  {% endif %}
 </div>
+
+{% else %}
+<div class="manual">
+  <nav class="toc">
+    <div class="lang"><b style="color:var(--ink)">EN</b> · <a href="/guide?lang=zh" style="display:inline;padding:0">中文</a></div>
+    <a href="#c0"><b>0</b>On one page</a><a href="#c1"><b>1</b>Contribution</a><a href="#c2"><b>2</b>Growth (team)</a><a href="#c3"><b>3</b>New accounts</a>
+    <a href="#c4"><b>4</b>Pay on collection</a><a href="#c5"><b>5</b>Reading the dashboard</a><a href="#c6"><b>6</b>Monthly routine</a><a href="#c7"><b>7</b>Edge cases</a><a href="#c8"><b>8</b>FAQ</a>
+  </nav>
+  <div>
+    <section class="ch" id="c0">
+      <h2><span class="n">0</span>On one page</h2>
+      <p class="lead">Three pieces, each a formula anyone can check. Paid only on <b>collected money</b>, and every dollar traces to an invoice.</p>
+      {% if not growth_live %}<div class="warn"><b>Right now (August and September) only Contribution pays.</b> Growth and the new-account bonus start
+        <b>{{ growth_start.strftime('%B %-d, %Y') }}</b>; the cycle resets every October. All sales history stays — it is the year-ago side of the comparison.</div>{% endif %}
+      <div class="cards">
+        <div class="pc me"><div class="t">1 · Contribution — individual</div><div class="f">line items × ${{ '%.2f'|format(item_rate) }}</div><div class="d">Every product line on an invoice. Steady, effort-based, easy to verify.</div></div>
+        <div class="pc team"><div class="t">2 · Growth — team</div><div class="f">net profit growth × {{ '%.0f'|format(rate*100) }}% ({{ '%.1f'|format(accel*100) }}% above target)</div><div class="d">The team's accounts vs those same accounts a year ago. Split equally.</div></div>
+        <div class="pc me"><div class="t">3 · New accounts — individual</div><div class="f">${{ flat_small }} / ${{ flat_medium }} / ${{ flat_large }}</div><div class="d">A flat bonus, by size, for an account the rep won.</div></div>
+      </div>
+      <div class="formula">pay now <span class="c">=</span> earned this month <span class="c">×</span> share of this month's invoices collected <span class="c">−</span> already paid<br><span class="c">// each month on its own; unpaid money never expires — it rolls forward until it is paid</span></div>
+    </section>
+
+    <section class="ch" id="c1">
+      <h2><span class="n">1</span>Contribution — ${{ '%.2f'|format(item_rate) }} per line</h2>
+      <p class="lead">Rewards the everyday work of placing products, regardless of dollar size.</p>
+      <ul><li>Each product line on an invoice counts once: ${{ '%.2f'|format(item_rate) }} a line.</li>
+        <li>Only invoices the rep wrote (the batch-number prefix says who).</li>
+        <li>Voided invoices count for nothing.</li></ul>
+      <div class="ex"><b class="l">Example</b>In September An Cao wrote 1,256 lines → 1,256 × ${{ '%.2f'|format(item_rate) }} = <b>$125.60</b>. The Contribution column shows the amount with the line count in brackets; click the row to see the invoices.</div>
+    </section>
+
+    <section class="ch" id="c2">
+      <h2><span class="n">2</span>Growth — a team number</h2>
+      <p class="lead">Accounts are hard to pin on one person, so growth is earned by the <b>team</b>: every account the team owns, each compared to <b>that same account a year ago</b>, added together.</p>
+      <h3>The teams</h3>
+      <ul>{% for t, ms in teams.items() %}<li><b>{{ t }}</b>: {{ ms|join(', ') }}</li>{% endfor %}
+        <li><b>House</b>: managers plus the house accounts (First Choice, Enson, the walk-in CASH &amp; CARRY) — earns no growth.</li></ul>
+      <h3>Who owns an account</h3>
+      <ul><li>The team that wrote <b>{{ '%.0f'|format(pct) }}% or more of its orders</b> over the last <b>{{ window_months }} months</b> — counted in <b>orders</b>, not dollars.</li>
+        <li>No team at the bar → the account is <b>shared</b>. Drag it onto a team on the <a href="/accounts">Accounts</a> page — <b>until you do, it pays nobody</b>. Your choice always beats the rule (shown as <i>pinned</i>).</li></ul>
+      <h3>The math</h3>
+      <div class="formula">team net growth <span class="c">=</span> Σ over its accounts (profit this cycle − same account, same months last year)<br>
+        target <span class="c">=</span> target% × the team's last-year profit on those accounts (default {{ '%.0f'|format(default_target*100) }}%, per team in <a href="/settings" style="color:#fff">Settings</a>)<br>
+        growth pay <span class="c">=</span> {{ '%.0f'|format(rate*100) }}% × min(net, target) <span class="c">+</span> {{ '%.1f'|format(accel*100) }}% × max(0, net − target)<br>
+        <span class="c">// pays only new ground above the previous peak; a down month is $0, never clawed back; split equally among members</span></div>
+      <ul><li><b>Accounts, not people.</b> An account carries its history when it changes hands: inheriting a flat account isn't growth, and losing one isn't a penalty.</li>
+        <li><b>Whole book, netted.</b> One growing account can't pay out while the rest shrinks more.</li>
+        <li><b>The cycle resets each October</b>: October vs last October, Oct+Nov vs last Oct+Nov, … through September.</li></ul>
+      <div class="ex"><b class="l">Example</b>NEW BEN CITY made $4,119 profit in January 2025 under An Cao. In 2026 it belongs to Team 2. Team 2 earns only if it grows the account <b>past</b> $4,119 — no free credit for taking it over, and An Cao is not charged for losing it.</div>
+    </section>
+
+    <section class="ch" id="c3">
+      <h2><span class="n">3</span>New accounts — a one-time bonus</h2>
+      <p class="lead">When a rep <b>wins</b> a brand-new account, a flat bonus pays at the ~quarter mark, once the account's size is clear:</p>
+      <div class="cards">
+        <div class="pc"><div class="t">Small</div><div class="f">${{ flat_small }}</div><div class="d">&lt; ${{ '{:,}'.format(tier_small) }}/yr run-rate</div></div>
+        <div class="pc"><div class="t">Medium</div><div class="f">${{ flat_medium }}</div><div class="d">&lt; ${{ '{:,}'.format(tier_medium) }}/yr</div></div>
+        <div class="pc"><div class="t">Large</div><div class="f">${{ flat_large }}</div><div class="d">≥ ${{ '{:,}'.format(tier_medium) }}/yr</div></div>
+      </div>
+      <ul><li>Paid only once you mark the account <b>rep-won</b> on <a href="/acquisitions">New accounts</a>. The <b>default is house</b> (no bonus) — a phone call can't be verified, so the rep claims it and you judge.</li>
+        <li>A new account has no year-ago, so its profit also feeds the team's growth automatically.</li></ul>
+    </section>
+
+    <section class="ch" id="c4">
+      <h2><span class="n">4</span>Pay on collection — month by month</h2>
+      <p class="lead">Everything above is <b>earned</b>. What's actually payable follows the customers' payments, and <b>each month stands on its own</b>.</p>
+      <div class="formula">released_M <span class="c">=</span> earned_M <span class="c">×</span> (M's invoices collected ÷ M's invoices billed)<br>
+        owed_M <span class="c">=</span> released_M <span class="c">−</span> paid against M<br>
+        pay now <span class="c">=</span> owed on this month <span class="c">+</span> anything still unpaid from earlier months</div>
+      <ul><li>August's earnings look only at August's invoices; September's only at September's — never blended.</li>
+        <li>A payment settles the oldest month first.</li>
+        <li><b>Unpaid money never expires.</b> If a customer pays a September invoice in November, September's bonus releases in November — even though the cycle has rolled over.</li>
+        <li>Voided and written-off invoices count for nothing. A payment that bounces drops the invoice back out automatically.</li></ul>
+      <div class="ex"><b class="l">Example</b>Ting Ting earned $99.40 in August; 42% of August's invoices are paid → $41.72 released. September: $91.20 earned, 33% paid → $29.79. Pay now $71.51. As the rest of August's invoices get paid, August keeps releasing.</div>
+    </section>
+
+    <section class="ch" id="c5">
+      <h2><span class="n">5</span>Reading the dashboard</h2>
+      <p class="lead">Every column is for the <b>selected month only</b>. Click a row to see that month's invoices; click an invoice number for its lines.</p>
+      <table class="legend">
+        <tr><td>Contribution</td><td>This month's line items × rate (count in brackets)</td></tr>
+        <tr><td>Growth share</td><td>The team's growth pay this month, split equally (— before Oct 1)</td></tr>
+        <tr><td>New accounts</td><td>Landing bonuses paid this month (— before Oct 1)</td></tr>
+        <tr><td>Earned</td><td>The three added up = earned this month</td></tr>
+        <tr><td>Collected</td><td>Share of this month's invoices the customers have paid</td></tr>
+        <tr><td>Released</td><td>Earned × Collected</td></tr>
+        <tr><td>Paid</td><td>Already paid against this month</td></tr>
+        <tr><td>Owed</td><td>Released − Paid</td></tr>
+        <tr><td>Pay now</td><td>Latest month only: this month's owed + unpaid from earlier months. The chips under the button say which months.</td></tr>
+      </table>
+      <p>Change month by clicking a chip, the arrows, the dropdown, <span class="kbd">←</span> <span class="kbd">→</span>, or by dragging the table. Open reps stay open.</p>
+    </section>
+
+    <section class="ch" id="c6">
+      <h2><span class="n">6</span>Monthly routine</h2>
+      <ol class="steps">
+        <li>Export the three files from GP and drop each into <a href="/upload">Import</a>: sales invoices, paid invoices, voided invoices.</li>
+        <li>Open <a href="/accounts">Accounts</a> and drag every "Needs assignment" account onto a team — unassigned accounts pay nobody.</li>
+        <li>Review <a href="/acquisitions">New accounts</a>: rep-won or house.</li>
+        <li>Check <a href="/underperformers">Falling behind</a> and <a href="/quiet">Quiet accounts</a> — who follows up.</li>
+        <li>Back on the <a href="/">Dashboard</a>, open each rep's row to check Pay now against the invoices, then press Pay to record it.</li>
+      </ol>
+    </section>
+
+    <section class="ch" id="c7">
+      <h2><span class="n">7</span>Edge cases</h2>
+      <ul><li><b>Limited stock</b> (<a href="/constrained">tab</a>): flagged items are removed from <b>both</b> years — a "couldn't ship it" decline isn't charged, and last year's sales of it don't raise the bar.</li>
+        <li><b>Store closures</b>: count against the book by default (a real loss); a confirmed no-fault closure can be exempted, again from both years.</li>
+        <li><b>One-time big orders</b>: paid that year; if it doesn't repeat, fine — a bonus can never go below $0.</li>
+        <li><b>Staff who left</b> (e.g. Maple Tran): their accounts keep their history; whoever picks one up earns only above last year.</li>
+        <li><b>Reversed payments</b>: an invoice that disappears from the paid file drops out, and its bonus stops releasing.</li></ul>
+    </section>
+
+    <section class="ch faq" id="c8">
+      <h2><span class="n">8</span>FAQ</h2>
+      <details><summary>Why is An Cao's collected % so much lower than Wendy's?</summary><p>It's the customers, not the rep. Big chains pay on long terms; independents pay fast. Nothing is lost — it releases later.</p></details>
+      <details><summary>Why does a past month have no Pay button?</summary><p>Past months are read-only. Whatever they still owe is already inside the latest month's Pay now — the chip under the button says "+N earlier".</p></details>
+      <details><summary>The two teams have similar books but 2 vs 3 people — is the equal split fair?</summary><p>Use the per-team target % in <a href="/settings">Settings</a> to balance it; the bigger team can carry a lower target.</p></details>
+      <details><summary>How do I move someone to another team?</summary><p>Do it at a cycle boundary (October 1), because ownership and the split are recomputed. For now it's a configuration change made by the developer.</p></details>
+    </section>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
