@@ -71,10 +71,7 @@
       {% endif %}<th class="num">Contribution</th>
       {% if growth_active %}<th class="num">Acquisition</th>{% endif %}
       <th class="num">Total this month</th>
-      <th class="num" title="Earned so far this cycle (all three pieces), through {{ m }} — the target the collection %% applies to">Earned (to {{ m }})</th>
-      <th class="num" title="Share of the rep's billing through {{ m }} actually collected, per the latest receivables upload">Collected</th>
-      <th class="num" title="Cumulative bonus already recorded as paid this cycle">Paid</th>
-      <th class="num" title="Earned × collected %% − already paid; the rest releases as invoices pay">Payable now</th></tr></thead>
+      <th class="num" title="Earned so far this cycle (all pieces), through {{ m }}">Earned (to {{ m }})</th></tr></thead>
     <tbody>
     {% for x in rows %}
       <tr>
@@ -83,17 +80,8 @@
         <td class="num">${{ '{:,.0f}'.format(x.pay_mo) }} <span class="mut">(1/{{ x.members }})</span></td>{% endif %}
         <td class="num">${{ '{:,.2f}'.format(x.contrib_mo) }} <span class="mut">({{ '{:,}'.format(x.n_items) }})</span></td>
         {% if growth_active %}<td class="num">{% if x.acq_mo > 0 %}${{ '{:,.0f}'.format(x.acq_mo) }}{% else %}<span class="mut">—</span>{% endif %}</td>{% endif %}
-        <td class="num"><strong>${{ '{:,.0f}'.format(x.total_mo) }}</strong></td>
-        <td class="num mut">${{ '{:,.0f}'.format(x.earned_cycle) }}</td>
-        <td class="num mut">{{ '%.0f'|format(x.collected_pct) }}%</td>
-        <td class="num mut">${{ '{:,.0f}'.format(x.paid) }}</td>
-        <td class="num"><strong>${{ '{:,.0f}'.format(x.payable_now) }}</strong>
-          {% if is_latest and x.payable_now >= 0.5 %}
-          <form method="post" action="/pay" style="margin:0;display:inline" onsubmit="return confirm('Record ${{ '{:,.0f}'.format(x.payable_now) }} as PAID to {{ x.associate }}?')">
-            <input type="hidden" name="associate" value="{{ x.associate }}">
-            <input type="hidden" name="amount" value="{{ '%.2f'|format(x.payable_now) }}">
-            <button type="submit" class="ghost" style="padding:2px 9px;font-size:11.5px;margin-left:6px">pay</button></form>
-          {% endif %}</td>
+        <td class="num"><strong>${{ '{:,.2f}'.format(x.total_mo) }}</strong></td>
+        <td class="num mut">${{ '{:,.2f}'.format(x.earned_cycle) }}</td>
       </tr>
     {% else %}
       <tr><td colspan="13" class="mut">No data.</td></tr>
@@ -105,10 +93,8 @@
       {% if growth_active %}<th></th><th class="num">${{ '{:,.0f}'.format(team.pay_mo) }}</th>{% endif %}
       <th class="num">${{ '{:,.2f}'.format(team.contrib_mo) }} <span class="mut">({{ '{:,}'.format(team.n_items) }})</span></th>
       {% if growth_active %}<th class="num">${{ '{:,.0f}'.format(team.acq_mo) }}</th>{% endif %}
-      <th class="num">${{ '{:,.0f}'.format(team.total_mo) }}</th>
-      <th class="num">${{ '{:,.0f}'.format(team.earned_cycle) }}</th><th></th>
-      <th class="num">${{ '{:,.0f}'.format(team.paid) }}</th>
-      <th class="num">${{ '{:,.0f}'.format(team.payable_now) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(team.total_mo) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(team.earned_cycle) }}</th>
     </tr></tfoot>
     {% endif %}
   </table>
@@ -118,16 +104,53 @@
     accounts you won. In the team table above, the <b>last-year column is those SAME accounts</b> (even if
     someone else sold them then), so every row subtracts cleanly: <b>net gap = book this yr − same accounts
     last yr</b>, and <b>growth pay</b> = the rate × new ground above the team's previous cumulative peak.
-    The <b>Earned / Collected / Paid / Payable</b> columns are <b>cumulative through {{ m }}</b> — step the month
-    selector and they build up (August alone → Aug+Sep → …). <b>Payable now</b> = earned so far × the share of
-    billing <b>collected</b> − already <b>paid</b> (never overpays; voided/written-off never count). <b>Record
-    pay</b> (latest month only) logs a payout so next month shows only the new amount. Click a rep's name for the
-    account-by-account drill-down.</p>
+    What is actually <b>payable</b> is in the pay run below — it follows the money collected, not the calendar.
+    Click a team for the account-by-account drill-down.</p>
   {% else %}
   <p class="hint" style="margin-top:10px"><b>Contribution</b> = the line items a rep wrote this month × the rate
-    (Settings). The <b>Earned / Collected / Paid / Payable</b> columns are <b>cumulative through {{ m }}</b>.
-    <b>Payable now</b> = earned so far × the share of billing <b>collected</b> − already <b>paid</b>.</p>
+    (Settings). What is actually <b>payable</b> is in the pay run below.</p>
   {% endif %}
+</div>
+
+<div class="card">
+  <h2>Pay run — as of today</h2>
+  <p class="hint">Pay follows <b>collection</b>, not the calendar. Every chapter stays open until it is fully
+    collected and fully paid, so money earned in August keeps releasing in November as those invoices get paid —
+    nothing is stranded when a cycle rolls over. <b>Owed now</b> = earned × the share of that chapter's billing
+    collected − already paid, floored at $0 (a recomputation can never claw back). <b>Not yet released</b> is
+    earned money still waiting on customer payments; it pays out automatically as the receivables come in.
+    <a href="/ledger">Full ledger by chapter →</a></p>
+  <table>
+    <thead><tr><th>Rep</th><th class="num">Earned (all chapters)</th><th class="num">Collected</th>
+      <th class="num">Paid to date</th><th class="num" title="Owed from an EARLIER chapter that has since collected">Carried over</th>
+      <th class="num">Owed now</th><th class="num" title="Earned but not yet collected — releases later">Not yet released</th></tr></thead>
+    <tbody>
+    {% for x in rows %}
+      <tr>
+        <td><strong>{{ x.associate }}</strong></td>
+        <td class="num">${{ '{:,.2f}'.format(x.earned_all) }}</td>
+        <td class="num mut">{{ '%.0f'|format(x.collected_pct) }}%</td>
+        <td class="num mut">${{ '{:,.2f}'.format(x.paid) }}</td>
+        <td class="num {{ '' if x.carried > 0.005 else 'mut' }}">{% if x.carried > 0.005 %}${{ '{:,.2f}'.format(x.carried) }}{% else %}—{% endif %}</td>
+        <td class="num"><strong>${{ '{:,.2f}'.format(x.payable_now) }}</strong>
+          {% if x.payable_now >= 0.01 %}
+          <form method="post" action="/pay" style="margin:0;display:inline" onsubmit="return confirm('Record ${{ '{:,.2f}'.format(x.payable_now) }} as PAID to {{ x.associate }}?')">
+            <input type="hidden" name="associate" value="{{ x.associate }}">
+            <input type="hidden" name="amount" value="{{ '%.2f'|format(x.payable_now) }}">
+            <button type="submit" class="ghost" style="padding:2px 9px;font-size:11.5px;margin-left:6px">pay</button></form>
+          {% endif %}</td>
+        <td class="num mut">${{ '{:,.2f}'.format(x.unreleased) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><th>Total</th>
+      <th class="num">${{ '{:,.2f}'.format(team.earned_all) }}</th><th></th>
+      <th class="num">${{ '{:,.2f}'.format(team.paid) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(team.carried) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(team.payable_now) }}</th>
+      <th class="num">${{ '{:,.2f}'.format(team.unreleased) }}</th>
+    </tr></tfoot>
+  </table>
 </div>
 
 {% if growth_active %}

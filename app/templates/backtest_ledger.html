@@ -1,0 +1,59 @@
+{% extends "backtest_base.html" %}{% block body %}
+<div class="card">
+  <h2>Pay ledger — every chapter, until it is collected and paid</h2>
+  <p class="hint">A <b>chapter</b> is an earning period (the Aug–Sep launch chapter, then one cycle a year from
+    October). A chapter ending does <b>not</b> close its money: an invoice written in September may only be paid
+    by the customer in November, and when it is, that rep's September earnings become payable here. Nothing is
+    stranded by a cycle rollover. <b>Collectable</b> = earned × the share of that chapter's own billing that has
+    been collected; it rises as receivables come in. <b>Owed</b> = collectable − paid, floored at $0, so a
+    recomputation can never take back money already released. Payments settle the <b>oldest chapter first</b>.</p>
+  {% for rep, chapters in ledger.rows.items() %}
+  {% set t = ledger.totals[rep] %}
+  <h3 style="margin-top:16px">{{ rep }}
+    <span class="mut" style="font-weight:400;font-size:12.5px">earned ${{ '{:,.2f}'.format(t.earned) }} ·
+      paid ${{ '{:,.2f}'.format(t.paid) }} ·
+      <b>owed ${{ '{:,.2f}'.format(t.owed) }}</b> ·
+      waiting on collection ${{ '{:,.2f}'.format(t.unreleased) }}</span></h3>
+  <table>
+    <thead><tr><th>Chapter</th><th></th><th class="num">Line items</th><th class="num">Contribution</th>
+      <th class="num">Growth</th><th class="num">Acquisition</th><th class="num">Earned</th>
+      <th class="num">Billed</th><th class="num">Collected</th><th class="num">Collectable</th>
+      <th class="num">Paid</th><th class="num">Owed</th></tr></thead>
+    <tbody>
+    {% for c in chapters %}
+      <tr>
+        <td>{{ c.chapter }}</td>
+        <td class="mut">{% if c.closed %}closed{% else %}open{% endif %}</td>
+        <td class="num mut">{{ '{:,}'.format(c.n_items) }}</td>
+        <td class="num">${{ '{:,.2f}'.format(c.contribution) }}</td>
+        <td class="num">{% if c.growth > 0.005 %}${{ '{:,.2f}'.format(c.growth) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+        <td class="num">{% if c.acquisition > 0.005 %}${{ '{:,.2f}'.format(c.acquisition) }}{% else %}<span class="mut">—</span>{% endif %}</td>
+        <td class="num"><strong>${{ '{:,.2f}'.format(c.earned) }}</strong></td>
+        <td class="num mut">${{ '{:,.0f}'.format(c.billed) }}</td>
+        <td class="num mut">${{ '{:,.0f}'.format(c.collected) }} ({{ '%.0f'|format(c.collected_pct) }}%)</td>
+        <td class="num">${{ '{:,.2f}'.format(c.collectable) }}</td>
+        <td class="num mut">${{ '{:,.2f}'.format(c.paid) }}</td>
+        <td class="num"><strong>${{ '{:,.2f}'.format(c.owed) }}</strong></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>Payments recorded</h2>
+  {% if history %}
+  <table>
+    <thead><tr><th>Rep</th><th>Chapter starting</th><th class="num">Paid to date</th><th>Recorded by</th><th>Last updated</th></tr></thead>
+    <tbody>
+    {% for h in history %}
+      <tr><td>{{ h.associate }}</td><td class="mut">{{ h.chapter }}</td>
+        <td class="num">${{ '{:,.2f}'.format(h.paid) }}</td><td class="mut">{{ h.by }}</td>
+        <td class="mut">{{ h.when.strftime('%Y-%m-%d %H:%M') if h.when else '—' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="hint">No payments recorded yet.</p>{% endif %}
+</div>
+{% endblock %}

@@ -64,62 +64,10 @@ def _guard(request: Request, db: Session):
     return user if (user and user.role != "rep") else None
 
 
-# ---------- contribution + acquisition (monthly, alongside the cumulative growth) ----------
-def contribution_by_rep_month(db, months, team, item_rate):
-    """Line items placed per (rep, month) x item_rate — same direct formula as the scorecard."""
-    df = service.active_lines(db)
-    d = df[df["associate"].isin(team)].copy()
-    d["ym"] = d["document_date"].dt.to_period("M")
-    per_set = {pd.Period(m, "M") for m in months}
-    d = d[d["ym"].isin(per_set)]
-    counts = d.groupby(["associate", "ym"]).size()
-    return {(rep, str(per)): dict(n_items=int(n), bonus=float(n) * item_rate)
-            for (rep, per), n in counts.items()}
-
-
-def acquisition_by_rep_month(db, months, team, s):
-    """Flat landing bonus by new-account size, paid ONCE at the ~quarter mark (first-sale month + 2),
-    only for accounts the manager confirmed rep-won (AcquisitionReview). Size = first-8-weeks revenue,
-    annualized, into the same small/medium/large tiers as the scorecard. Returns (pay_map, review_rows).
-    Fast (~0.2s) and NOT memoized on purpose: reads AcquisitionReview live so a mark shows immediately, and
-    never pollutes the engine cache / evicts the (expensive) growth result."""
-    df = service.active_lines(db)
-    first = df.groupby("account")["document_date"].min()
-    lo = pd.Period(months[0], "M") - 3                      # landed up to a quarter before the window still pays in it
-    hi = pd.Period(months[-1], "M")
-    cand = first[(first.dt.to_period("M") >= lo) & (first.dt.to_period("M") <= hi)]
-    self_acq = service.self_acquired_set(db)
-    names = service.customer_names(db)
-    flags = {r.account: r.rep_won for r in db.query(M.AcquisitionReview)}
-    small_max, med_max = float(s["acq_tier_small_max"]), float(s["acq_tier_medium_max"])
-    flats = dict(small=float(s["acq_flat_small"]), medium=float(s["acq_flat_medium"]), large=float(s["acq_flat_large"]))
-    # VECTORIZED first-8-weeks window per candidate (no per-account full-df scan): each candidate's early rows =
-    # its lines within 56 days of its own first sale. rev8 per account + the top TEAM rep in that window.
-    sub = df[df["account"].isin(set(cand.index))].copy()
-    sub["_first"] = sub["account"].map(first)
-    early = sub[sub["document_date"] <= sub["_first"] + pd.Timedelta(days=56)]
-    rev8_by = early.groupby("account")["extended_price"].sum()
-    teamrev = early[early["associate"].isin(team)].groupby(["account", "associate"])["extended_price"].sum()
-    rep_by = (teamrev.reset_index().sort_values("extended_price").groupby("account").tail(1)
-              .set_index("account")["associate"]) if len(teamrev) else pd.Series(dtype=object)
-    pay, review = {}, []
-    for acct, fs in cand.items():
-        rep = rep_by.get(acct)
-        rev8 = float(rev8_by.get(acct, 0.0))
-        annual = rev8 * 365.0 / 56.0
-        tier = "small" if annual < small_max else ("medium" if annual < med_max else "large")
-        flat = flats[tier]
-        pay_month = str(fs.to_period("M") + 2)
-        confirmed = acct in self_acq
-        if rep and confirmed and pay_month in months:
-            pay[(rep, pay_month)] = pay.get((rep, pay_month), 0.0) + flat
-        review.append(dict(account=acct, customer=names.get(acct, acct), rep=rep or "—",
-                           first_order=str(fs.date()), rev8=rev8, annualized=annual, tier=tier, flat=flat,
-                           pay_month=pay_month,
-                           status=("rep-won" if flags.get(acct) is True
-                                   else ("house" if flags.get(acct) is False else "unreviewed"))))
-    review.sort(key=lambda r: -r["annualized"])
-    return pay, review
+# contribution + acquisition live in service.py (the pay ledger needs them too); re-exported here
+# so the route handlers below keep reading the same names.
+contribution_by_rep_month = service.contribution_by_rep_month
+acquisition_by_rep_month = service.acquisition_by_rep_month
 
 
 @app.get("/healthz", response_class=PlainTextResponse)
@@ -173,20 +121,10 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
     # lands now still gets reviewed on the New accounts tab and pays once the growth cycle opens).
     acq_pay = acquisition_by_rep_month(db, months, team, s)[0] if growth_active else {}
 
-    # pay-on-collection: earned (all three pieces) is a TARGET; payable now scales by the rep's collected
-    # fraction of their billing. Everything below is CUMULATIVE THROUGH THE SELECTED MONTH, so stepping the
-    # month selector forward adds up (August alone -> Aug+Sep -> ...), not the whole cycle at once.
     thru = months[:mi + 1]
-    sel_end = min(pd.Period(m, "M").end_time, pd.Timestamp(r["as_of"]))
-    df = service.active_lines(db)
-    win = df[(df["document_date"] >= r["fiscal_start"]) & (df["document_date"] <= sel_end)]
-    win = win[win["associate"].isin(team)]
-    coll = {str(x) for x in service.collected_set(db)}
-    billed = win.groupby("associate")["extended_price"].sum()
-    collected = win[win["sop_number"].astype(str).isin(coll)].groupby("associate")["extended_price"].sum()
-
-    paid = {p.associate: float(p.paid_cum or 0.0)
-            for p in db.query(M.GrowthPayment).filter(M.GrowthPayment.fiscal_start == r["fiscal_start"].date())}
+    # PAY is a live, whole-program number, not a per-month one: the ledger keeps every chapter open until it
+    # is fully collected AND fully paid, so money earned in a closed chapter still releases here.
+    ledger = service.pay_ledger(db)
 
     # GROWTH is earned by the TEAM (the accounts it owns) and split equally; CONTRIBUTION and ACQUISITION
     # stay individual. So there are two views: the team's growth, then each rep's own pay line.
@@ -215,22 +153,22 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         growth_cycle = float(t["cum_pay"])                                              # through selected month
         contrib_cycle = sum(contrib.get((rep, mm), {}).get("bonus", 0.0) for mm in thru)
         acq_cycle = sum(v for (rp, mmn), v in acq_pay.items() if rp == rep and mmn in thru)
-        earned_cycle = growth_cycle + contrib_cycle + acq_cycle
-        b = float(billed.get(rep, 0.0))
-        frac = min(1.0, float(collected.get(rep, 0.0)) / b) if b > 0 else 0.0
-        collectable = earned_cycle * frac
-        already = paid.get(rep, 0.0)
+        tot = ledger["totals"].get(rep, {})
         rows.append(dict(
             associate=rep, team=x["team"], members=int(x["members"] or 1),
             pay_mo=float(t["pay"]), cum_pay=growth_cycle,
             n_items=c["n_items"], contrib_mo=c["bonus"], acq_mo=a_mo,
             total_mo=float(t["pay"]) + c["bonus"] + a_mo,
-            earned_cycle=earned_cycle, collected_pct=frac * 100.0,
-            paid=already, payable_now=max(0.0, collectable - already),
+            earned_cycle=growth_cycle + contrib_cycle + acq_cycle,
+            earned_all=tot.get("earned", 0.0),
+            collected_pct=(100.0 * tot.get("collectable", 0.0) / tot["earned"]) if tot.get("earned") else 0.0,
+            paid=tot.get("paid", 0.0), payable_now=tot.get("owed", 0.0),
+            carried=tot.get("owed_prior", 0.0), unreleased=tot.get("unreleased", 0.0),
         ))
     rows.sort(key=lambda z: (z["team"] is None, z["team"] or "", -z["earned_cycle"]))
     team_row = {k: sum(z[k] for z in rows) for k in
-                ("pay_mo", "cum_pay", "contrib_mo", "acq_mo", "total_mo", "earned_cycle", "paid", "payable_now")}
+                ("pay_mo", "cum_pay", "contrib_mo", "acq_mo", "total_mo", "earned_cycle", "earned_all",
+                 "paid", "payable_now", "carried", "unreleased")}
     team_row["n_items"] = sum(z["n_items"] for z in rows)
     for k in ("profit_mo", "profit_mo_ly", "gap_mo", "cum_gap"):
         team_row[k] = sum(z[k] for z in team_rows)
@@ -241,6 +179,7 @@ def backtest(request: Request, m: str = None, db: Session = Depends(get_db)):
         "rows": rows, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
         "unassigned": service.unassigned_summary(db),
         "is_latest": (mi == len(months) - 1), "growth_active": growth_active,
+        "ledger": ledger,
         "growth_start": r["growth_start"],
         "fiscal_start": r["fiscal_start"], "as_of": r["as_of"]})
 
@@ -252,17 +191,8 @@ def record_pay(request: Request, associate: str = Form(...), amount: float = For
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    r = service.run_cumulative_growth(db, with_comparison=False)
-    fs = r["fiscal_start"].date()
-    p = db.query(M.GrowthPayment).filter(M.GrowthPayment.associate == associate,
-                                         M.GrowthPayment.fiscal_start == fs).first()
-    if p is None:
-        p = M.GrowthPayment(associate=associate, fiscal_start=fs, paid_cum=0.0)
-        db.add(p)
-    p.paid_cum = float(p.paid_cum or 0.0) + max(0.0, float(amount))   # cumulative; never decreases
-    p.user_id = user.user_id
-    p.updated_at = dt.datetime.utcnow()
-    db.commit()
+    # settle the OLDEST chapter first, and never beyond what that chapter has collected
+    service.allocate_payment(db, associate, amount, user.user_id)
     return RedirectResponse("/", status_code=303)
 
 
@@ -317,6 +247,21 @@ def team_detail(request: Request, team_name: str, m: str = None, db: Session = D
         "share_each": (float(t["pay"]) / len(members)) if members else 0.0,
         "rate": r["cumulative_rate"], "growth_active": r.get("growth_active", True),
         "growth_start": r["growth_start"]})
+
+
+# ---------- the pay ledger: every chapter, open until collected and paid ----------
+@app.get("/ledger", response_class=HTMLResponse)
+def ledger_page(request: Request, db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    ledger = service.pay_ledger(db)
+    payments = (db.query(M.GrowthPayment).order_by(M.GrowthPayment.updated_at.desc()).limit(50).all())
+    users = {u.user_id: u.username for u in db.query(M.User).all()}
+    history = [dict(associate=p.associate, chapter=str(p.fiscal_start), paid=float(p.paid_cum or 0.0),
+                    by=users.get(p.user_id, "—"), when=p.updated_at) for p in payments]
+    return templates.TemplateResponse("backtest_ledger.html", {
+        "request": request, "user": user, "page": "ledger", "ledger": ledger, "history": history})
 
 
 # ---------- account assignment: which TEAM owns each account ----------
@@ -727,14 +672,12 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     growth_cycle = float(my_traj[-1]["cum_pay"]) if my_traj else 0.0
     contrib_cycle = sum(x["contrib"] for x in traj)
     acq_cycle = sum(x["acq"] for x in traj)
-    earned = growth_cycle + contrib_cycle + acq_cycle
-    df = service.active_lines(db)
-    win = df[(df["document_date"] >= r["fiscal_start"]) & (df["document_date"] <= r["as_of"])]
-    mine = win[win["associate"] == name]
-    coll = {str(x) for x in service.collected_set(db)}
-    billed = float(mine["extended_price"].sum())
-    collected = float(mine[mine["sop_number"].astype(str).isin(coll)]["extended_price"].sum())
-    frac = min(1.0, collected / billed) if billed > 0 else 0.0
+    earned_cycle_only = growth_cycle + contrib_cycle + acq_cycle
+    # pay comes from the LEDGER (every chapter, open until collected and paid) — not just this cycle, so
+    # nothing a rep earned before the cycle rolled over goes missing.
+    led = service.pay_ledger(db)["totals"].get(name, {})
+    earned = led.get("earned", earned_cycle_only)
+    frac = (led.get("collectable", 0.0) / earned) if earned else 0.0
     names = service.customer_names(db)
     acc = r["accounts"]
     accounts = []
@@ -742,15 +685,14 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
         for a in acc[acc["holder"] == my_team].sort_values("growth", ascending=False).itertuples(index=False):
             accounts.append(dict(name=names.get(a.account, a.account), ty=float(a.ty_profit),
                                  ly=float(a.ly_profit), gap=float(a.growth), is_young=bool(a.is_young)))
-    p = db.query(M.GrowthPayment).filter(M.GrowthPayment.associate == name,
-                                         M.GrowthPayment.fiscal_start == r["fiscal_start"].date()).first()
-    already = float(p.paid_cum or 0.0) if p else 0.0
+    already = led.get("paid", 0.0)
     rr = r["reps"]; me_row = rr[rr["associate"] == name] if len(rr) else rr
     target = float(me_row.iloc[0]["target"]) if len(me_row) and me_row.iloc[0]["target"] is not None else None
     net = float(team_traj[-1]["cum_growth"]) if team_traj else 0.0
-    k = dict(cum_gap=net, earned=earned,
+    k = dict(cum_gap=net, earned=earned, earned_cycle=earned_cycle_only,
              growth_cycle=growth_cycle, contrib_cycle=contrib_cycle, acq_cycle=acq_cycle,
-             collected_pct=frac * 100.0, paid=already, payable=max(0.0, earned * frac - already),
+             collected_pct=frac * 100.0, paid=already, payable=led.get("owed", 0.0),
+             unreleased=led.get("unreleased", 0.0), carried=led.get("owed_prior", 0.0),
              target=target, target_pct=(min(100.0, max(0.0, net) / target * 100.0) if target else None))
     return templates.TemplateResponse("backtest_me.html", {
         "request": request, "user": user, "page": "me", "lang": lang, "name": name,

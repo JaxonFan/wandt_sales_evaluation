@@ -889,6 +889,210 @@ def _contribution_only_growth(db, fiscal_start, as_of, rate):
                 team_members=teams, accounts=pd.DataFrame(), account_monthly={}, growth_active=False)
 
 
+# ---------- the PAY LEDGER: what each rep has earned, what has been collected, what is still owed ----------
+def pay_chapters(db):
+    """The program's pay chapters, oldest first.
+
+    A chapter is a self-contained earning period: the launch chapter (program_start -> the day before
+    growth_start, contribution only), then one cycle per fiscal year from growth_start on. Earnings belong to
+    the chapter they were written in FOREVER — a chapter closing does not close its money, because
+    pay-on-collection means an invoice written in September can pay out in November. `pay_ledger` keeps every
+    chapter open until it is fully collected and fully paid."""
+    s = get_settings(db)
+    program_start = pd.Timestamp(s.get("program_start", "2026-08-01"))
+    growth_start = pd.Timestamp(s.get("growth_start", "2026-10-01"))
+    fmonth = int(s.get("fiscal_start_month", 10))
+    _lo, hi = data_bounds(db)
+    starts = [program_start]
+    if growth_start > program_start:
+        starts.append(growth_start)
+    year = growth_start.year
+    while True:
+        year += 1
+        nxt = pd.Timestamp(year=year, month=fmonth, day=1)
+        if nxt > hi:
+            break
+        starts.append(nxt)
+    chapters = []
+    for i, start in enumerate(starts):
+        if start > hi:
+            continue
+        end = (starts[i + 1] - pd.Timedelta(days=1)) if i + 1 < len(starts) else hi
+        chapters.append(dict(start=start, end=min(end, hi), closed=(i + 1 < len(starts)),
+                             growth_active=(start >= growth_start),
+                             label=f"{start:%b %Y} – {min(end, hi):%b %Y}"))
+    return chapters
+
+
+def _chapter_growth(db, start, end, growth_active):
+    """Growth earned per rep inside one chapter (zeros before growth_start). Memoized per chapter."""
+    if not growth_active:
+        return {}
+
+    def _run():
+        from .config import GROWTH_EXEMPT_ACCOUNTS
+        s = get_settings(db)
+        default_target = float(s.get("growth_target_default", 0.06))
+        teams = team_members(db)
+        _, _, roster = attribution_maps(db)
+        res = compute_cumulative_growth(
+            active_lines(db), start, end, roster,
+            cumulative_rate=float(s.get("cumulative_rate", 0.05)),
+            accel_rate=float(s.get("growth_accel_rate", 0.075)),
+            rep_targets={t: float(s.get(f"growth_target::{t}", default_target)) for t in teams},
+            exempt_accounts=GROWTH_EXEMPT_ACCOUNTS,
+            young_account_pct=float(s.get("young_account_pct", 0.01)),
+            young_account_months=int(s.get("young_account_months", 12)),
+            constrained_item_numbers=get_constrained_items(db),
+            teams=teams, account_team=account_team_map(db))
+        return {rep: float(rows[-1]["cum_pay"]) for rep, rows in res.get("rep_trajectory", {}).items() if rows}
+
+    return _memo(("chapter_growth", _growth_version(db), str(start.date()), str(end.date())), _run)
+
+
+def pay_ledger(db):
+    """Per rep, per chapter: earned -> collectable -> paid -> still owed. The single source of truth for pay.
+
+    earned      = contribution (own line items) + acquisition (own landings) + growth (the rep's equal share
+                  of their team's growth pay for that chapter)
+    collected%  = the share of THAT chapter's billing by that rep which the receivables file says is paid
+    collectable = earned x collected%   (it RISES over time as old invoices pay, which is the whole point:
+                  a closed chapter keeps releasing money long after the chapter ends)
+    paid        = GrowthPayment.paid_cum for (rep, chapter start)
+    owed        = max(0, collectable - paid)       -- never negative, so a recomputation can't claw back
+
+    Returns dict(chapters, rows={rep: [chapter rows]}, totals={rep: {...}})."""
+    s = get_settings(db)
+    item_rate = float(s["item_rate"])
+    _, _, roster = attribution_maps(db)
+    df = active_lines(db)
+    collected = {str(x) for x in collected_set(db)}
+    paid_rows = {(p.associate, p.fiscal_start): float(p.paid_cum or 0.0)
+                 for p in db.query(M.GrowthPayment).all()}
+    chapters = pay_chapters(db)
+
+    rows, totals = {rep: [] for rep in roster}, {}
+    for ch in chapters:
+        months = [str(m) for m in pd.period_range(ch["start"].to_period("M"), ch["end"].to_period("M"), freq="M")]
+        contrib = contribution_by_rep_month(db, months, roster, item_rate)
+        acq = acquisition_by_rep_month(db, months, roster, s)[0] if ch["growth_active"] else {}
+        growth = _chapter_growth(db, ch["start"], ch["end"], ch["growth_active"])
+        win = df[(df["document_date"] >= ch["start"]) & (df["document_date"] <= ch["end"])]
+        for rep in roster:
+            mine = win[win["associate"] == rep]
+            contribution = sum(contrib.get((rep, m), {}).get("bonus", 0.0) for m in months)
+            n_items = sum(contrib.get((rep, m), {}).get("n_items", 0) for m in months)
+            acquisition = sum(v for (r, m), v in acq.items() if r == rep and m in months)
+            earned = contribution + acquisition + float(growth.get(rep, 0.0))
+            billed = float(mine["extended_price"].sum())
+            got = float(mine[mine["sop_number"].astype(str).isin(collected)]["extended_price"].sum())
+            frac = min(1.0, got / billed) if billed > 0 else 0.0
+            already = paid_rows.get((rep, ch["start"].date()), 0.0)
+            collectable = earned * frac
+            rows[rep].append(dict(
+                chapter=ch["label"], start=ch["start"], end=ch["end"], closed=ch["closed"],
+                n_items=n_items, contribution=contribution, acquisition=acquisition,
+                growth=float(growth.get(rep, 0.0)), earned=earned,
+                billed=billed, collected=got, collected_pct=frac * 100.0,
+                collectable=collectable, paid=already, owed=max(0.0, collectable - already),
+                unreleased=max(0.0, earned - collectable)))
+    for rep in roster:
+        mine = rows[rep]
+        totals[rep] = dict(
+            earned=sum(r["earned"] for r in mine), collectable=sum(r["collectable"] for r in mine),
+            paid=sum(r["paid"] for r in mine), owed=sum(r["owed"] for r in mine),
+            unreleased=sum(r["unreleased"] for r in mine),
+            owed_prior=sum(r["owed"] for r in mine[:-1]),          # everything but the current chapter
+            owed_current=(mine[-1]["owed"] if mine else 0.0))
+    return dict(chapters=chapters, rows=rows, totals=totals)
+
+
+def allocate_payment(db, associate, amount, user_id):
+    """Record a payment against a rep, settling the OLDEST chapter first (so last quarter's collected money
+    clears before this quarter's). Never pays a chapter beyond what it has collected. Returns the allocation."""
+    import datetime as _dt
+    ledger = pay_ledger(db)
+    left, applied = max(0.0, float(amount)), []
+    for row in ledger["rows"].get(associate, []):
+        if left <= 0.005:
+            break
+        take = min(left, row["owed"])
+        if take <= 0.005:
+            continue
+        start = row["start"].date()
+        payment = (db.query(M.GrowthPayment)
+                   .filter(M.GrowthPayment.associate == associate,
+                           M.GrowthPayment.fiscal_start == start).first())
+        if payment is None:
+            payment = M.GrowthPayment(associate=associate, fiscal_start=start, paid_cum=0.0)
+            db.add(payment)
+        payment.paid_cum = float(payment.paid_cum or 0.0) + take
+        payment.user_id = user_id
+        payment.updated_at = _dt.datetime.utcnow()
+        applied.append(dict(chapter=row["chapter"], amount=take))
+        left -= take
+    db.commit()
+    return applied
+
+
+# ---------- contribution + acquisition (monthly pieces that sit beside the cumulative growth) ----------
+def contribution_by_rep_month(db, months, team, item_rate):
+    """Line items placed per (rep, month) x item_rate — same direct formula as the scorecard."""
+    df = active_lines(db)
+    d = df[df["associate"].isin(team)].copy()
+    d["ym"] = d["document_date"].dt.to_period("M")
+    per_set = {pd.Period(m, "M") for m in months}
+    d = d[d["ym"].isin(per_set)]
+    counts = d.groupby(["associate", "ym"]).size()
+    return {(rep, str(per)): dict(n_items=int(n), bonus=float(n) * item_rate)
+            for (rep, per), n in counts.items()}
+
+
+def acquisition_by_rep_month(db, months, team, s):
+    """Flat landing bonus by new-account size, paid ONCE at the ~quarter mark (first-sale month + 2),
+    only for accounts the manager confirmed rep-won (AcquisitionReview). Size = first-8-weeks revenue,
+    annualized, into the same small/medium/large tiers as the scorecard. Returns (pay_map, review_rows).
+    Fast (~0.2s) and NOT memoized on purpose: reads AcquisitionReview live so a mark shows immediately, and
+    never pollutes the engine cache / evicts the (expensive) growth result."""
+    df = active_lines(db)
+    first = df.groupby("account")["document_date"].min()
+    lo = pd.Period(months[0], "M") - 3                      # landed up to a quarter before the window still pays in it
+    hi = pd.Period(months[-1], "M")
+    cand = first[(first.dt.to_period("M") >= lo) & (first.dt.to_period("M") <= hi)]
+    self_acq = self_acquired_set(db)
+    names = customer_names(db)
+    flags = {r.account: r.rep_won for r in db.query(M.AcquisitionReview)}
+    small_max, med_max = float(s["acq_tier_small_max"]), float(s["acq_tier_medium_max"])
+    flats = dict(small=float(s["acq_flat_small"]), medium=float(s["acq_flat_medium"]), large=float(s["acq_flat_large"]))
+    # VECTORIZED first-8-weeks window per candidate (no per-account full-df scan): each candidate's early rows =
+    # its lines within 56 days of its own first sale. rev8 per account + the top TEAM rep in that window.
+    sub = df[df["account"].isin(set(cand.index))].copy()
+    sub["_first"] = sub["account"].map(first)
+    early = sub[sub["document_date"] <= sub["_first"] + pd.Timedelta(days=56)]
+    rev8_by = early.groupby("account")["extended_price"].sum()
+    teamrev = early[early["associate"].isin(team)].groupby(["account", "associate"])["extended_price"].sum()
+    rep_by = (teamrev.reset_index().sort_values("extended_price").groupby("account").tail(1)
+              .set_index("account")["associate"]) if len(teamrev) else pd.Series(dtype=object)
+    pay, review = {}, []
+    for acct, fs in cand.items():
+        rep = rep_by.get(acct)
+        rev8 = float(rev8_by.get(acct, 0.0))
+        annual = rev8 * 365.0 / 56.0
+        tier = "small" if annual < small_max else ("medium" if annual < med_max else "large")
+        flat = flats[tier]
+        pay_month = str(fs.to_period("M") + 2)
+        confirmed = acct in self_acq
+        if rep and confirmed and pay_month in months:
+            pay[(rep, pay_month)] = pay.get((rep, pay_month), 0.0) + flat
+        review.append(dict(account=acct, customer=names.get(acct, acct), rep=rep or "—",
+                           first_order=str(fs.date()), rev8=rev8, annualized=annual, tier=tier, flat=flat,
+                           pay_month=pay_month,
+                           status=("rep-won" if flags.get(acct) is True
+                                   else ("house" if flags.get(acct) is False else "unreviewed"))))
+    review.sort(key=lambda r: -r["annualized"])
+    return pay, review
+
+
 def written_off_set(db):
     """Invoice numbers the manager wrote off as bad debt -> dropped from the unpaid/pending panel."""
     return {s for (s,) in db.query(M.WrittenOffInvoice.sop_number).all()}

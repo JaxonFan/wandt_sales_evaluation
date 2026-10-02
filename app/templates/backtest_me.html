@@ -47,11 +47,18 @@
     <div class="kpi"><div class="label">{{ '已发放' if zh else 'Paid so far' }}</div>
       <div class="val">${{ '{:,.0f}'.format(k.paid) }}</div></div>
     <div class="kpi primary"><div class="label">{{ '现在可发' if zh else 'Payable now' }}</div>
-      <div class="val">${{ '{:,.0f}'.format(k.payable) }}</div></div>
+      <div class="val">${{ '{:,.2f}'.format(k.payable) }}</div></div>
+    <div class="kpi"><div class="label">{{ '等客户付款' if zh else 'Waiting on collection' }}</div>
+      <div class="val">${{ '{:,.2f}'.format(k.unreleased) }}</div></div>
   </div>
-  <p class="hint">{% if zh %}<b>现在可发</b> = 已赚 × 已收款比例 − 已发放。客户货款收回来，剩下的部分就会发放 ——
-    只有收到钱的生意才算数。{% else %}<b>Payable now</b> = earned × your collected % − paid so far. As your
-    customers' invoices get paid, the rest releases — only collected business counts.{% endif %}</p>
+  <p class="hint">{% if zh %}<b>现在可发</b> = 已赚 × 已收款比例 − 已发放。<b>等客户付款</b>的那部分不会作废 ——
+    客户什么时候把货款结清，那部分就什么时候发给你，<b>就算已经进入下一个周期也一样</b>。只有收到钱的生意才算数。
+    {% if k.carried > 0.005 %}（其中 ${{ '{:,.2f}'.format(k.carried) }} 是上一个周期赚的，现在货款收回来了。）{% endif %}
+    {% else %}<b>Payable now</b> = earned × your collected % − paid so far. The amount <b>waiting on
+    collection</b> is not lost — it pays out whenever those customers settle their invoices, <b>even after the
+    cycle has rolled over</b>. Only collected business counts.
+    {% if k.carried > 0.005 %}(${{ '{:,.2f}'.format(k.carried) }} of what's payable was earned in an earlier
+    period and has only now been collected.){% endif %}{% endif %}</p>
 </div>
 
 <div class="card">
