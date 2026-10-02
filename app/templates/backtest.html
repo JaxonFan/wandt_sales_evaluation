@@ -14,8 +14,15 @@
   .paycell form{display:inline}
   .paybtn{background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:700;box-shadow:var(--shadow);white-space:nowrap}
   .paybtn:hover{background:var(--accent-2);border-color:var(--accent-2)}
-  .why{font-size:11px;color:var(--muted);margin-top:4px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
-  .why span{background:var(--paper);border-radius:999px;padding:1px 8px}
+  .why{font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap}
+  .why span{background:var(--paper);border-radius:999px;padding:1px 7px;margin-left:4px}
+  tr.rep > td:first-child{white-space:nowrap} .paycell{white-space:nowrap}
+  /* fit the pay table on a laptop without scrolling: headers may wrap, numbers stay on one line */
+  #paycard table{font-size:13px} #paycard thead th{white-space:normal;letter-spacing:0;font-size:11px;line-height:1.25;vertical-align:bottom}
+  #paycard td.num,#paycard th.num{padding-left:6px;padding-right:6px}
+  #paycard .why{white-space:normal;line-height:1.6}
+  @media (max-width:1300px){ #paycard table{font-size:12.5px} #paycard .paybtn{padding:4px 10px;font-size:12px} #paycard th, #paycard td{padding:8px 5px} }
+  .paybtn{padding:5px 12px;font-size:12.5px}
   .auditbtn{display:block;margin-top:16px;padding:12px 16px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);color:var(--accent-2);font-weight:600;font-size:13.5px;text-decoration:none;text-align:center;box-shadow:var(--shadow)}
   .auditbtn:hover{border-color:var(--accent);background:var(--accent-soft)}
   /* team grouping */
@@ -43,7 +50,7 @@
   .strip b{display:block;font-size:17px;margin-top:2px;font-variant-numeric:tabular-nums}
   .strip .miss b{color:#c0392b}
   .scroll{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
-  table.stmt{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.stmt{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}   /* fixed: an expanded invoice can't re-size the columns around it */
   table.stmt th{position:sticky;top:0;background:#f7f7fa;z-index:1;font-weight:600;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
   table.stmt td{padding:6px 10px;border-bottom:1px solid #f0f0f3;background:none;white-space:nowrap}
   table.stmt td.cust{max-width:360px;overflow:hidden;text-overflow:ellipsis}
@@ -55,9 +62,9 @@
   table.stmt tr.miss td.cust,table.stmt tr.miss td.num{color:#7a2a2a}
 
   tr.invx > td{background:#fff;padding:10px 12px 12px 40px;border-bottom:1px solid var(--line)}
-  .invbox{border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;background:#fcfcfd}
+  .invbox{border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;background:#fcfcfd;overflow-x:auto}
   .invhead{font-size:12.5px;color:var(--muted);margin-bottom:8px} .invhead b{color:var(--ink)}
-  table.inv{font-size:12px;width:100%} table.inv th{text-transform:none;letter-spacing:0;font-size:11px;position:static} table.inv td,table.inv th{padding:4px 8px;white-space:normal}
+  table.inv{font-size:12px;width:100%;table-layout:auto} table.inv th{text-transform:none;letter-spacing:0;font-size:11px;position:static} table.inv td,table.inv th{padding:4px 8px;white-space:normal}
   table.inv .num{text-align:right;font-variant-numeric:tabular-nums}
 </style>
 <script data-nav>
@@ -149,9 +156,10 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
 <div class="card" id="paycard">
   <h2>Pay — {{ m }}</h2>
   {% if not growth_active %}
-  <p class="hint"><b>{{ months[0] }} → {{ months[-1] }} is contribution only</b> — line items × rate. Growth and
-    new-account bonuses start {{ growth_start.strftime('%B %-d, %Y') }}. Pay follows <b>collection</b>: what's
-    owed is earned × the share of that rep's billing the customers have paid, minus what's already been paid.</p>
+  <p class="hint"><b>{{ months[0] }} → {{ months[-1] }} is contribution only</b> — line items × rate. The
+    <b>Growth share</b> and <b>New accounts</b> columns are here but empty until {{ growth_start.strftime('%B %-d, %Y') }}.
+    Pay follows <b>collection</b>: what's owed is earned × the share of that rep's billing the customers have paid,
+    minus what's already been paid.</p>
   {% else %}
   <p class="hint"><b>Growth share</b> = the team's growth pay split equally. <b>Contribution</b> and
     <b>Acquisition</b> are the rep's own. Pay follows <b>collection</b>: what's owed is earned × the share of
@@ -160,18 +168,18 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
   <table>
     <thead><tr>
       <th>Rep</th>
-      {% if growth_active %}<th>Team</th><th class="num">Growth share</th>{% endif %}
       <th class="num">Contribution</th>
-      {% if growth_active %}<th class="num">Acquisition</th>{% endif %}
-      <th class="num">Earned in {{ m }}</th>
+      <th class="num" title="{{ 'The team\'s growth pay split equally' if growth_active else 'Starts ' ~ growth_start.strftime('%b %-d, %Y') }}">Growth share</th>
+      <th class="num" title="{{ 'Flat bonus for a confirmed rep-won new account' if growth_active else 'Starts ' ~ growth_start.strftime('%b %-d, %Y') }}">New accounts</th>
+      <th class="num">Earned {{ m[5:]|int|month_name }}</th>
       <th class="num" title="Share of this month's own invoices the customers have paid">Collected</th>
       <th class="num" title="Earned × collected — how much of this month's earnings has been released">Released</th>
       <th class="num" title="Paid against this month">Paid</th>
-      <th class="num" title="Released − paid. Unpaid money rolls forward until it is paid.">Owed on {{ m }}</th>
+      <th class="num" title="Released − paid. Unpaid money rolls forward until it is paid.">Owed {{ m[5:]|int|month_name }}</th>
       {% if is_latest %}<th class="num" title="This month's owed plus anything still unpaid from earlier months">Pay now</th>{% endif %}
     </tr></thead>
     <tbody>
-    {% set ncol = (10 if growth_active else 7) + (1 if is_latest else 0) %}
+    {% set ncol = 9 + (1 if is_latest else 0) %}
     {% for g in groups %}
       <tr class="grp {{ g.css }}"><td colspan="{{ ncol }}">
         <b>{{ g.team }}</b>
@@ -181,10 +189,9 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
       {% set is_open = (rid[2:] in open_set) %}
       <tr class="rep {{ g.css }}" onclick="rowtog(event,'{{ rid }}')" title="Click to see the invoices behind this">
         <td><span class="tg {{ 'open' if is_open }}" id="tg-{{ rid }}">▸</span><strong>{{ x.associate }}</strong></td>
-        {% if growth_active %}<td class="mut">{{ x.team or '—' }}</td>
-        <td class="num">${{ '{:,.2f}'.format(x.pay_mo) }}</td>{% endif %}
         <td class="num">${{ '{:,.2f}'.format(x.contrib_mo) }} <span class="mut">({{ '{:,}'.format(x.n_items) }})</span></td>
-        {% if growth_active %}<td class="num">{% if x.acq_mo > 0 %}${{ '{:,.0f}'.format(x.acq_mo) }}{% else %}<span class="mut">—</span>{% endif %}</td>{% endif %}
+        <td class="num">{% if growth_active %}${{ '{:,.2f}'.format(x.pay_mo) }}{% else %}<span class="mut" title="Starts {{ growth_start.strftime('%b %-d, %Y') }}">—</span>{% endif %}</td>
+        <td class="num">{% if growth_active and x.acq_mo > 0 %}${{ '{:,.0f}'.format(x.acq_mo) }}{% else %}<span class="mut" {% if not growth_active %}title="Starts {{ growth_start.strftime('%b %-d, %Y') }}"{% endif %}>—</span>{% endif %}</td>
         <td class="num"><strong>${{ '{:,.2f}'.format(x.m_earned) }}</strong></td>
         <td class="num mut">{{ '%.0f'|format(x.m_collected_pct) }}%</td>
         <td class="num">${{ '{:,.2f}'.format(x.m_collectable) }}</td>
@@ -201,9 +208,8 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
           </form>
           <div class="why">
             {% set earlier = x.pay_breakdown|rejectattr('label', 'equalto', x.panel.label if x.panel else '')|list %}
-            {% if x.m_owed > 0.005 %}<span>{{ m }} ${{ '{:,.2f}'.format(x.m_owed) }}</span>{% endif %}
-            {% if earlier %}<span>{{ earlier|length }} earlier month{{ 's' if earlier|length > 1 }} ${{ '{:,.2f}'.format(x.carried) }}
-              <span style="opacity:.7">({{ earlier[0].label.split(' ')[0] }}{% if earlier|length > 1 %}–{{ earlier[-1].label.split(' ')[0] }}{% endif %})</span></span>{% endif %}
+            {% if x.m_owed > 0.005 %}<span title="owed on {{ m }}">{{ m[5:]|int|month_name }} ${{ '{:,.2f}'.format(x.m_owed) }}</span>{% endif %}
+            {% if earlier %}<span title="{{ earlier|length }} earlier month{{ 's' if earlier|length > 1 }}: {{ earlier[0].label.split(' ')[0] }}{% if earlier|length > 1 %}–{{ earlier[-1].label.split(' ')[0] }}{% endif %}">+{{ earlier|length }} earlier ${{ '{:,.2f}'.format(x.carried) }}</span>{% endif %}
           </div>
           {% else %}<span class="mut">nothing owed</span>{% endif %}</td>
         {% endif %}
@@ -294,9 +300,9 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
     {% if rows %}
     <tfoot><tr>
       <th>Team</th>
-      {% if growth_active %}<th></th><th class="num">${{ '{:,.2f}'.format(team.pay_mo) }}</th>{% endif %}
       <th class="num">${{ '{:,.2f}'.format(team.contrib_mo) }} <span class="mut">({{ '{:,}'.format(team.n_items) }})</span></th>
-      {% if growth_active %}<th class="num">${{ '{:,.0f}'.format(team.acq_mo) }}</th>{% endif %}
+      <th class="num">{% if growth_active %}${{ '{:,.2f}'.format(team.pay_mo) }}{% else %}—{% endif %}</th>
+      <th class="num">{% if growth_active %}${{ '{:,.0f}'.format(team.acq_mo) }}{% else %}—{% endif %}</th>
       <th class="num">${{ '{:,.2f}'.format(team.m_earned) }}</th><th></th>
       <th class="num">${{ '{:,.2f}'.format(team.m_collectable) }}</th>
       <th class="num">${{ '{:,.2f}'.format(team.m_paid) }}</th>
