@@ -60,38 +60,43 @@
   table.inv{font-size:12px;width:100%} table.inv th{text-transform:none;letter-spacing:0;font-size:11px;position:static} table.inv td,table.inv th{padding:4px 8px;white-space:normal}
   table.inv .num{text-align:right;font-variant-numeric:tabular-nums}
 </style>
-<script>
-var PREV={{ nav.prev|tojson }}, NEXT={{ nav.next|tojson }};
+<script data-nav>
+var PREV={{ nav.prev|tojson }}, NEXT={{ nav.next|tojson }}, CUR={{ m|tojson }};
+var cache={}, busy=false;
 function openSet(){try{return JSON.parse(localStorage.getItem('dash-open')||'[]');}catch(e){return [];}}
 function saveOpen(ids){try{localStorage.setItem('dash-open',JSON.stringify(ids));}catch(e){}}
 function setOpen(id,on){var e=document.getElementById(id);if(!e)return;e.hidden=!on;var t=document.getElementById('tg-'+id);if(t)t.classList.toggle('open',on);
   var ids=openSet().filter(function(x){return x!==id;});if(on)ids.push(id);saveOpen(ids);}
 function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);setOpen(id,e.hidden);}
-function go(m){if(m)location.href='/?m='+m;}
-document.addEventListener('DOMContentLoaded',function(){
-  openSet().forEach(function(id){if(document.getElementById(id))setOpen(id,true);});           // open rows survive a month change
-  var cur=document.querySelector('.mchip.on');if(cur)cur.scrollIntoView({inline:'center',block:'nearest'});
-  document.addEventListener('keydown',function(e){if(e.target.closest('input,select,textarea'))return;if(e.key==='ArrowLeft')go(PREV);if(e.key==='ArrowRight')go(NEXT);});
-  // drag left/right (mouse or touch) on the month bar or the pay card to shift a month
-  ['monthnav','paycard'].forEach(function(id){var el=document.getElementById(id);if(!el)return;var sx=null,moved=false;
-    el.addEventListener('pointerdown',function(e){if(e.target.closest('a,button,form,input,select,.scroll'))return;sx=e.clientX;moved=false;});
-    el.addEventListener('pointermove',function(e){if(sx===null)return;var dx=e.clientX-sx;if(Math.abs(dx)>90&&!moved){moved=true;sx=null;go(dx>0?PREV:NEXT);}});
-    el.addEventListener('pointerup',function(){sx=null;});el.addEventListener('pointercancel',function(){sx=null;});});
-});
-function flt(id,which,a){var p=document.getElementById(id);p.querySelectorAll('table.stmt tbody tr').forEach(function(r){if(r.classList.contains('invx'))return;r.hidden=(which!=='all'&&!r.classList.contains(which));});
-  p.querySelectorAll('.flt a').forEach(function(x){x.classList.remove('on');});a.classList.add('on');
-  p.querySelectorAll('.cap').forEach(function(c){c.textContent=c.dataset[which];});}
-
-function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest('tr'),nxt=tr.nextElementSibling;
-  if(nxt&&nxt.classList.contains('invx')){nxt.remove();return;}
-  var cols=tr.children.length,x=document.createElement('tr');x.className='invx';x.innerHTML='<td colspan="'+cols+'" class="mut">loading…</td>';tr.after(x);
-  fetch('/invoice/'+encodeURIComponent(sop)+'.json').then(function(r){return r.json();}).then(function(j){
-    if(!j.ok){x.firstChild.textContent='Could not load this invoice.';return;}
-    var h=j.header,m=function(v){return '$'+Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});};
-    var rows=j.lines.map(function(l,i){return '<tr><td class="mut">'+(i+1)+'</td><td>'+l.item+'</td><td>'+l.description+'</td><td class="num">'+Number(l.qty).toLocaleString()+'</td><td class="num mut">'+m(l.unit_price)+'</td><td class="num">'+m(l.extended_price)+'</td><td class="num mut">'+m(l.extended_cost)+'</td><td class="num'+(l.profit<0?' neg':'')+'">'+m(l.profit)+'</td></tr>';}).join('');
-    x.innerHTML='<td colspan="'+cols+'"><div class="invbox"><div class="invhead"><b>'+h.sop_number+'</b> · '+h.customer+' · '+h.date+' · written by '+(h.associate||'—')+' · '+h.n_lines+' lines · total '+m(h.total)+' · profit '+m(h.profit)+' <span class="st '+(h.voided?'wo':(h.collected?'ok':'miss'))+'">'+(h.voided?'voided':(h.collected?'collected':'missing'))+'</span> <a href="/invoice/'+h.sop_number+'" class="mut" style="margin-left:8px">open page</a></div>'
-      +'<table class="inv"><thead><tr><th>#</th><th>Item</th><th>Description</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Amount</th><th class="num">Cost</th><th class="num">Profit</th></tr></thead><tbody>'+rows+'</tbody></table></div></td>';
-  });}
+function restoreOpen(){openSet().forEach(function(id){var e=document.getElementById(id);if(e){e.hidden=false;var t=document.getElementById('tg-'+id);if(t)t.classList.add('open');}});}
+function fetchMonth(m){if(!m)return Promise.resolve(null);if(cache[m])return Promise.resolve(cache[m]);
+  return fetch('/?m='+m,{credentials:'same-origin'}).then(function(r){return r.text();}).then(function(h){cache[m]=h;return h;});}
+function prefetch(){[PREV,NEXT].forEach(function(m){if(m&&!cache[m])fetchMonth(m);});}
+// swap the month bar + pay card in place with a slide/fade, like a page turn
+function go(m,dir){if(!m||busy)return;busy=true;dir=dir||(m<CUR?-1:1);
+  var card=document.getElementById('paycard');card.style.transition='transform .18s ease,opacity .18s ease';card.style.transform='translateX('+(-dir*48)+'px)';card.style.opacity='0';
+  Promise.all([fetchMonth(m),new Promise(function(r){setTimeout(r,180);})]).then(function(res){var html=res[0];if(!html){location.href='/?m='+m;return;}
+    var doc=new DOMParser().parseFromString(html,'text/html');
+    document.getElementById('monthnav').replaceWith(doc.getElementById('monthnav'));
+    var fresh=doc.getElementById('paycard');fresh.style.transition='none';fresh.style.transform='translateX('+(dir*48)+'px)';fresh.style.opacity='0';card.replaceWith(fresh);
+    var sc=doc.querySelector('script[data-nav]');if(sc){var mm=sc.textContent.match(/PREV=(.*?), NEXT=(.*?), CUR=(.*?);/);if(mm){PREV=JSON.parse(mm[1]);NEXT=JSON.parse(mm[2]);CUR=JSON.parse(mm[3]);}}
+    history.pushState({m:m},'','/?m='+m);restoreOpen();wireDrag();
+    requestAnimationFrame(function(){fresh.style.transition='transform .22s ease,opacity .22s ease';fresh.style.transform='';fresh.style.opacity='1';});
+    var cur=document.querySelector('.mchip.on');if(cur)cur.scrollIntoView({inline:'center',block:'nearest'});
+    setTimeout(function(){busy=false;prefetch();},240);});}
+window.addEventListener('popstate',function(e){if(e.state&&e.state.m)go(e.state.m);});
+document.addEventListener('click',function(e){var a=e.target.closest('#monthnav a[href^="/?m="]');if(!a)return;e.preventDefault();go(a.getAttribute('href').slice(4));});
+document.addEventListener('change',function(e){if(e.target.matches('#monthnav select')){e.preventDefault();go(e.target.value);}});
+document.addEventListener('keydown',function(e){if(e.target.closest('input,select,textarea'))return;if(e.key==='ArrowLeft')go(PREV,-1);if(e.key==='ArrowRight')go(NEXT,1);});
+// drag: the pay card follows the finger/mouse and fades, snaps back if released early, turns the page past 90px
+function wireDrag(){['monthnav','paycard'].forEach(function(id){var el=document.getElementById(id);if(!el||el.dataset.drag)return;el.dataset.drag='1';var sx=null,card=null;
+  el.addEventListener('pointerdown',function(e){if(e.target.closest('a,button,form,input,select,.scroll,.detail'))return;sx=e.clientX;card=document.getElementById('paycard');card.style.transition='none';});
+  el.addEventListener('pointermove',function(e){if(sx===null)return;var dx=e.clientX-sx;var lim=(dx>0&&!PREV)||(dx<0&&!NEXT)?0.25:1;card.style.transform='translateX('+(dx*0.6*lim)+'px)';card.style.opacity=String(Math.max(0.35,1-Math.abs(dx)/320));});
+  function release(e){if(sx===null)return;var dx=e.clientX-sx;sx=null;card.style.transition='transform .2s ease,opacity .2s ease';
+    if(dx>90&&PREV){go(PREV,-1);}else if(dx<-90&&NEXT){go(NEXT,1);}else{card.style.transform='';card.style.opacity='1';}}
+  el.addEventListener('pointerup',release);el.addEventListener('pointercancel',release);el.addEventListener('pointerleave',release);});}
+document.addEventListener('DOMContentLoaded',function(){restoreOpen();wireDrag();prefetch();history.replaceState({m:CUR},'','/?m='+CUR);
+  var cur=document.querySelector('.mchip.on');if(cur)cur.scrollIntoView({inline:'center',block:'nearest'});});
 </script>
 
 <div class="card monthnav" id="monthnav">
@@ -103,7 +108,7 @@ function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest(
     {% for mo in months %}<option value="{{ mo }}" {{ 'selected' if mo==m }}>{{ mo }}</option>{% endfor %}
   </select>
   <a class="arrow {{ 'dis' if not nav.next }}" href="{{ '/?m=' ~ nav.next if nav.next else 'javascript:void(0)' }}" title="Next month (→)">›</a>
-  <div class="navhint">{% if growth_active %}Cycle {{ months[0] }} → {{ months[-1] }}{% else %}{{ months[0] }} → {{ months[-1] }} · contribution only{% endif %} · drag left or right, or use ← → keys, to change month — open rows stay open</div>
+  <div class="navhint">{% if growth_active %}Cycle {{ months[0] }} → {{ months[-1] }}{% else %}{{ months[0] }} → {{ months[-1] }} · contribution only{% endif %} · <b>Swipe or drag the table</b> left/right, press <b>← →</b>, or click a month — open rows stay open</div>
 </div>
 
 {% if growth_active and team_rows %}

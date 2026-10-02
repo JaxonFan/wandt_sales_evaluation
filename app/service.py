@@ -891,6 +891,10 @@ def _contribution_only_growth(db, fiscal_start, as_of, rate):
 
 def review_counts(db):
     """Badge counts for the 'Needs review' tabs (falling behind / quiet / unreviewed new accounts)."""
+    return _memo(("review_counts", _engine_version(db), _assignment_version(db)), lambda: _review_counts_compute(db))
+
+
+def _review_counts_compute(db):
     s = get_settings(db)
     under = sum(1 for r in underperforming_accounts(db) if r["negative"] and r["below_band"])
     quiet = len(flag_silent_accounts(db))
@@ -903,6 +907,15 @@ def review_counts(db):
 
 
 # ---------- the PAY LEDGER: what each rep has earned, what has been collected, what is still owed ----------
+def _pay_version(db):
+    """Memo key for the pay ledger: growth inputs, the collected set, written-off set, and recorded payments."""
+    return (_growth_version(db),
+            db.query(func.count(M.CollectedInvoice.sop_number), func.max(M.CollectedInvoice.reported_at)).one(),
+            frozenset(written_off_set(db)),
+            frozenset((p.associate, p.fiscal_start, round(float(p.paid_cum or 0.0), 2))
+                      for p in db.query(M.GrowthPayment).all()))
+
+
 def pay_chapters(db):
     """The program's pay chapters, oldest first.
 
@@ -979,7 +992,11 @@ def pay_ledger(db):
     chapter (GrowthPayment) and settle its months oldest-first.
 
     Returns dict(chapters, rows={rep: [chapter rows, each with .months]}, months={rep: [month rows]},
-                 totals={rep: {...}})."""
+                 totals={rep: {...}}). Memoized by _pay_version (the dashboard asks for it once per rep)."""
+    return _memo(("pay_ledger", _pay_version(db)), lambda: _pay_ledger_compute(db))
+
+
+def _pay_ledger_compute(db):
     s = get_settings(db)
     item_rate = float(s["item_rate"])
     _, _, roster = attribution_maps(db)
@@ -1050,6 +1067,16 @@ def rep_pay_detail(db, associate, show="all"):
     _, _, roster = attribution_maps(db)
     if associate not in roster:
         return None
+    full = _memo(("rep_pay_detail", _pay_version(db), associate), lambda: _rep_pay_detail_compute(db, associate))
+    if show == "all":
+        return full
+    months = [dict(m, invoices=[i for i in m["invoices"]
+                                if (show == "unpaid" and not i["paid"]) or (show == "paid" and i["paid"])])
+              for m in full["months"]]
+    return dict(full, months=months)
+
+
+def _rep_pay_detail_compute(db, associate):
     s = get_settings(db)
     ledger = pay_ledger(db)
     df = active_lines(db)
@@ -1075,10 +1102,8 @@ def rep_pay_detail(db, associate, show="all"):
                                      lines=int(inv["lines"]), customer=names.get(inv["account"], inv["account"]),
                                      paid=(str(sop) in collected), written_off=(str(sop) in written_off)))
             invoices.sort(key=lambda i: (i["date"], i["sop_number"]), reverse=True)   # newest first
-        shown = [i for i in invoices
-                 if show == "all" or (show == "unpaid" and not i["paid"]) or (show == "paid" and i["paid"])]
         pay = payments.get(mr["chapter_start"].date())
-        months.append(dict(mr, label=per.strftime("%B %Y"), invoices=shown, n_invoices=len(invoices),
+        months.append(dict(mr, label=per.strftime("%B %Y"), invoices=invoices, n_invoices=len(invoices),
                            n_paid=sum(1 for i in invoices if i["paid"]),
                            n_unpaid=sum(1 for i in invoices if not i["paid"]),
                            unpaid_amount=sum(i["amount"] for i in invoices if not i["paid"]),
