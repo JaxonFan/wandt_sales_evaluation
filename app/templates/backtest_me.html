@@ -90,9 +90,10 @@
     {% endfor %}
     </tbody>
   </table>
-  {% if growth_active %}<p class="hint" style="margin-top:8px">{% if zh %}增长奖只在<b>累计净增长创新高</b>的时候发；跌下去的月份是 $0，
-    不倒扣 —— 做回来、再创新高，就继续发。{% else %}Growth pays only when your <b>cumulative net growth hits a
-    new high</b>; a down month is $0, never clawed back — recover past your peak and it pays again.{% endif %}</p>
+  {% if growth_active %}<p class="hint" style="margin-top:8px">{% if zh %}增长奖<b>只发一次</b>：每月对累计增长里<b>还没发过的部分</b>发奖；累计跌下去的月份是 $0，
+    已经发的不收回 —— 做回来之后，超过已发部分的再接着发。{% else %}Growth is <b>paid once</b>: each month pays on the
+    part of your cumulative growth <b>not yet paid for</b>; if the total drops, that month is $0 and nothing is taken
+    back — once it climbs past what's already been paid on, the extra pays.{% endif %}</p>
   {% else %}<p class="hint" style="margin-top:8px">{% if zh %}开单奖 = 你这个月写的订单行数 × 单价。
     十月起会加上增长奖和新客户奖。{% else %}Contribution = the line items you wrote this month × the rate.
     Growth and new-account bonuses join in October.{% endif %}</p>{% endif %}

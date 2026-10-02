@@ -1,38 +1,6 @@
 {% extends "backtest_base.html" %}{% block body %}
 {% set zh = (lang == 'zh') %}
-<style>
-  .manual{display:grid;grid-template-columns:200px 1fr;gap:28px;align-items:start}
-  .toc{position:sticky;top:16px;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:12px 6px;box-shadow:var(--shadow)}
-  .toc a{display:block;padding:7px 12px;border-radius:8px;font-size:13px;color:var(--muted);text-decoration:none}
-  .toc a:hover{background:var(--paper);color:var(--ink)}
-  .toc a b{display:inline-block;width:20px;color:var(--accent-2)}
-  .toc .lang{margin:4px 12px 10px;font-size:12px;color:var(--muted)}
-  .ch{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:22px 26px;margin-bottom:18px;box-shadow:var(--shadow);scroll-margin-top:16px}
-  .ch h2{display:flex;align-items:center;gap:12px;font-size:17px;margin:0 0 6px}
-  .ch h2 .n{width:30px;height:30px;border-radius:9px;background:var(--accent-soft);color:var(--accent-2);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0}
-  .ch .lead{color:var(--muted);font-size:13.5px;line-height:1.6;margin:0 0 14px}
-  .ch p,.ch li{font-size:13.5px;line-height:1.7} .ch ul{margin:6px 0 10px 20px;padding:0} .ch li{margin-bottom:4px}
-  .ch h3{font-size:14px;margin:18px 0 6px}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:10px 0 6px}
-  .pc{border:1px solid var(--line-2);border-radius:12px;padding:14px 16px;background:var(--paper)}
-  .pc .t{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
-  .pc .f{font-size:15px;font-weight:700;margin:6px 0 4px;letter-spacing:-.01em}
-  .pc .d{font-size:12.5px;color:var(--muted);line-height:1.5}
-  .pc.team{border-color:#5A48B6} .pc.me{border-color:#2B6CB0}
-  .formula{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;background:var(--ink);color:#fff;border-radius:10px;padding:12px 16px;margin:10px 0;line-height:1.8;overflow-x:auto}
-  .formula .c{color:#b9c2bd}
-  .ex{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0;font-size:13px;line-height:1.65}
-  .ex b.l{display:block;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-2);margin-bottom:4px}
-  .warn{border-left:4px solid var(--warm);background:var(--warm-bg);border-radius:0 10px 10px 0;padding:10px 14px;margin:10px 0;font-size:13px;line-height:1.65}
-  table.legend{font-size:13px;margin:8px 0} table.legend th{text-transform:none;letter-spacing:0;font-size:12px} table.legend td:first-child{white-space:nowrap;font-weight:600;width:170px}
-  ol.steps{counter-reset:s;list-style:none;margin:8px 0 0;padding:0}
-  ol.steps li{counter-increment:s;position:relative;padding:8px 0 8px 40px;border-bottom:1px solid var(--line);font-size:13.5px}
-  ol.steps li::before{content:counter(s);position:absolute;left:0;top:7px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700}
-  ol.steps li a{font-weight:600}
-  .faq details{border-bottom:1px solid var(--line);padding:8px 0} .faq summary{cursor:pointer;font-weight:600;font-size:13.5px} .faq p{margin:6px 0 2px}
-  .kbd{display:inline-block;border:1px solid var(--line-2);border-bottom-width:2px;border-radius:5px;padding:0 6px;font-size:12px;background:var(--card)}
-  @media (max-width:980px){.manual{grid-template-columns:1fr} .toc{position:static}}
-</style>
+{% include "_manual_style.html" %}
 
 {% if zh %}
 <div class="manual">
@@ -77,7 +45,14 @@
       <div class="formula">小组净增长 <span class="c">=</span> Σ 每个客户 (今年至今利润 − 去年同期利润)<br>
         目标 <span class="c">=</span> 目标% × 小组这些客户去年利润（默认 {{ '%.0f'|format(default_target*100) }}%，<a href="/settings" style="color:#fff">Settings</a> 按组调）<br>
         增长奖 <span class="c">=</span> {{ '%.0f'|format(rate*100) }}% × min(净增长, 目标) <span class="c">+</span> {{ '%.1f'|format(accel*100) }}% × max(0, 净增长 − 目标)<br>
-        <span class="c">// 每月只对「超过之前高点」的部分发；跌的月份 $0，永不倒扣；小组奖金平分给组员</span></div>
+        <span class="c">// 增长只发一次：每月对「累计增长里还没发过的部分」发 5%；累计跌下去就 $0，已发的不收回；小组奖金平分</span></div>
+      <h3>「只发一次」是什么意思</h3>
+      <table class="legend">
+        <tr><th>月份</th><th>累计净增长</th><th>已发到</th><th>本月按 5% 发的部分</th><th>发</th></tr>
+        <tr><td>十月</td><td>$1,000</td><td>$0</td><td>$1,000</td><td><b>$50</b></td></tr>
+        <tr><td>十一月（跌）</td><td>$800</td><td>$1,000</td><td>无 —— 累计低于已发的</td><td><b>$0</b>，$50 不收回</td></tr>
+        <tr><td>十二月</td><td>$1,500</td><td>$1,000</td><td>$500（超过已发的 $1,000 的部分）</td><td><b>$25</b></td></tr>
+      </table>
       <ul><li><b>算客户，不算个人。</b>客户换人时历史跟着客户走：接手平稳客户不算增长，被调走也不扣分。</li>
         <li><b>整本账一起算。</b>一个客户涨不能掩盖另一个客户跌，看净和。</li>
         <li><b>周期每年十月重置</b>：十月比去年十月，十月+十一月比去年十月+十一月，一直到九月。</li></ul>
@@ -199,7 +174,14 @@
       <div class="formula">team net growth <span class="c">=</span> Σ over its accounts (profit this cycle − same account, same months last year)<br>
         target <span class="c">=</span> target% × the team's last-year profit on those accounts (default {{ '%.0f'|format(default_target*100) }}%, per team in <a href="/settings" style="color:#fff">Settings</a>)<br>
         growth pay <span class="c">=</span> {{ '%.0f'|format(rate*100) }}% × min(net, target) <span class="c">+</span> {{ '%.1f'|format(accel*100) }}% × max(0, net − target)<br>
-        <span class="c">// pays only new ground above the previous peak; a down month is $0, never clawed back; split equally among members</span></div>
+        <span class="c">// growth is paid ONCE: each month pays 5% of the cumulative growth not yet paid for; if the total falls below what's been paid on, $0 and nothing taken back; split equally</span></div>
+      <h3>What "paid once" means</h3>
+      <table class="legend">
+        <tr><th>Month</th><th>Cumulative net growth</th><th>Already paid on</th><th>This month pays 5% of…</th><th>Pay</th></tr>
+        <tr><td>October</td><td>$1,000</td><td>$0</td><td>$1,000</td><td><b>$50</b></td></tr>
+        <tr><td>November (down)</td><td>$800</td><td>$1,000</td><td>nothing — the total is below what's already been paid on</td><td><b>$0</b>, the $50 stays</td></tr>
+        <tr><td>December</td><td>$1,500</td><td>$1,000</td><td>$500 — the part above the $1,000 already paid</td><td><b>$25</b></td></tr>
+      </table>
       <ul><li><b>Accounts, not people.</b> An account carries its history when it changes hands: inheriting a flat account isn't growth, and losing one isn't a penalty.</li>
         <li><b>Whole book, netted.</b> One growing account can't pay out while the rest shrinks more.</li>
         <li><b>The cycle resets each October</b>: October vs last October, Oct+Nov vs last Oct+Nov, … through September.</li></ul>

@@ -1,125 +1,220 @@
 {% extends "backtest_base.html" %}{% block body %}
-
 {% set zh = (lang != 'en') %}
-<div class="card guide-body">
-  <div style="display:flex;align-items:center;gap:10px">
-    <h2 style="margin:0">{{ '奖金怎么算 — 销售指南' if zh else 'How your bonus works — rep guide' }}</h2>
-    <span class="mut" style="margin-left:auto;font-size:12.5px">
-      <a href="/me/guide?lang=zh" {% if zh %}style="font-weight:700"{% endif %}>中文</a> ·
-      <a href="/me/guide?lang=en" {% if not zh %}style="font-weight:700"{% endif %}>EN</a></span>
+{% include "_manual_style.html" %}
+{% set team_label = my_team or (teams.keys()|list|first if teams else '') %}
+
+{% if zh %}
+<div class="manual">
+  <nav class="toc">
+    <div class="lang"><b style="color:var(--ink)">中文</b> · <a href="/me/guide?lang=en" style="display:inline;padding:0">EN</a></div>
+    <a href="#c0"><b>0</b>一页看懂</a><a href="#c1"><b>1</b>开单奖</a><a href="#c2"><b>2</b>增长奖（小组）</a><a href="#c3"><b>3</b>新客户奖</a>
+    <a href="#c4"><b>4</b>什么时候发钱</a><a href="#c5"><b>5</b>看懂「我的奖金」</a><a href="#c6"><b>6</b>我能做什么</a><a href="#c7"><b>7</b>常见问题</a>
+  </nav>
+  <div>
+    <section class="ch" id="c0">
+      <h2><span class="n">0</span>一页看懂</h2>
+      <p class="lead">奖金一共三项，每一项我们自己都能算出来。只按<b>客户已付清的货款</b>发放，每一分钱都能查到是哪张发票。</p>
+      {% if not growth_live %}<div class="warn"><b>八月、九月只算开单奖。</b>增长奖和新客户奖从 <b>{{ growth_start.strftime('%Y年%-m月%-d日') }}</b> 开始，
+        到时候重新开始算，十月比去年十月，十月+十一月比去年十月+十一月，以此类推。以前的记录都保留。</div>{% endif %}
+      <div class="cards">
+        <div class="pc me"><div class="t">1 · 开单奖 — 我自己的</div><div class="f">订单行数 × ${{ '%.2f'|format(item_rate) }}</div><div class="d">发票上每写一行商品就有。</div></div>
+        <div class="pc team"><div class="t">2 · 增长奖 — 小组的</div><div class="f">小组净利润增长 × {{ '%.0f'|format(rate*100) }}%</div><div class="d">小组名下的客户和去年比。超目标部分 {{ '%.1f'|format(accel*100) }}%。组员平分。</div></div>
+        <div class="pc me"><div class="t">3 · 新客户奖 — 我自己的</div><div class="f">${{ flat_small }} / ${{ flat_medium }} / ${{ flat_large }}</div><div class="d">自己开发的新客户，按规模一次性发。</div></div>
+      </div>
+      <div class="formula">现在可发 <span class="c">=</span> 本月已赚 <span class="c">×</span> 本月发票客户已付的比例 <span class="c">−</span> 已发给我的<br><span class="c">// 每个月单独算；没发的钱不会作废，客户什么时候付清，就什么时候发</span></div>
+    </section>
+
+    <section class="ch" id="c1">
+      <h2><span class="n">1</span>开单奖 — 每行 ${{ '%.2f'|format(item_rate) }}</h2>
+      <p class="lead">酬劳的是每天铺货的功夫，和金额大小无关。</p>
+      <ul><li>一张发票写了几行商品，就算几行，一行 ${{ '%.2f'|format(item_rate) }}。</li>
+        <li>只算我自己写的发票。作废的不算。</li></ul>
+      <div class="ex"><b class="l">例子</b>这个月写了 1,000 行 → 1,000 × ${{ '%.2f'|format(item_rate) }} = <b>${{ '{:,.2f}'.format(1000*item_rate) }}</b>。「我的奖金」页的「开单奖」一栏能看到金额和行数。</div>
+    </section>
+
+    <section class="ch" id="c2">
+      <h2><span class="n">2</span>增长奖 — 按小组算</h2>
+      <p class="lead">客户很难分清算谁的，所以增长奖按<b>小组</b>算：小组名下所有客户的利润加在一起，和<b>同样这批客户去年同期</b>比。</p>
+      <ul>{% for t, ms in teams.items() %}<li><b>{{ t }}</b>：{{ ms|join('、') }}{% if t == my_team %}（<b>我在这个组</b>）{% endif %}</li>{% endfor %}</ul>
+      <h3>客户归哪个组</h3>
+      <ul><li>最近 12 个月里，哪个组写了这个客户 <b>80% 以上的订单</b>（按单数），客户就归哪个组。没有组过线的由经理指定。</li>
+        <li><b>算客户，不算个人。</b>客户换人时历史跟着客户走：接手一个平稳的客户不算增长，被调走也不扣分。</li></ul>
+      <h3>怎么算</h3>
+      <div class="formula">小组净增长 <span class="c">=</span> Σ 每个客户 (今年至今利润 − 去年同期利润)<br>
+        增长奖 <span class="c">=</span> {{ '%.0f'|format(rate*100) }}% × 到目标的部分 <span class="c">+</span> {{ '%.1f'|format(accel*100) }}% × 超过目标的部分<br>
+        我的一份 <span class="c">=</span> 小组增长奖 ÷ 组员人数</div>
+      <h3>增长奖只发一次</h3>
+      <table class="legend">
+        <tr><th>月份</th><th>小组累计净增长</th><th>已发到</th><th>本月发的部分</th><th>小组拿到</th></tr>
+        <tr><td>十月</td><td>$1,000</td><td>$0</td><td>$1,000 × 5%</td><td><b>$50</b></td></tr>
+        <tr><td>十一月（跌）</td><td>$800</td><td>$1,000</td><td>无 —— 累计低于已发的</td><td><b>$0</b>，$50 不收回</td></tr>
+        <tr><td>十二月</td><td>$1,500</td><td>$1,000</td><td>$500 × 5%</td><td><b>$25</b></td></tr>
+      </table>
+      <ul><li>一个客户涨、一个客户跌，看的是<b>加总后的净增长</b>。红色（下滑）的客户值得先去拜访。</li>
+        <li>新客户没有去年可比，它的全部利润都算进小组的净增长。</li>
+        <li>周期每年十月重新开始。</li></ul>
+    </section>
+
+    <section class="ch" id="c3">
+      <h2><span class="n">3</span>新客户奖 — 一次性</h2>
+      <p class="lead">我自己开发的新客户（经理确认后），开单约一个季度、规模看清楚了，一次性发：</p>
+      <div class="cards">
+        <div class="pc"><div class="t">小客户</div><div class="f">${{ flat_small }}</div></div>
+        <div class="pc"><div class="t">中客户</div><div class="f">${{ flat_medium }}</div></div>
+        <div class="pc"><div class="t">大客户</div><div class="f">${{ flat_large }}</div></div>
+      </div>
+      <ul><li>默认不算开发（电话没法查证），要主动跟经理申报，由经理判断。</li>
+        <li>之后这个客户的利润还会继续算进小组增长奖。</li></ul>
+    </section>
+
+    <section class="ch" id="c4">
+      <h2><span class="n">4</span>什么时候发钱 — 按月、按收款</h2>
+      <p class="lead">上面算出来的是<b>已赚</b>。实际发放看客户有没有把货款付清，而且<b>每个月单独算</b>。</p>
+      <div class="formula">本月已释放 <span class="c">=</span> 本月已赚 <span class="c">×</span> (本月发票客户已付 ÷ 本月发票总额)<br>
+        现在可发 <span class="c">=</span> 已释放 <span class="c">−</span> 已发给我的（加上以前月份还没发的）</div>
+      <ul><li>八月的奖金只看八月的发票收没收回来；九月只看九月。</li>
+        <li><b>没发的钱不会作废。</b>客户十一月才付九月的货款，九月那部分奖金就十一月发，就算已经进入下一个周期。</li>
+        <li>作废、坏账的发票不算。</li></ul>
+      <div class="ex"><b class="l">例子</b>8 月赚 $99.40，8 月发票客户付了 42% → 释放 $41.72；9 月赚 $91.20，付了 33% → 释放 $29.79。现在可发 $71.51。8 月剩下的发票付清后，8 月那部分继续发。</div>
+    </section>
+
+    <section class="ch" id="c5">
+      <h2><span class="n">5</span>看懂「我的奖金」</h2>
+      <table class="legend">
+        <tr><td>已赚</td><td>三项合计（现在只有开单奖）</td></tr>
+        <tr><td>货款已收</td><td>我的发票里客户已付清的比例</td></tr>
+        <tr><td>已发放</td><td>经理已经发给我的</td></tr>
+        <tr><td>现在可发</td><td>已赚 × 货款已收 − 已发放</td></tr>
+        <tr><td>等客户付款</td><td>已赚但客户还没付的那部分 —— 不会作废，付清就发</td></tr>
+      </table>
+      <p>「落后的客户」和「静默客户」两页列出需要跟进的客户。</p>
+    </section>
+
+    <section class="ch" id="c6">
+      <h2><span class="n">6</span>我能做什么</h2>
+      <ol class="steps">
+        <li>打开<a href="/me/watch">「落后的客户」</a>，下滑的客户早点回访 —— 比什么都有效。</li>
+        <li>帮客户把货款按时结清 —— 货款已收上去了，「现在可发」马上跟着涨。</li>
+        <li>多开新品、多开新客户 —— 每一行都有开单奖，新客户还有一次性奖励。</li>
+        <li>第一次登录后，在<a href="/account">「修改密码」</a>把密码改成自己的。</li>
+      </ol>
+    </section>
+
+    <section class="ch faq" id="c7">
+      <h2><span class="n">7</span>常见问题</h2>
+      <details><summary>我的货款已收比例为什么比别人低？</summary><p>看客户不看人：大连锁付款慢，小店付得快。钱不会少，只是晚点发。</p></details>
+      <details><summary>跌的月份会倒扣吗？</summary><p>不会。已经发的永远不收回；跌的月份增长奖是 $0，做回来再接着发。</p></details>
+      <details><summary>客户被调给别人了，我吃亏吗？</summary><p>不吃亏。历史跟着客户走，调走的客户不再算在我们组，也不扣我们的分。</p></details>
+      <details><summary>组里有人卖得多、有人卖得少，为什么平分？</summary><p>增长奖按小组算是因为客户很难分清是谁的；开单奖和新客户奖还是各算各的。</p></details>
+    </section>
   </div>
-
-  {% if zh %}
-  <p class="hint" style="margin-top:6px">一共三项，每一项我们都可以自己算得出来。奖金只按<b>已收回的货款</b>发放。</p>
-
-  {% if not growth_live %}
-  <div class="msg" style="background:var(--accent-soft);border-color:var(--accent)">
-    <b>八月、九月只算开单奖</b>（写的每一行都算钱）。<b>增长奖和新客户奖从
-    {{ growth_start.strftime('%Y年%-m月%-d日') }} 开始</b>：到时候重新开始算，十月比去年十月，
-    十月+十一月比去年十月+十一月，以此类推。以前的记录都保留，用来做对比和判断新客户、静默客户。
-  </div>
-  {% endif %}
-
-  <h3>1 · 增长奖 — 按<b>小组</b>算，到目标 {{ '%.0f'|format(rate*100) }}%，超过目标 {{ '%.1f'|format(accel*100) }}%</h3>
-  <p><b>一句话：</b>客户很难分清算谁的，所以增长奖<b>按小组算</b>：把<b>小组名下所有客户</b>的利润加在一起，
-  和<b>同样这批客户去年同期</b>比，多出来的部分 —— 到小组<b>目标</b>之前拿 <b>{{ '%.0f'|format(rate*100) }}%</b>，
-  超过目标的部分拿 <b>{{ '%.1f'|format(accel*100) }}%</b>；如果整体比去年少，这个月是 $0（不倒扣）。
-  小组的增长奖<b>平分</b>给每个组员。</p>
-  <ul>
-    <li><b>我们的小组：</b>{% for t, ms in teams.items() %}<b>{{ t }}</b>（{{ ms|join('、') }}）{% if not loop.last %}；{% endif %}{% endfor %}。
-      {% if my_team %}你在 <b>{{ my_team }}</b>。{% endif %}</li>
-    <li><b>客户归哪个组：</b>最近 12 个月里，一个小组写了这个客户 <b>80% 以上的订单</b>（按<b>单数</b>算，
-      不看金额），客户就归这个组；没有小组过线的客户由经理指定。</li>
-    <li><b>开单奖和新客户奖还是算个人的</b> —— 自己写的每一行、自己开发的新客户，都是自己的。</li>
-    <li><b>算客户，不算个人。</b>客户换人负责时，它的历史跟着客户走：接手一个平稳的客户不算增长，
-      也不会因为客户被调走而吃亏 —— 调整客户对谁都不加分、不减分。</li>
-    <li><b>全部客户一起算。</b>一个客户涨、另一个跌，看的是<b>加总后的净增长</b>。红色（下滑）的客户
-      值得先去拜访。</li>
-    <li><b>逐月累计、只对新高发放。</b>淡季旺季自然抵消；某个月跌了就是 $0，做回来、超过之前的高点，
-      又继续发。已经发的不会收回。</li>
-    <li><b>一次性大单：</b>偶尔的一笔大单，当年照发；第二年不重复也没关系 —— 你只是不会为同一笔生意
-      再拿一次钱，而且奖金永远不会低于 $0，绝不会倒亏。</li>
-    <li><b>新客户</b>没有去年可比，所以它的全部利润都算进我们的净增长。</li>
-    <li><b>限购商品</b>（公司缺货的）两年都剔除 —— 供不上货不算我们的问题。</li>
-  </ul>
-
-  <h3>2 · 开单奖 — 每行 ${{ '%.2f'|format(item_rate) }}</h3>
-  <p>发票上每写一行商品，就有 ${{ '%.2f'|format(item_rate) }}。日常的辛苦每一单都有回报。</p>
-
-  <h3>3 · 新客户奖 — 开发新客户的一次性奖励</h3>
-  <p>我们自己开发的新客户（经理确认后），开单约一个季度、规模看清楚了，一次性发：
-  小客户 <b>${{ flat_small }}</b> · 中客户 <b>${{ flat_medium }}</b> · 大客户 <b>${{ flat_large }}</b>。
-  之后这个客户的利润还会继续算进增长奖。</p>
-
-  <h3>按收款发放</h3>
-  <p>以上算出来的是<b>目标数</b>。实际发放按我们客户货款的回收比例 —— 收到多少货款、就发多少比例，
-  剩下的等款到了自动补上。作废、坏账的发票不算。</p>
-
-  <h3>我们能做什么</h3>
-  <ul>
-    <li>打开<a href="/me/watch">「落后客户」</a>看谁在掉 —— 下滑的客户早点回访，比什么都有效。</li>
-    <li>帮客户把货款按时结清 —— 收款比例上去了,「现在可发」马上跟着涨。</li>
-    <li>多开新品、多开新客户 —— 每一行都有开单奖，新客户还有一次性奖励。</li>
-    <li>第一次登录后，请在<a href="/account">「修改密码」</a>里把密码改成自己的。</li>
-  </ul>
-
-  {% else %}
-  <p class="hint" style="margin-top:6px">Three pieces, each simple enough to check yourself. Paid only on
-  collected money.</p>
-
-  {% if not growth_live %}
-  <div class="msg" style="background:var(--accent-soft);border-color:var(--accent)">
-    <b>August and September pay contribution only</b> — every line you write. <b>Growth and the new-account
-    bonus start {{ growth_start.strftime('%B %-d, %Y') }}</b>: the count starts fresh, October is compared to
-    last October, Oct+Nov to last Oct+Nov, and so on. Your past sales stay on file — they are what we compare
-    against, and what tells us which accounts are new or quiet.
-  </div>
-  {% endif %}
-
-  <h3>1 · Growth — a <b>team</b> number: {{ '%.0f'|format(rate*100) }}% up to target, {{ '%.1f'|format(accel*100) }}% above</h3>
-  <p><b>One sentence:</b> accounts are hard to pin on one person, so growth is earned by your <b>team</b>: add up
-  the profit of <b>every account your team owns</b> and compare it to <b>what those same accounts did last
-  year</b> — on the increase the team earns <b>{{ '%.0f'|format(rate*100) }}%</b> up to its <b>target</b> and
-  <b>{{ '%.1f'|format(accel*100) }}%</b> above it; if the total is below last year, that month is $0 (never
-  clawed back). The team's growth pay is <b>split equally</b> among its members.</p>
-  <ul>
-    <li><b>The teams:</b> {% for t, ms in teams.items() %}<b>{{ t }}</b> ({{ ms|join(', ') }}){% if not loop.last %}, {% endif %}{% endfor %}.
-      {% if my_team %}You are on <b>{{ my_team }}</b>.{% endif %}</li>
-    <li><b>Which team owns an account:</b> the team that wrote <b>80% or more of its orders</b> over the last
-      12 months (counted in orders, not dollars). Accounts no team owns outright are assigned by the manager.</li>
-    <li><b>Contribution and new-account bonuses stay yours</b> — the lines you write and the accounts you land
-      are counted for you personally.</li>
-    <li><b>Accounts, not people.</b> When an account changes hands its history travels with it — inheriting a
-      flat account isn't growth, and losing an account doesn't hurt you. Reassignments are neutral.</li>
-    <li><b>Whole book together.</b> One account up, another down — the <b>net</b> is what pays. The red
-      (declining) ones are worth visiting first.</li>
-    <li><b>Cumulative, pays on new highs.</b> Slow and strong months cancel out; a down month is $0, recover
-      past your peak and it pays again. Nothing already paid is taken back.</li>
-    <li><b>One-time big orders:</b> an occasional large order pays that year; if it doesn't repeat next year
-      that's fine — you just don't get paid twice for the same sale, and you can never end up owing.</li>
-    <li><b>New accounts</b> have no last year, so all their profit counts toward your net.</li>
-    <li><b>Limited-stock items</b> are removed from both years — supply problems aren't your problem.</li>
-  </ul>
-
-  <h3>2 · Contribution — ${{ '%.2f'|format(item_rate) }} per line</h3>
-  <p>Every line item you write on an invoice earns ${{ '%.2f'|format(item_rate) }}.</p>
-
-  <h3>3 · Acquisition — a one-time bonus for landing a new account</h3>
-  <p>A new account you won yourself (manager-confirmed) pays once its size is clear (~a quarter):
-  small <b>${{ flat_small }}</b> · medium <b>${{ flat_medium }}</b> · large <b>${{ flat_large }}</b>.
-  Its profit keeps counting toward your growth too.</p>
-
-  <h3>Paid on collection</h3>
-  <p>Everything above is a <b>target</b>. What's actually paid follows your customers' payments — collect the
-  money and the rest releases automatically. Voided and written-off invoices never count.</p>
-
-  <h3>What you can do</h3>
-  <ul>
-    <li>Open <a href="/me/watch">"Falling behind"</a> — an early visit to a slipping customer beats everything.</li>
-    <li>Help customers settle invoices on time — your collected % rises and "payable now" follows.</li>
-    <li>Place more lines, land new accounts — every line pays, and a new account pays extra.</li>
-    <li>After your first sign-in, set your own password under <a href="/account">My account</a>.</li>
-  </ul>
-  {% endif %}
 </div>
+
+{% else %}
+<div class="manual">
+  <nav class="toc">
+    <div class="lang"><a href="/me/guide?lang=zh" style="display:inline;padding:0">中文</a> · <b style="color:var(--ink)">EN</b></div>
+    <a href="#c0"><b>0</b>On one page</a><a href="#c1"><b>1</b>Contribution</a><a href="#c2"><b>2</b>Growth (team)</a><a href="#c3"><b>3</b>New accounts</a>
+    <a href="#c4"><b>4</b>When you get paid</a><a href="#c5"><b>5</b>Reading "My bonus"</a><a href="#c6"><b>6</b>What you can do</a><a href="#c7"><b>7</b>FAQ</a>
+  </nav>
+  <div>
+    <section class="ch" id="c0">
+      <h2><span class="n">0</span>On one page</h2>
+      <p class="lead">Three pieces, each simple enough to check yourself. Paid only on money the customers have <b>actually paid</b>, and every dollar traces to an invoice.</p>
+      {% if not growth_live %}<div class="warn"><b>August and September pay contribution only.</b> Growth and the new-account bonus start
+        <b>{{ growth_start.strftime('%B %-d, %Y') }}</b>: the count starts fresh, October is compared to last October, Oct+Nov to last Oct+Nov, and so on. Your past sales stay on file.</div>{% endif %}
+      <div class="cards">
+        <div class="pc me"><div class="t">1 · Contribution — yours</div><div class="f">line items × ${{ '%.2f'|format(item_rate) }}</div><div class="d">Every product line you write on an invoice.</div></div>
+        <div class="pc team"><div class="t">2 · Growth — your team's</div><div class="f">net profit growth × {{ '%.0f'|format(rate*100) }}%</div><div class="d">The team's accounts vs last year. {{ '%.1f'|format(accel*100) }}% above target. Split equally.</div></div>
+        <div class="pc me"><div class="t">3 · New accounts — yours</div><div class="f">${{ flat_small }} / ${{ flat_medium }} / ${{ flat_large }}</div><div class="d">A one-time bonus, by size, for an account you won.</div></div>
+      </div>
+      <div class="formula">payable now <span class="c">=</span> earned this month <span class="c">×</span> share of this month's invoices the customers have paid <span class="c">−</span> already paid to you<br><span class="c">// each month on its own; unpaid money never expires — it pays whenever the customer settles</span></div>
+    </section>
+
+    <section class="ch" id="c1">
+      <h2><span class="n">1</span>Contribution — ${{ '%.2f'|format(item_rate) }} per line</h2>
+      <p class="lead">Rewards the everyday work of placing products, whatever the dollar size.</p>
+      <ul><li>Each product line on an invoice counts once: ${{ '%.2f'|format(item_rate) }} a line.</li>
+        <li>Only invoices you wrote. Voided ones count for nothing.</li></ul>
+      <div class="ex"><b class="l">Example</b>1,000 lines this month → 1,000 × ${{ '%.2f'|format(item_rate) }} = <b>${{ '{:,.2f}'.format(1000*item_rate) }}</b>. "My bonus" shows the amount and the line count.</div>
+    </section>
+
+    <section class="ch" id="c2">
+      <h2><span class="n">2</span>Growth — a team number</h2>
+      <p class="lead">Accounts are hard to pin on one person, so growth is earned by your <b>team</b>: every account the team owns, compared to <b>what those same accounts earned last year</b>.</p>
+      <ul>{% for t, ms in teams.items() %}<li><b>{{ t }}</b>: {{ ms|join(', ') }}{% if t == my_team %} (<b>your team</b>){% endif %}</li>{% endfor %}</ul>
+      <h3>Which team owns an account</h3>
+      <ul><li>The team that wrote <b>80% or more of its orders</b> over the last 12 months (by count). Accounts no team owns outright are assigned by the manager.</li>
+        <li><b>Accounts, not people.</b> When an account changes hands its history travels with it — inheriting a flat account isn't growth, and losing one doesn't cost you.</li></ul>
+      <h3>The math</h3>
+      <div class="formula">team net growth <span class="c">=</span> Σ over its accounts (profit this cycle − same account last year)<br>
+        growth pay <span class="c">=</span> {{ '%.0f'|format(rate*100) }}% × the part up to target <span class="c">+</span> {{ '%.1f'|format(accel*100) }}% × the part above<br>
+        your share <span class="c">=</span> team growth pay ÷ number of members</div>
+      <h3>Growth is paid once</h3>
+      <table class="legend">
+        <tr><th>Month</th><th>Team cumulative growth</th><th>Already paid on</th><th>This month pays on</th><th>Team gets</th></tr>
+        <tr><td>October</td><td>$1,000</td><td>$0</td><td>$1,000 × 5%</td><td><b>$50</b></td></tr>
+        <tr><td>November (down)</td><td>$800</td><td>$1,000</td><td>nothing — below what's been paid on</td><td><b>$0</b>, the $50 stays</td></tr>
+        <tr><td>December</td><td>$1,500</td><td>$1,000</td><td>$500 × 5%</td><td><b>$25</b></td></tr>
+      </table>
+      <ul><li>One account up, another down — the <b>net</b> is what pays. The red (declining) ones are worth visiting first.</li>
+        <li>New accounts have no last year, so all their profit counts toward the team's net.</li>
+        <li>The cycle starts over each October.</li></ul>
+    </section>
+
+    <section class="ch" id="c3">
+      <h2><span class="n">3</span>New accounts — a one-time bonus</h2>
+      <p class="lead">An account you won yourself (manager-confirmed) pays once its size is clear, about a quarter in:</p>
+      <div class="cards">
+        <div class="pc"><div class="t">Small</div><div class="f">${{ flat_small }}</div></div>
+        <div class="pc"><div class="t">Medium</div><div class="f">${{ flat_medium }}</div></div>
+        <div class="pc"><div class="t">Large</div><div class="f">${{ flat_large }}</div></div>
+      </div>
+      <ul><li>The default is "house" (a phone call can't be verified) — tell the manager when you've won one, and they decide.</li>
+        <li>Its profit keeps counting toward the team's growth too.</li></ul>
+    </section>
+
+    <section class="ch" id="c4">
+      <h2><span class="n">4</span>When you get paid — month by month, on collection</h2>
+      <p class="lead">Everything above is <b>earned</b>. What's actually paid follows your customers' payments, and <b>each month stands on its own</b>.</p>
+      <div class="formula">released this month <span class="c">=</span> earned this month <span class="c">×</span> (this month's invoices paid ÷ this month's invoices billed)<br>
+        payable now <span class="c">=</span> released <span class="c">−</span> already paid to you (plus anything still unpaid from earlier months)</div>
+      <ul><li>August's bonus looks only at August's invoices; September's only at September's.</li>
+        <li><b>Unpaid money never expires.</b> If a customer pays a September invoice in November, that part of September's bonus pays in November — even in the next cycle.</li>
+        <li>Voided and written-off invoices count for nothing.</li></ul>
+      <div class="ex"><b class="l">Example</b>Earned $99.40 in August, 42% of August's invoices paid → $41.72 released. September: $91.20 earned, 33% paid → $29.79. Payable now $71.51. As the rest of August gets paid, August keeps releasing.</div>
+    </section>
+
+    <section class="ch" id="c5">
+      <h2><span class="n">5</span>Reading "My bonus"</h2>
+      <table class="legend">
+        <tr><td>Earned</td><td>The three pieces added up (contribution only, for now)</td></tr>
+        <tr><td>Collected</td><td>Share of your invoices the customers have paid</td></tr>
+        <tr><td>Paid so far</td><td>What the manager has already paid you</td></tr>
+        <tr><td>Payable now</td><td>Earned × Collected − Paid so far</td></tr>
+        <tr><td>Waiting on collection</td><td>Earned but not yet paid by the customer — never lost, pays when they settle</td></tr>
+      </table>
+      <p>"Falling behind" and "Quiet accounts" list the customers worth a call.</p>
+    </section>
+
+    <section class="ch" id="c6">
+      <h2><span class="n">6</span>What you can do</h2>
+      <ol class="steps">
+        <li>Open <a href="/me/watch">"Falling behind"</a> — an early visit to a slipping customer beats everything.</li>
+        <li>Help customers settle invoices on time — your collected % rises and "Payable now" follows.</li>
+        <li>Place more lines, land new accounts — every line pays, and a new account pays extra.</li>
+        <li>After your first sign-in, set your own password under <a href="/account">My password</a>.</li>
+      </ol>
+    </section>
+
+    <section class="ch faq" id="c7">
+      <h2><span class="n">7</span>FAQ</h2>
+      <details><summary>Why is my collected % lower than a teammate's?</summary><p>It's the customers, not you: big chains pay slowly, independents pay fast. Nothing is lost — it pays later.</p></details>
+      <details><summary>Does a down month take money back?</summary><p>No. What's been paid is never clawed back; a down month's growth is $0, and it pays again once growth climbs past what's already been paid on.</p></details>
+      <details><summary>An account moved to someone else — do I lose out?</summary><p>No. The account's history goes with it; it stops counting for your team and isn't charged against you either.</p></details>
+      <details><summary>Why is growth split equally when some of us sell more?</summary><p>Because accounts are hard to attribute to one person. Contribution and new-account bonuses are still yours alone.</p></details>
+    </section>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

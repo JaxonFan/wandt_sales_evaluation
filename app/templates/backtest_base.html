@@ -114,7 +114,7 @@
   <div class="me"><b>{{ user.username }}</b><a href="/logout">log out</a></div>
 </nav>
 <div id="content">
-<div class="topbar"><h1>{{ titles.get(page, 'W&T Scorecard') }}</h1></div>
+<div class="topbar"><h1>{{ '奖金怎么算' if (user.role == 'rep' and page == 'repguide') else titles.get(page, 'W&T Scorecard') }}</h1></div>
 {% if user.role != 'rep' %}{% for title, href, keys, kids in sections %}{% if page in keys and kids %}
 <div class="seg">{% for ktitle, khref, kkey in kids %}<a href="{{ khref }}" class="{{ 'on' if page == kkey }}">{{ ktitle }}</a>{% endfor %}</div>
 {% endif %}{% endfor %}{% endif %}
