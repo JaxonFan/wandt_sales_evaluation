@@ -13,14 +13,25 @@ PERIOD_DAYS = 28
 
 # ---------- attribution (batch number -> sales rep) ----------
 def attribution_maps(db):
-    """Build (prefix_map, variant_map, sales_team) from the associates table."""
+    """Build (prefix_map, variant_map, sales_team) from the associates table.
+
+    `other_names` is a comma/semicolon-separated list of EXTRA batch codes for the same person. A token of
+    exactly two characters is a second batch PREFIX (An Cao writes both AN... and AC...); anything longer is
+    a full batch-number variant (MORGANW, VANESSAW). Without this a second prefix silently credits nobody."""
+    from .config import EXTRA_BATCH_PREFIXES
     associates = db.query(M.Associate).all()
-    prefix_map, variant_map, sales_team = {}, {}, []
+    prefix_map, variant_map, sales_team = dict(EXTRA_BATCH_PREFIXES), {}, []
     for a in associates:
         if a.batch_initial:
             prefix_map[a.batch_initial.strip().upper()] = a.name
-        if a.other_names:
-            variant_map[a.other_names.strip().upper()] = a.name
+        for token in str(a.other_names or "").replace(";", ",").split(","):
+            token = token.strip().upper()
+            if not token:
+                continue
+            if len(token) == 2:
+                prefix_map[token] = a.name
+            else:
+                variant_map[token] = a.name
         if a.name and (a.role or "").strip().lower() in SALES_ROLES and (a.status or "").strip().lower() == "active":
             sales_team.append(a.name)
     return prefix_map, variant_map, sorted(set(sales_team))

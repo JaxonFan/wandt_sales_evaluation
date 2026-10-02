@@ -75,6 +75,14 @@ DEFAULTS = {
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)
 }
 
+# Extra batch-number PREFIXES that belong to someone already on the roster. GP batch numbers are
+# "<2-letter code><date>", and a person can write under more than one code — An Cao uses AN... and AC...
+# (814 lines / $572k through Sep 2026 that previously credited nobody). Kept in code so both apps and the
+# importer agree; the roster's `other_names` column can also carry extras (2 chars = another prefix).
+EXTRA_BATCH_PREFIXES = {
+    "AC": "An Cao",
+}
+
 # ---------------------------------------------------------------------------------------------------
 # TEAMS. Accounts are hard to pin on one person, so GROWTH is measured and paid at the TEAM level: an
 # account belongs to the team whose members wrote >= TEAM_OWNERSHIP_PCT of its ORDERS over the trailing
