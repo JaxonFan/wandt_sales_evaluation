@@ -889,6 +889,53 @@ def _contribution_only_growth(db, fiscal_start, as_of, rate):
                 team_members=teams, accounts=pd.DataFrame(), account_monthly={}, growth_active=False)
 
 
+def late_invoices(db, late_after_days=None):
+    """Every unpaid invoice with its age, grouped by account — the collections call list.
+
+    An invoice is unpaid if the receivables file has not listed it (and it is not voided / written off);
+    it is LATE once older than `late_after_days` (Setting, default 30). Only invoices from the first
+    month the paid report covers onward are judged, so pre-coverage history never reads as unpaid.
+    Returns dict(as_of, late_after, buckets, accounts=[...], invoices=[...])."""
+    s = get_settings(db)
+    late_after = int(late_after_days or s.get("late_after_days", 30))
+    df = active_lines(db)
+    if not len(df):
+        return dict(as_of=None, late_after=late_after, buckets=[], accounts=[], invoices=[])
+    collected = {str(x) for x in collected_set(db)}
+    written_off = {str(x) for x in written_off_set(db)}
+    _lo, hi = data_bounds(db)
+    inv = df.groupby("sop_number").agg(date=("document_date", "min"), amount=("extended_price", "sum"),
+                                       account=("account", "first"), rep=("associate", "first")).reset_index()
+    # coverage floor: the month of the oldest invoice the paid report has ever listed
+    paid_dates = inv[inv["sop_number"].astype(str).isin(collected)]["date"]
+    floor = paid_dates.min().to_period("M").start_time if len(paid_dates) else hi
+    inv = inv[(inv["date"] >= floor) & ~inv["sop_number"].astype(str).isin(collected | written_off)].copy()
+    inv["age"] = (hi - inv["date"]).dt.days
+    inv["late"] = inv["age"] > late_after
+    names = customer_names(db)
+    team_of = {r["account"]: r["team"] for r in account_assignments(db)}
+    buckets = []
+    for lo, up, label in ((0, late_after, f"0–{late_after} days"), (late_after + 1, late_after + 30, f"{late_after + 1}–{late_after + 30}"),
+                          (late_after + 31, late_after + 60, f"{late_after + 31}–{late_after + 60}"), (late_after + 61, 10 ** 6, f"{late_after + 61}+")):
+        m = inv[(inv["age"] >= lo) & (inv["age"] <= up)]
+        buckets.append(dict(label=label, n=int(len(m)), amount=float(m["amount"].sum()), late=lo > late_after))
+    accounts = []
+    for account, g in inv.groupby("account"):
+        late = g[g["late"]]
+        accounts.append(dict(account=account, customer=names.get(account, account), team=team_of.get(account),
+                             rep=g["rep"].mode().iat[0] if len(g["rep"].mode()) else None,
+                             n=int(len(g)), amount=float(g["amount"].sum()),
+                             n_late=int(len(late)), late_amount=float(late["amount"].sum()),
+                             oldest=int(g["age"].max())))
+    accounts.sort(key=lambda a: -a["late_amount"])
+    invoices = [dict(sop_number=str(r.sop_number), date=r.date, amount=float(r.amount), account=r.account,
+                     customer=names.get(r.account, r.account), rep=r.rep, age=int(r.age), late=bool(r.late))
+                for r in inv.sort_values("age", ascending=False).itertuples(index=False)]
+    return dict(as_of=hi, late_after=late_after, coverage_from=floor, buckets=buckets, accounts=accounts,
+                invoices=invoices, total_late=float(inv[inv["late"]]["amount"].sum()),
+                n_late=int(inv["late"].sum()))
+
+
 def review_counts(db):
     """Badge counts for the 'Needs review' tabs (falling behind / quiet / unreviewed new accounts)."""
     return _memo(("review_counts", _engine_version(db), _assignment_version(db)), lambda: _review_counts_compute(db))

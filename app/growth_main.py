@@ -565,6 +565,42 @@ def rep_underperformers(request: Request, lang: str = "zh", view: str = "both",
         ctx, request=request, user=user, page="mewatch", lang=lang, mine=True, team=my_team))
 
 
+# ---------- late payments: who owes us, how old ----------
+@app.get("/late", response_class=HTMLResponse)
+def late_page(request: Request, team: str = "", db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    data = service.late_invoices(db)
+    accounts = [a for a in data["accounts"] if not team or (a["team"] or "shared") == team]
+    teams = sorted({(a["team"] or "shared") for a in data["accounts"]})
+    return templates.TemplateResponse("backtest_late.html", dict(
+        data, request=request, user=user, page="late", accounts=accounts, team=team, teams=teams))
+
+
+@app.get("/me/late", response_class=HTMLResponse)
+def rep_late(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
+    """A rep's own unpaid invoices — the ones holding back their pay."""
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if user.role != "rep":
+        return RedirectResponse("/late", status_code=303)
+    data = service.late_invoices(db)
+    mine = [i for i in data["invoices"] if i["rep"] == user.associate_name]
+    by_acct = {}
+    for i in mine:
+        a = by_acct.setdefault(i["account"], dict(account=i["account"], customer=i["customer"], n=0, amount=0.0,
+                                                   n_late=0, late_amount=0.0, oldest=0, team=None, rep=user.associate_name))
+        a["n"] += 1; a["amount"] += i["amount"]; a["oldest"] = max(a["oldest"], i["age"])
+        if i["late"]:
+            a["n_late"] += 1; a["late_amount"] += i["amount"]
+    accounts = sorted(by_acct.values(), key=lambda a: -a["late_amount"])
+    return templates.TemplateResponse("backtest_late.html", dict(
+        data, request=request, user=user, page="melate", lang=lang, accounts=accounts, team="", teams=[],
+        invoices=mine, total_late=sum(i["amount"] for i in mine if i["late"]), n_late=sum(1 for i in mine if i["late"])))
+
+
 # ---------- new-account review (assigned vs self-earned -> acquisition eligibility) ----------
 @app.get("/acquisitions", response_class=HTMLResponse)
 def acquisitions_page(request: Request, db: Session = Depends(get_db)):
@@ -609,6 +645,7 @@ def settings_page(request: Request, saved: int = 0, db: Session = Depends(get_db
         "request": request, "user": user, "page": "settings", "saved": bool(saved), "reps": reps,
         "base_rate": float(s.get("cumulative_rate", 0.05)),
         "accel_rate": float(s.get("growth_accel_rate", 0.075)), "default_target": default_t,
+        "late_after": int(s.get("late_after_days", 30)),
         "acq_small": int(float(s["acq_flat_small"])), "acq_medium": int(float(s["acq_flat_medium"])),
         "acq_large": int(float(s["acq_flat_large"])),
         "tier_small": int(float(s["acq_tier_small_max"])), "tier_medium": int(float(s["acq_tier_medium_max"]))})
@@ -628,7 +665,7 @@ async def settings_save(request: Request, db: Session = Depends(get_db)):
     for key in ("cumulative_rate", "growth_accel_rate", "growth_target_default"):
         if form.get(key, "").strip():
             put(key, float(form[key]))
-    for key in ("acq_flat_small", "acq_flat_medium", "acq_flat_large"):
+    for key in ("acq_flat_small", "acq_flat_medium", "acq_flat_large", "late_after_days"):
         if form.get(key, "").strip():
             put(key, int(float(form[key])))
     for name in service.team_members(db):

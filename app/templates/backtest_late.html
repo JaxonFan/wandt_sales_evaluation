@@ -1,0 +1,69 @@
+{% extends "backtest_base.html" %}{% block body %}
+{% set zh = (lang is defined and lang != 'en' and user.role == 'rep') %}
+{% set base = '/me/late' if user.role == 'rep' else '/late' %}
+<style>
+  .buckets{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:10px 0 16px}
+  .bk{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card)}
+  .bk.late{border-color:#C43D3D} .bk .l{font-size:11.5px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+  .bk .v{font-size:22px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums} .bk.late .v{color:#C43D3D}
+  .bk .n{font-size:12px;color:var(--muted)}
+  tr.acct{cursor:pointer} tr.acct:hover > td{background:#fafafc}
+  tr.inv > td{background:#fafafc;padding:10px 14px 12px 30px}
+  table.mini{font-size:12.5px;width:auto;min-width:560px} table.mini th{text-transform:none;letter-spacing:0;font-size:11.5px} table.mini td,table.mini th{padding:4px 10px}
+  .age{font-size:11px;padding:2px 8px;border-radius:9px;background:var(--paper);color:var(--muted)} .age.late{background:#fdecec;color:#c0392b}
+</style>
+<div class="card">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <h2 style="margin:0">{{ '未付款的发票' if zh else 'Late payments' }}</h2>
+    {% if user.role == 'rep' %}<span class="mut" style="margin-left:auto;font-size:12.5px"><a href="{{ base }}?lang=zh" {% if zh %}style="font-weight:700"{% endif %}>中文</a> · <a href="{{ base }}?lang=en" {% if not zh %}style="font-weight:700"{% endif %}>EN</a></span>{% endif %}
+  </div>
+  <p class="hint">{% if zh %}截至 {{ as_of.strftime('%Y-%m-%d') }}，客户还没付清的发票。超过 <b>{{ late_after }} 天</b>算逾期。
+    这些发票付清之前，对应的奖金不会释放 —— 催一下货款，「现在可发」马上跟着涨。
+    {% else %}Invoices the customers have not paid as of {{ as_of.strftime('%b %-d, %Y') }}, per the latest receivables upload.
+    An invoice is <b>late</b> after <b>{{ late_after }} days</b> (Settings → Pay dials). Until these are paid the bonus
+    earned on them stays in "waiting" — so this is also the list that unlocks pay. Judged from {{ coverage_from.strftime('%b %Y') }}
+    onward, the first month the paid report covers.{% endif %}</p>
+  <div class="buckets">
+    {% for b in buckets %}<div class="bk {{ 'late' if b.late }}"><div class="l">{{ b.label }}</div><div class="v">${{ '{:,.0f}'.format(b.amount) }}</div><div class="n">{{ b.n }} {{ '张' if zh else 'invoices' }}</div></div>{% endfor %}
+  </div>
+  {% if teams %}<div class="subtabs" style="margin:0 0 12px">
+    <a href="/late" class="{{ 'on' if not team }}">All</a>
+    {% for t in teams %}<a href="/late?team={{ t|urlencode }}" class="{{ 'on' if team == t }}">{{ t }}</a>{% endfor %}
+  </div>{% endif %}
+  <table>
+    <thead><tr><th>{{ '客户' if zh else 'Customer' }}</th>{% if user.role != 'rep' %}<th>Team</th><th>Rep</th>{% endif %}
+      <th class="num">{{ '未付' if zh else 'Unpaid' }}</th><th class="num">{{ '其中逾期' if zh else 'of which late' }}</th>
+      <th class="num">{{ '最久' if zh else 'Oldest' }}</th></tr></thead>
+    <tbody>
+    {% for a in accounts %}{% set rid = 'a' ~ loop.index %}
+      <tr class="acct" onclick="tog('{{ rid }}')">
+        <td><b>{{ a.customer }}</b><div class="mut" style="font-size:11px">{{ a.account }}</div></td>
+        {% if user.role != 'rep' %}<td class="mut">{{ a.team or 'shared' }}</td><td class="mut">{{ a.rep or '—' }}</td>{% endif %}
+        <td class="num">${{ '{:,.0f}'.format(a.amount) }} <span class="mut">({{ a.n }})</span></td>
+        <td class="num {{ 'neg' if a.late_amount > 0 }}"><b>${{ '{:,.0f}'.format(a.late_amount) }}</b> <span class="mut">({{ a.n_late }})</span></td>
+        <td class="num"><span class="age {{ 'late' if a.oldest > late_after }}">{{ a.oldest }}d</span></td>
+      </tr>
+      <tr class="inv" id="{{ rid }}" hidden><td colspan="{{ 6 if user.role != 'rep' else 4 }}">
+        <table class="mini">
+          <thead><tr><th>{{ '日期' if zh else 'Date' }}</th><th>{{ '发票' if zh else 'Invoice' }}</th>{% if user.role != 'rep' %}<th>Rep</th>{% endif %}<th class="num">{{ '金额' if zh else 'Amount' }}</th><th class="num">{{ '天数' if zh else 'Age' }}</th></tr></thead>
+          <tbody>
+          {% for i in invoices if i.account == a.account %}
+            <tr><td class="mut">{{ i.date.strftime('%b %-d') }}</td><td><a href="/invoice/{{ i.sop_number }}" style="color:var(--accent-2);text-decoration:none;font-weight:600">{{ i.sop_number }}</a></td>
+              {% if user.role != 'rep' %}<td class="mut">{{ i.rep or '—' }}</td>{% endif %}
+              <td class="num">${{ '{:,.0f}'.format(i.amount) }}</td><td class="num"><span class="age {{ 'late' if i.late }}">{{ i.age }}d</span></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </td></tr>
+    {% else %}
+      <tr><td colspan="6" class="mut">{{ '没有未付款的发票。' if zh else 'Nothing unpaid.' }}</td></tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><th>{{ '合计' if zh else 'Total' }}</th>{% if user.role != 'rep' %}<th></th><th></th>{% endif %}
+      <th class="num">${{ '{:,.0f}'.format(accounts|sum(attribute='amount')) }}</th>
+      <th class="num" style="color:#C43D3D">${{ '{:,.0f}'.format(accounts|sum(attribute='late_amount')) }}</th><th></th></tr></tfoot>
+  </table>
+  <p class="hint" style="margin-top:8px">{{ '点客户看每张发票。' if zh else 'Click a customer for its invoices; click an invoice for its lines.' }}</p>
+</div>
+<script>function tog(id){var e=document.getElementById(id);e.hidden=!e.hidden;}</script>
+{% endblock %}

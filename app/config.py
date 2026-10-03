@@ -71,6 +71,9 @@ DEFAULTS = {
     "underperf_min_profit": 500,    # ignore accounts below this much profit in the year-ago window (too small/noisy to judge)
     "underperf_bands": 5,           # accounts are compared against the MEDIAN growth of accounts their own size (quintiles by year-ago profit)
 
+    # --- late payments (an unpaid invoice is "late" after this many days) ---
+    "late_after_days": 30,
+
     # --- closure decision-support ---
     "fine_amount": 200,            # manager-confirmed behavior-churn fine ($)
 }
