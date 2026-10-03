@@ -486,6 +486,25 @@ def account_save(request: Request, current: str = Form(...), new: str = Form(...
     return RedirectResponse(f"/account?err={err}&lang={lang}", status_code=303)
 
 
+# ---------- the assistant: ask the scorecard in your own words ----------
+@app.post("/assistant")
+async def assistant_turn(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return JSONResponse({"ok": False}, status_code=401)
+    body = await request.json()
+    messages = body.get("messages") or []
+    from . import assistant as AS
+    out = AS.run(messages, db, rep_only=(user.associate_name if user.role == "rep" else None))
+    return JSONResponse({"ok": True, **out})
+
+
+@app.get("/assistant/status")
+def assistant_status(request: Request, db: Session = Depends(get_db)):
+    from . import assistant as AS
+    return JSONResponse(AS.configured())
+
+
 # ---------- teams: who earns growth together ----------
 @app.get("/teams", response_class=HTMLResponse)
 def teams_page(request: Request, saved: str = "", err: str = "", db: Session = Depends(get_db)):
@@ -657,7 +676,6 @@ def rep_underperformers(request: Request, lang: str = "zh", view: str = "both",
         return RedirectResponse("/login", status_code=303)
     if user.role != "rep":
         return RedirectResponse("/underperformers", status_code=303)
-    r = service.run_cumulative_growth(db, with_comparison=False)
     my_team = service.team_of_rep(db).get(user.associate_name)
     ctx = _underperf_context(db, view, team=my_team)
     return templates.TemplateResponse("backtest_underperformers.html", dict(

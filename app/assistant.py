@@ -1,0 +1,411 @@
+"""The assistant that sits on top of the scorecard — ask it, in your own words, about pay, accounts, invoices.
+
+    "Why is An Cao's collected % so low?"   "Which Team 2 accounts dropped most this quarter?"
+    "Chart Ting Ting's monthly earned vs released"   "Who owes us more than 60 days?"
+
+It answers from the scorecard's own records through the read-only tools below, in the language the question
+was asked in, and says which number came from where. It never invents a number: a record that is not there is
+answered "no data for that". It changes nothing — no payments, no assignments. It can draw a chart (returned as
+an image) and, when a SerpAPI key is configured, look things up on the web — clearly marked as from the web.
+
+The loop is the plain tool-use loop: the model asks for a tool, the tool runs against the service layer, the
+result goes back, until the model answers. A rep's session only sees that rep's own data.
+"""
+from __future__ import annotations
+
+import base64
+import io
+import json
+import os
+from datetime import datetime
+
+import pandas as pd
+
+from . import service
+
+MODEL = "claude-opus-5"
+MAX_STEPS = 10
+MAX_TOKENS = 4000
+
+
+def _secret(name: str) -> str | None:
+    """An API key from the environment (ECS injects it from Secrets Manager) or a local secrets/<NAME> file."""
+    v = os.environ.get(name)
+    if v:
+        return v.strip()
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    f = os.path.join(here, "secrets", name)
+    if os.path.exists(f):
+        return open(f).read().strip() or None
+    return None
+
+
+def configured() -> dict:
+    return {"claude": bool(_secret("ANTHROPIC_API_KEY")), "web": bool(_secret("SERPAPI_KEY"))}
+
+
+SYSTEM = """You are the assistant inside the W&T Sales Scorecard, answering the sales manager (or a sales rep) at the computer.
+
+What the scorecard is: a monthly incentive. Per rep per month: Contribution = line items x rate (individual);
+Growth share = the TEAM's cumulative year-over-year profit growth pay on the accounts it owns, split equally (from Oct 2026);
+New accounts = flat landing bonus (individual). Pay follows COLLECTION month by month: a month's earnings are RELEASED in
+proportion to how much of THAT month's invoices the customers have paid; OWED = released - paid; unpaid money never expires.
+Accounts belong to the team that wrote 80% of their orders in the last 12 months; the manager can pin exceptions.
+
+Rules:
+1. Numbers about this business (pay, invoices, accounts, growth, collections) come ONLY from the tools. If a tool has no
+   record, say "no data for that" — never estimate or invent a figure. Market or general facts may come from web_search,
+   and must be marked "(web: source)". Never mix the two.
+2. Answer in the language the question was asked in (English or 中文). Plain words, short. Every number carries its unit
+   and where it came from, e.g. "(Sep 2026 ledger)", "(invoice INV0398092)", "(assignment page)".
+3. Look things up before answering: resolve a customer with find_accounts and a person with reps first.
+4. You change nothing. If asked to pay, assign, or edit, explain where in the app the manager does it.
+5. Arithmetic you do yourself (totals, differences, percentages) is labelled "my calculation" with the inputs shown.
+6. When a chart would say it better than a table, call chart. Keep tables to 8 rows or fewer; the chart can hold more.
+7. If the question is ambiguous, say what you assumed in one line and answer; don't interrogate.
+8. Plain text only — no markdown headings, bold, or tables. Lists: one item per line starting with "·"."""
+
+TOOLS = [
+    {"name": "reps", "description": "The sales reps, their teams, and the house group. Call first when a question names a person or team.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "months", "description": "Which months the scorecard covers (the pay chapters) and today's data date.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "pay", "description": "A rep's pay ledger month by month: contribution, growth share, new-account bonus, earned, collected %, released, paid, owed, waiting. Omit rep for everyone (totals per rep).",
+     "input_schema": {"type": "object", "properties": {"rep": {"type": "string"}, "month": {"type": "string", "description": "YYYY-MM, optional"}}}},
+    {"name": "invoices", "description": "A rep's invoices in a month: number, date, customer, amount, lines, collected or missing. Filter status to 'missing' or 'collected'.",
+     "input_schema": {"type": "object", "properties": {"rep": {"type": "string"}, "month": {"type": "string"}, "status": {"type": "string"}, "n": {"type": "integer"}}, "required": ["rep", "month"]}},
+    {"name": "invoice", "description": "One invoice line by line (items, qty, price, cost, profit) and its collected/missing status.",
+     "input_schema": {"type": "object", "properties": {"sop_number": {"type": "string"}}, "required": ["sop_number"]}},
+    {"name": "find_accounts", "description": "Match a customer name (English or Chinese, partial) to account codes. Call before asking about an account.",
+     "input_schema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}},
+    {"name": "account", "description": "One account: owner team, order shares per team, monthly profit for the last 24 months, first order, who sells it.",
+     "input_schema": {"type": "object", "properties": {"account": {"type": "string"}}, "required": ["account"]}},
+    {"name": "assignments", "description": "Account ownership: which team owns which account, the shared (unassigned) ones, pins. Filter by team name, 'shared', or a rep name.",
+     "input_schema": {"type": "object", "properties": {"view": {"type": "string"}, "n": {"type": "integer"}}}},
+    {"name": "growth", "description": "Team growth this cycle: each team's book profit vs the same accounts last year, net gap, target, growth pay, and the accounts driving it (top gainers and losers).",
+     "input_schema": {"type": "object", "properties": {"team": {"type": "string"}, "n": {"type": "integer"}}}},
+    {"name": "falling_behind", "description": "Accounts behind over the last 3 months: down vs last year and/or below their size band's median. Filter by team.",
+     "input_schema": {"type": "object", "properties": {"team": {"type": "string"}, "n": {"type": "integer"}}}},
+    {"name": "quiet", "description": "Accounts that have gone quiet (no order for longer than their usual gap).",
+     "input_schema": {"type": "object", "properties": {"n": {"type": "integer"}}}},
+    {"name": "late_payments", "description": "Unpaid invoices by age: buckets, the accounts owing most, oldest invoice. Optional min_days to list only older ones.",
+     "input_schema": {"type": "object", "properties": {"min_days": {"type": "integer"}, "team": {"type": "string"}, "n": {"type": "integer"}}}},
+    {"name": "new_accounts", "description": "Accounts that first ordered recently: first order, size tier, rep, reviewed as rep-won / house / unreviewed, landing bonus.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "settings", "description": "The pay dials: item rate, growth rates and targets, landing bonuses, late-after days, cycle dates.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "chart", "description": "Draw a chart from data you already have and show it to the user. kind: 'bar', 'line', or 'barh'. series: list of {name, values}; labels: x-axis labels (same length as values).",
+     "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "kind": {"type": "string"}, "labels": {"type": "array", "items": {"type": "string"}},
+                                                       "series": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "values": {"type": "array", "items": {"type": "number"}}}, "required": ["name", "values"]}},
+                                                       "y_label": {"type": "string"}, "currency": {"type": "boolean"}}, "required": ["title", "kind", "labels", "series"]}},
+    {"name": "web_search", "description": "Search the web (Google via SerpAPI) for market facts, a customer's public info, seasonality, news. Not for the business's own numbers. Returns titles, links, snippets.",
+     "input_schema": {"type": "object", "properties": {"q": {"type": "string"}, "n": {"type": "integer"}}, "required": ["q"]}},
+]
+
+
+def _money(x):
+    return round(float(x or 0.0), 2)
+
+
+class Tools:
+    """Read-only views over the service layer. `rep_only` scopes a rep's session to their own data."""
+
+    def __init__(self, db, rep_only: str | None = None):
+        self.db = db
+        self.rep_only = rep_only
+        self.images: list = []
+
+    # ---- people / time
+    def reps(self):
+        _, _, roster = service.attribution_maps(self.db)
+        teams = service.teams_table(self.db)
+        return {"reps": roster, "teams": [{"name": t["name"], "kind": t["kind"], "members": t["members"],
+                                          "auto_rule": t["auto"], "fallback": t["fallback"]} for t in teams],
+                "primary_team": service.team_of_rep(self.db)}
+
+    def months(self):
+        ch = service.pay_chapters(self.db)
+        _lo, hi = service.data_bounds(self.db)
+        return {"data_through": str(hi.date()), "chapters": [{"label": c["label"], "from": str(c["start"].date()),
+                                                             "to": str(c["end"].date()), "growth_active": c["growth_active"],
+                                                             "closed": c["closed"]} for c in ch]}
+
+    # ---- pay
+    def pay(self, rep: str | None = None, month: str | None = None):
+        if self.rep_only:
+            rep = self.rep_only
+        ledger = service.pay_ledger(self.db)
+        if rep:
+            if rep not in ledger["months"]:
+                return {"error": f"no rep called {rep}; see reps"}
+            rows = ledger["months"][rep]
+            if month:
+                rows = [r for r in rows if r["month"] == month]
+            out = [{k: (_money(v) if isinstance(v, float) else v) for k, v in r.items()
+                    if k in ("month", "n_items", "contribution", "growth", "acquisition", "earned", "billed", "collected",
+                             "collected_pct", "collectable", "paid", "owed", "unreleased")} for r in rows]
+            for o in out:
+                o["released"] = o.pop("collectable"); o["waiting"] = o.pop("unreleased")
+            t = ledger["totals"][rep]
+            return {"rep": rep, "months": out, "totals": {k: _money(v) for k, v in t.items()}}
+        return {"totals_by_rep": {r: {k: _money(v) for k, v in t.items()} for r, t in ledger["totals"].items()}}
+
+    def invoices(self, rep: str, month: str, status: str | None = None, n: int | None = None):
+        if self.rep_only:
+            rep = self.rep_only
+        d = service.rep_pay_detail(self.db, rep, show="all")
+        if d is None:
+            return {"error": f"no rep called {rep}"}
+        m = next((x for x in d["months"] if x["month"] == month), None)
+        if m is None:
+            return {"error": f"{rep} has no invoices in {month}"}
+        inv = m["invoices"]
+        if status == "missing":
+            inv = [i for i in inv if not i["paid"]]
+        elif status == "collected":
+            inv = [i for i in inv if i["paid"]]
+        n = max(1, min(n or 25, 100))
+        return {"rep": rep, "month": month, "count": len(inv), "billed": _money(m["billed"]), "collected": _money(m["collected"]),
+                "collected_pct": round(m["collected_pct"], 1),
+                "invoices": [{"invoice": i["sop_number"], "date": str(i["date"].date()), "customer": i["customer"],
+                              "amount": _money(i["amount"]), "lines": i["lines"],
+                              "status": "written off" if i["written_off"] else ("collected" if i["paid"] else "missing")} for i in inv[:n]]}
+
+    def invoice(self, sop_number: str):
+        inv = service.invoice_detail(self.db, sop_number)
+        if inv is None:
+            return {"error": f"no invoice {sop_number}"}
+        h = inv["header"]
+        if self.rep_only and h["associate"] != self.rep_only:
+            return {"error": "not your invoice"}
+        return {"invoice": h["sop_number"], "customer": h["customer"], "date": str(h["date"]), "written_by": h["associate"],
+                "lines": h["n_lines"], "total": _money(h["total"]), "profit": _money(h["profit"]),
+                "status": "voided" if h["voided"] else "written off" if h["written_off"] else "collected" if h["collected"] else "missing",
+                "items": [{"item": l["item"], "description": l["description"], "qty": l["qty"], "unit_price": _money(l["unit_price"]),
+                           "amount": _money(l["extended_price"]), "profit": _money(l["profit"])} for l in inv["lines"]]}
+
+    # ---- accounts
+    def find_accounts(self, q: str):
+        names = service.customer_names(self.db)
+        ql = q.strip().lower()
+        hits = [(a, n) for a, n in names.items() if ql in n.lower() or ql in a.lower()]
+        return {"matches": [{"account": a, "customer": n} for a, n in hits[:15]], "count": len(hits)}
+
+    def account(self, account: str):
+        df = service.active_lines(self.db)
+        d = df[df["account"] == account]
+        if not len(d):
+            return {"error": f"no account {account}; use find_accounts"}
+        if self.rep_only and self.rep_only not in set(d["associate"]):
+            return {"error": "not one of your accounts"}
+        names = service.customer_names(self.db)
+        row = next((r for r in service.account_assignments(self.db) if r["account"] == account), None)
+        d = d.assign(ym=d["document_date"].dt.to_period("M").astype(str))
+        monthly = d.groupby("ym")["line_profit"].sum().tail(24)
+        sellers = d[d["document_date"] >= d["document_date"].max() - pd.DateOffset(months=12)].groupby("associate")["extended_price"].sum()
+        return {"account": account, "customer": names.get(account, account), "first_order": str(d["document_date"].min().date()),
+                "last_order": str(d["document_date"].max().date()),
+                "owner": (row or {}).get("team"), "pinned": bool((row or {}).get("manual")), "order_shares": {k: round(v * 100) for k, v in ((row or {}).get("shares") or {}).items()},
+                "sellers_12mo_revenue": {k: _money(v) for k, v in sellers.sort_values(ascending=False).items()},
+                "monthly_profit": {k: _money(v) for k, v in monthly.items()}}
+
+    def assignments(self, view: str | None = None, n: int | None = None):
+        rows = service.account_assignments(self.db)
+        if self.rep_only:
+            mine = service.team_of_rep(self.db).get(self.rep_only)
+            rows = [r for r in rows if r["team"] in (mine, self.rep_only)]
+        elif view == "shared":
+            rows = [r for r in rows if r["shared"]]
+        elif view:
+            rows = [r for r in rows if r["team"] == view]
+        n = max(1, min(n or 30, 200))
+        return {"count": len(rows), "accounts": [{"account": r["account"], "customer": r["customer"], "owner": r["team"],
+                                                  "pinned": bool(r["manual"]), "orders_12mo": r["orders"],
+                                                  "shares": {k: round(v * 100) for k, v in r["shares"].items()},
+                                                  "profit_12mo": _money(r["profit"])} for r in rows[:n]]}
+
+    def growth(self, team: str | None = None, n: int | None = None):
+        r = service.run_cumulative_growth(self.db, with_comparison=False)
+        if not r.get("growth_active", True):
+            return {"note": "growth is not active yet — this is the contribution-only chapter", "starts": str(r["growth_start"].date())}
+        if self.rep_only:
+            team = service.team_of_rep(self.db).get(self.rep_only)
+        teams = r.get("teams")
+        out = {"cycle": f"{r['months'][0]} to {r['months'][-1]}", "teams": []}
+        names = service.customer_names(self.db)
+        for _, t in (teams.iterrows() if teams is not None else []):
+            if team and t["team"] != team:
+                continue
+            accts = [(a, v) for a, v in r["account_monthly"].items() if v["primary"] == t["team"]]
+            accts.sort(key=lambda av: -av[1]["gap"])
+            k = max(1, min(n or 5, 25))
+            out["teams"].append({"team": t["team"], "accounts": int(t["n_accounts"]), "cumulative_net_gap": _money(t["cum_growth"]),
+                                 "target": (_money(t["target"]) if t["target"] is not None else None), "growth_pay_so_far": _money(t["earned"]),
+                                 "top_gainers": [{"customer": names.get(a, a), "gap": _money(v["gap"])} for a, v in accts[:k]],
+                                 "top_losers": [{"customer": names.get(a, a), "gap": _money(v["gap"])} for a, v in accts[-k:][::-1] if v["gap"] < 0]})
+        return out
+
+    def falling_behind(self, team: str | None = None, n: int | None = None):
+        rows = service.underperforming_accounts(self.db)
+        if self.rep_only:
+            team = service.team_of_rep(self.db).get(self.rep_only)
+        if team:
+            rows = [r for r in rows if r["team"] == team]
+        rows = [r for r in rows if r["flagged"]]
+        n = max(1, min(n or 15, 100))
+        return {"count": len(rows), "window": "last 3 months vs the same 3 months last year",
+                "accounts": [{"customer": r["customer"], "owner": r["team"], "profit_3mo": _money(r["ty_profit"]), "last_year": _money(r["ly_profit"]),
+                              "change": _money(r["change"]), "growth_pct": (round(r["growth_pct"] * 100, 1) if r["growth_pct"] is not None else None),
+                              "band_median_pct": (round(r["band_median"] * 100, 1) if r.get("band_median") is not None else None),
+                              "flags": [f for f, on in (("down", r["negative"]), ("below band", r["below_band"])) if on]} for r in rows[:n]]}
+
+    def quiet(self, n: int | None = None):
+        rows = service.flag_silent_accounts(self.db, associate=self.rep_only) if self.rep_only else service.flag_silent_accounts(self.db)
+        n = max(1, min(n or 15, 100))
+        return {"count": len(rows), "accounts": rows[:n]}
+
+    def late_payments(self, min_days: int | None = None, team: str | None = None, n: int | None = None):
+        data = service.late_invoices(self.db)
+        inv = data["invoices"]
+        if self.rep_only:
+            inv = [i for i in inv if i["rep"] == self.rep_only]
+        if min_days:
+            inv = [i for i in inv if i["age"] >= min_days]
+        if team and not self.rep_only:
+            keep = {a["account"] for a in data["accounts"] if (a["team"] or "shared") == team}
+            inv = [i for i in inv if i["account"] in keep]
+        by = {}
+        for i in inv:
+            b = by.setdefault(i["account"], {"customer": i["customer"], "invoices": 0, "amount": 0.0, "oldest_days": 0})
+            b["invoices"] += 1; b["amount"] += i["amount"]; b["oldest_days"] = max(b["oldest_days"], i["age"])
+        accts = sorted(by.values(), key=lambda b: -b["amount"])
+        n = max(1, min(n or 15, 100))
+        return {"as_of": str(data["as_of"].date()), "late_after_days": data["late_after"],
+                "buckets": [{"range": b["label"], "invoices": b["n"], "amount": _money(b["amount"])} for b in data["buckets"]],
+                "total_unpaid": _money(sum(i["amount"] for i in inv)), "accounts": [dict(a, amount=_money(a["amount"])) for a in accts[:n]]}
+
+    def new_accounts(self):
+        s = service.get_settings(self.db)
+        _, _, roster = service.attribution_maps(self.db)
+        _lo, hi = service.data_bounds(self.db)
+        months = [str(m) for m in pd.period_range((hi - pd.DateOffset(months=11)).to_period("M"), hi.to_period("M"), freq="M")]
+        _pay, review = service.acquisition_by_rep_month(self.db, months, roster, s)
+        if self.rep_only:
+            review = [r for r in review if r["rep"] == self.rep_only]
+        return {"count": len(review), "accounts": [{k: (_money(v) if isinstance(v, float) else v) for k, v in r.items()} for r in review]}
+
+    def settings(self):
+        s = service.get_settings(self.db)
+        keys = ("item_rate", "cumulative_rate", "growth_accel_rate", "growth_target_default", "acq_flat_small", "acq_flat_medium",
+                "acq_flat_large", "acq_tier_small_max", "acq_tier_medium_max", "late_after_days", "program_start", "growth_start", "fiscal_start_month")
+        return {k: s.get(k) for k in keys} | {k: v for k, v in s.items() if k.startswith("growth_target::")}
+
+    # ---- chart
+    def chart(self, title: str, kind: str, labels: list, series: list, y_label: str | None = None, currency: bool = True):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import FuncFormatter
+        palette = ["#5A48B6", "#2B6CB0", "#1F9D57", "#C0682B", "#B83280", "#2C7A7B"]
+        fig, ax = plt.subplots(figsize=(7.2, 3.6), dpi=140)
+        x = list(range(len(labels)))
+        k = max(1, len(series))
+        for i, s in enumerate(series):
+            vals = [float(v or 0) for v in s["values"]][:len(labels)]
+            if kind == "line":
+                ax.plot(x[:len(vals)], vals, marker="o", linewidth=2, color=palette[i % 6], label=s["name"])
+            elif kind == "barh":
+                ax.barh([xi + i / k * 0.8 for xi in x[:len(vals)]], vals, height=0.8 / k, color=palette[i % 6], label=s["name"])
+            else:
+                ax.bar([xi + i / k * 0.8 - 0.4 + 0.4 / k for xi in x[:len(vals)]], vals, width=0.8 / k, color=palette[i % 6], label=s["name"])
+        if kind == "barh":
+            ax.set_yticks([xi + 0.4 - 0.4 / k for xi in x]); ax.set_yticklabels(labels, fontsize=8)
+            if currency: ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"${v:,.0f}"))
+        else:
+            ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=8, rotation=0 if len(labels) <= 8 else 45, ha="center" if len(labels) <= 8 else "right")
+            if currency: ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"${v:,.0f}"))
+        ax.set_title(title, fontsize=11, loc="left", fontweight="bold")
+        if y_label: ax.set_ylabel(y_label, fontsize=9)
+        for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+        ax.grid(axis="x" if kind == "barh" else "y", color="#eee"); ax.set_axisbelow(True)
+        if len(series) > 1: ax.legend(fontsize=8, frameon=False)
+        fig.tight_layout()
+        buf = io.BytesIO(); fig.savefig(buf, format="png"); plt.close(fig)
+        self.images.append("data:image/png;base64," + base64.b64encode(buf.getvalue()).decode())
+        return {"ok": True, "shown": True, "note": "the chart is displayed to the user below your answer; refer to it, don't re-list its numbers"}
+
+    # ---- web
+    def web_search(self, q: str, n: int | None = None):
+        key = _secret("SERPAPI_KEY")
+        if not key:
+            return {"error": "web search is not configured (no SERPAPI_KEY) — answer from the scorecard only"}
+        import urllib.parse, urllib.request
+        qs = urllib.parse.urlencode({"engine": "google", "q": q, "num": max(3, min(n or 8, 10)), "hl": "en", "gl": "us", "api_key": key})
+        try:
+            with urllib.request.urlopen("https://serpapi.com/search.json?" + qs, timeout=30) as r:
+                data = json.loads(r.read())
+        except Exception as e:
+            return {"error": f"search failed: {type(e).__name__}"}
+        out = {"q": q, "results": []}
+        ab = data.get("answer_box") or {}
+        if ab:
+            out["answer_box"] = {k: ab[k] for k in ("title", "answer", "snippet", "link") if k in ab}
+        for r in (data.get("organic_results") or [])[: max(3, min(n or 8, 10))]:
+            out["results"].append({"title": r.get("title"), "link": r.get("link"), "snippet": r.get("snippet"), "source": r.get("source")})
+        return out
+
+    def call(self, name: str, args: dict):
+        fn = getattr(self, name, None)
+        if not fn or name.startswith("_") or name == "call":
+            return {"error": f"no tool {name}"}
+        try:
+            return fn(**args)
+        except TypeError as e:
+            return {"error": f"bad arguments: {e}"}
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+
+def run(messages: list, db, rep_only: str | None = None, client=None) -> dict:
+    """One turn: the conversation so far (role/content pairs from the page) -> reply text, any charts, tools used."""
+    tools = Tools(db, rep_only=rep_only)
+    convo = [{"role": m["role"], "content": m["content"]} for m in messages
+             if m.get("role") in ("user", "assistant") and m.get("content")]
+    if not convo or convo[-1]["role"] != "user":
+        return {"reply": "Ask me something.", "images": [], "used": []}
+    if client is None:
+        key = _secret("ANTHROPIC_API_KEY")
+        if not key:
+            return {"reply": "The assistant isn't connected yet — no ANTHROPIC_API_KEY is configured. "
+                             "Once it is, ask me about pay, accounts, invoices or collections.", "images": [], "used": [],
+                    "unconfigured": True}
+        import anthropic
+        client = anthropic.Anthropic(api_key=key, max_retries=1, timeout=90)
+    today = datetime.now().strftime("%Y-%m-%d")
+    system = SYSTEM + f"\nToday is {today}." + (f"\nThis session belongs to the sales rep {rep_only}: answer only about their own pay and accounts." if rep_only else
+                                                 "\nThis session belongs to the manager.")
+    used, reply = [], ""
+    for _ in range(MAX_STEPS + 1):
+        msg = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS, system=system, tools=TOOLS, messages=convo,
+                                     thinking={"type": "adaptive"}, output_config={"effort": "medium"})
+        blocks = list(msg.content)
+        text = "".join(getattr(b, "text", "") for b in blocks if getattr(b, "type", "") == "text")
+        calls = [b for b in blocks if getattr(b, "type", "") == "tool_use"]
+        if msg.stop_reason == "refusal":
+            reply = text or "I can't help with that one."
+            break
+        if not calls or msg.stop_reason != "tool_use":
+            reply = text
+            break
+        convo.append({"role": "assistant", "content": [b.model_dump() if hasattr(b, "model_dump") else b for b in blocks]})
+        results = []
+        for c in calls:
+            args = dict(c.input or {})
+            out = tools.call(c.name, args)
+            used.append({"tool": c.name, "args": args})
+            results.append({"type": "tool_result", "tool_use_id": c.id,
+                            "content": json.dumps(out, ensure_ascii=False, default=str)[:14000]})
+        convo.append({"role": "user", "content": results})
+    else:
+        reply = reply or "That took too many lookups — try a narrower question."
+    return {"reply": reply or "(no answer)", "images": tools.images, "used": used}

@@ -27,10 +27,15 @@ done
 echo "[3/4] rolling the service"
 # the primaryContainer block has to be sent back as-is; /tmp gets wiped between sessions, so rebuild it
 aws ecs describe-express-gateway-service --service-arn "$SERVICE" --region $REGION > /tmp/wandt-gb-service.json
+SECRETS=$(aws secretsmanager list-secrets --region $REGION --query 'SecretList[?starts_with(Name, `wandt/`)].[Name,ARN]' --output json)
+echo "$SECRETS" > /tmp/wandt-secrets.json
 python3 -c "
 import json
 pc=json.load(open('/tmp/wandt-gb-service.json'))['service']['activeConfigurations'][0]['primaryContainer']
-json.dump(pc, open('$CONTAINER','w'), indent=2)"
+# every wandt/<NAME> secret becomes the env var NAME (DATABASE_URL, SECRET_KEY, ANTHROPIC_API_KEY, SERPAPI_KEY, ...)
+pc['secrets']=[{'name': n.split('/',1)[1], 'valueFrom': arn} for n, arn in json.load(open('/tmp/wandt-secrets.json'))]
+json.dump(pc, open('$CONTAINER','w'), indent=2)
+print('  secrets wired:', [s['name'] for s in pc['secrets']])"
 aws ecs update-express-gateway-service --service-arn "$SERVICE" --primary-container "file://$CONTAINER" \
   --region $REGION --query 'service.status.statusCode' --output text
 

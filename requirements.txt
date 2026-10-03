@@ -10,3 +10,5 @@ numpy==2.0.2
 openpyxl==3.1.5
 psycopg2-binary>=2.9,<3
 markdown==3.9
+anthropic>=1.0        # the assistant (python 3.11 in the image; 0.x locally on 3.9)
+matplotlib==3.9.4     # the assistant's chart tool
