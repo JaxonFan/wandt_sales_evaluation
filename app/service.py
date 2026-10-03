@@ -435,6 +435,7 @@ def _growth_version(db):
         frozenset(voided_set(db)),
         frozenset(get_constrained_items(db)),
         _assignment_version(db),
+        _team_version(db),
     )
 
 
@@ -444,24 +445,79 @@ def _assignment_version(db):
 
 
 # ---------- teams: who owns which account ----------
+TEAM_COLORS = ["#5A48B6", "#2B6CB0", "#1F9D57", "#C0682B", "#B83280", "#2C7A7B"]
+
+
+def _seed_teams(db):
+    """First boot on a database without a teams table: carry config.TEAMS / HOUSE in, once."""
+    from .config import TEAMS, HOUSE_TEAM, HOUSE_MEMBERS
+    if db.query(M.Team).count():
+        return
+    for i, (name, members) in enumerate(TEAMS.items()):
+        db.add(M.Team(name=name, kind="team", members=list(members), auto=True, fallback=False,
+                      color=TEAM_COLORS[i % len(TEAM_COLORS)], sort=i))
+    db.add(M.Team(name=HOUSE_TEAM, kind="house", members=list(HOUSE_MEMBERS), auto=False, fallback=False,
+                  color="#8a8f8c", sort=99))
+    db.commit()
+
+
+def teams_table(db):
+    """Every Team row, as plain dicts, in display order (house last)."""
+    _seed_teams(db)
+    rows = db.query(M.Team).order_by(M.Team.sort, M.Team.name).all()
+    return [dict(name=t.name, kind=t.kind or "team", members=list(t.members or []), auto=bool(t.auto),
+                 fallback=bool(t.fallback), color=t.color or "#8a8f8c") for t in rows]
+
+
+def _team_version(db):
+    return tuple((t["name"], t["kind"], tuple(t["members"]), t["auto"], t["fallback"]) for t in teams_table(db))
+
+
+def house_team_name(db):
+    return next((t["name"] for t in teams_table(db) if t["kind"] == "house"), "House")
+
+
 def team_members(db):
-    """{team: [members]} for the PAID teams, restricted to reps actually on the active roster."""
-    from .config import TEAMS
+    """{team: [members]} for every EARNING team (kind 'team'), members restricted to the active roster."""
     _, _, roster = attribution_maps(db)
     active = set(roster)
     out = {}
-    for team, members in TEAMS.items():
-        present = [m for m in members if m in active]
+    for t in teams_table(db):
+        if t["kind"] != "team":
+            continue
+        present = [m for m in t["members"] if m in active]
         if present:
-            out[team] = present
+            out[t["name"]] = present
     return out
 
 
+def auto_teams(db):
+    """The teams that take part in the 80%-of-orders rule, in order."""
+    return [t["name"] for t in teams_table(db) if t["kind"] == "team" and t["auto"]]
+
+
+def fallback_teams(db):
+    return [t["name"] for t in teams_table(db) if t["kind"] == "team" and t["fallback"]]
+
+
 def team_of_rep(db):
-    """{rep name: team} across the paid teams AND the house team (house members earn no growth)."""
-    from .config import TEAMS, HOUSE_TEAM, HOUSE_MEMBERS
-    out = {m: team for team, members in TEAMS.items() for m in members}
-    out.update({m: HOUSE_TEAM for m in HOUSE_MEMBERS})
+    """{rep: auto team or house} — the rep's PRIMARY group, used for the ownership rule and for grouping."""
+    out = {}
+    for t in teams_table(db):
+        if t["kind"] == "house" or (t["kind"] == "team" and t["auto"]):
+            for m in t["members"]:
+                out.setdefault(m, t["name"])
+    return out
+
+
+def earners(db):
+    """{earner: [members]} the growth engine pays: every earning team, plus each rep who has at least one
+    account pinned to them BY NAME (an individual earner is a team of one)."""
+    out = dict(team_members(db))
+    _, _, roster = attribution_maps(db)
+    pinned = {a.team for a in db.query(M.AccountAssignment).all() if a.team in set(roster)}
+    for rep in sorted(pinned):
+        out[rep] = [rep]
     return out
 
 
@@ -475,13 +531,17 @@ def account_assignments(db):
 
     Returns rows: account, customer, orders, per-team counts/shares, auto, manual, team (final), profit/revenue
     over the window, plus `shared` (no team at the bar). Memoized by data + assignment version."""
-    from .config import HOUSE_TEAM, HOUSE_ACCOUNTS, TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS
+    from .config import HOUSE_ACCOUNTS, TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS
 
     def _compute():
         df = active_lines(db)
-        teams = team_members(db)
         rep_team = team_of_rep(db)
-        all_teams = list(teams) + [HOUSE_TEAM]
+        HOUSE = house_team_name(db)
+        autos = auto_teams(db)
+        all_teams = autos + [HOUSE]
+        members_of = {t["name"]: set(t["members"]) for t in teams_table(db)}
+        fallbacks = fallback_teams(db)
+        _, _, roster = attribution_maps(db)
         manual = {a.account: a.team for a in db.query(M.AccountAssignment).all() if a.team}
         names = customer_names(db)
         if not len(df):
@@ -505,19 +565,28 @@ def account_assignments(db):
                 else {t: 0 for t in all_teams}
             shares = {t: (by_team[t] / n_orders if n_orders else 0.0) for t in all_teams}
             if account in HOUSE_ACCOUNTS:
-                auto = HOUSE_TEAM                       # house by policy, whoever writes the order
+                auto = HOUSE                            # house by policy, whoever writes the order
             else:
                 auto = next((t for t in all_teams if shares[t] >= TEAM_OWNERSHIP_PCT), None)
+                if auto is None:
+                    # a FALLBACK team (e.g. "Everyone") catches the account when its members' auto teams
+                    # together wrote >= the bar
+                    for fb in fallbacks:
+                        covered = sum(shares[t] for t in autos if members_of[t] & members_of[fb])
+                        if covered >= TEAM_OWNERSHIP_PCT:
+                            auto = fb
+                            break
             team = manual.get(account) or auto
+            owner_kind = ("rep" if team in set(roster) else "house" if team == HOUSE else "team" if team else None)
             rows.append(dict(account=account, customer=names.get(account, account), orders=n_orders,
                              by_team=by_team, shares=shares, auto=auto, manual=manual.get(account),
-                             team=team, shared=(team is None),
+                             team=team, owner_kind=owner_kind, shared=(team is None),
                              profit=float(profit.get(account, 0.0)), revenue=float(revenue.get(account, 0.0)),
                              house_by_policy=(account in HOUSE_ACCOUNTS)))
         rows.sort(key=lambda r: -r["profit"])
         return rows
 
-    return _memo(("assignments", _data_version(db), _assignment_version(db)), _compute)
+    return _memo(("assignments", _data_version(db), _assignment_version(db), _team_version(db)), _compute)
 
 
 def underperforming_accounts(db):
@@ -840,8 +909,8 @@ def run_cumulative_growth(db, with_comparison=True):
     def _core():
         df = active_lines(db)
         _, _, team = attribution_maps(db)
-        teams = team_members(db)
-        # growth is earned by TEAMS now, so the target % is per team (Setting key 'growth_target::Team 1').
+        teams = earners(db)        # every earning team + each rep with an account pinned to them by name
+        # the target % is per earner (Setting key 'growth_target::Team 1' / 'growth_target::An Cao')
         targets = {name: float(s.get(f"growth_target::{name}", default_target)) for name in teams}
         fiscal_start, as_of = cycle_window()
         return compute_cumulative_growth(df, fiscal_start, as_of, team, cumulative_rate=rate,
@@ -873,7 +942,7 @@ def _contribution_only_growth(db, fiscal_start, as_of, rate):
     (Aug-Sep 2026): the same month spine and one all-zero row per rep, so every page renders unchanged while
     growth_active=False tells the templates to hide the growth columns."""
     _, _, team = attribution_maps(db)
-    teams = team_members(db)
+    teams = earners(db)
     rep_team = {m: t for t, members in teams.items() for m in members}
     months = [str(m) for m in pd.period_range(fiscal_start.to_period("M"), as_of.to_period("M"), freq="M")]
     zero_row = lambda m: dict(month=m, pay=0.0, cum_pay=0.0, cum_growth=0.0, ty_book=0.0, ly_book=0.0,
@@ -1006,7 +1075,7 @@ def _chapter_growth(db, start, end, growth_active):
         from .config import GROWTH_EXEMPT_ACCOUNTS
         s = get_settings(db)
         default_target = float(s.get("growth_target_default", 0.06))
-        teams = team_members(db)
+        teams = earners(db)
         _, _, roster = attribution_maps(db)
         res = compute_cumulative_growth(
             active_lines(db), start, end, roster,

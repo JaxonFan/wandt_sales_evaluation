@@ -9,8 +9,8 @@
   .teamtabs a.over{background:var(--accent-soft);border-style:solid;transform:scale(1.03)}
   .teamtabs .dropnote{font-size:12.5px;color:var(--muted);margin-left:6px}
   tr.acct{cursor:grab} tr.acct:active{cursor:grabbing} tr.acct.drag{opacity:.45}
-  tr.acct td:first-child{border-left:4px solid var(--line-2)}
-  tr.acct.t1 td:first-child{border-left-color:#5A48B6} tr.acct.t2 td:first-child{border-left-color:#2B6CB0} tr.acct.house td:first-child{border-left-color:#8a8f8c} tr.acct.shared td:first-child{border-left-color:#C0682B}
+  tr.acct td:first-child{border-left:4px solid var(--own, var(--line-2))}
+  tr.acct.shared td:first-child{border-left-color:#C0682B}
   .pin{font-size:10.5px;color:var(--accent-2);background:var(--accent-soft);border-radius:999px;padding:1px 7px;margin-left:6px}
   .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
   .toast.on{opacity:1}
@@ -23,21 +23,28 @@
     your assignment always beats the computed one (<span class="pin">pinned</span>). Drag a pinned row onto the tab
     its share puts it in to let the rule decide again. Growth follows this ownership; contribution and new-account
     bonuses stay with whoever did the work.</p>
-  {% set tabs = [('shared','Needs assignment',None,counts.shared), ('t1','Team 1','Team 1',counts['Team 1']), ('t2','Team 2','Team 2',counts['Team 2']), ('house','House','House',counts['House'])] %}
   <div class="teamtabs">
-    {% for css, title, team, n in tabs %}
-    <a href="/accounts?view={{ 'shared' if not team else team|urlencode }}" class="{{ css }} {{ 'on' if view == ('shared' if not team else team) }}"
-       data-team="{{ team or '' }}" ondragover="over(event)" ondragleave="leave(event)" ondrop="drop(event)">
-      <b>{{ title }} ({{ n }})</b>
-      <small>{% if team and team_members.get(team) %}{{ team_members[team]|join(', ') }}{% elif team == 'House' %}managers · house accounts{% else %}no team at {{ '%.0f'|format(pct) }}% — pays nobody{% endif %}</small>
+    {% for t in tabs %}
+    <a href="/accounts?view={{ t.key|urlencode }}" class="{{ 'on' if view == t.key }} {{ t.css if t.css }}"
+       style="{% if t.color %}border-color:{{ t.color }}{% endif %}"
+       data-team="{{ t.team or '' }}" ondragover="over(event)" ondragleave="leave(event)" ondrop="drop(event)">
+      <b>{{ t.title }} ({{ t.n }})</b><small>{{ t.sub }}</small>
     </a>
     {% endfor %}
     <a href="/accounts?view=all" class="{{ 'on' if view=='all' }}"><b>All ({{ counts.all }})</b><small>every account</small></a>
-    <span class="dropnote">← drop a row here</span>
     <form method="get" action="/accounts" style="margin-left:auto">
       <input type="hidden" name="view" value="{{ view }}">
       <input name="q" value="{{ q }}" placeholder="search customer…">
     </form>
+  </div>
+  <div class="teamtabs" style="margin-top:-4px">
+    <span class="dropnote" style="margin:0 6px 0 0">or pin to one person:</span>
+    {% for t in people %}
+    <a href="/accounts?view={{ t.key|urlencode }}" class="{{ 'on' if view == t.key }}" style="min-width:0;padding:6px 12px"
+       data-team="{{ t.team }}" ondragover="over(event)" ondragleave="leave(event)" ondrop="drop(event)">
+      <b style="font-size:13px">{{ t.title }}{% if t.n %} ({{ t.n }}){% endif %}</b>
+    </a>
+    {% endfor %}
   </div>
   <table>
     <thead><tr><th>Customer</th><th class="num">Orders ({{ months }}mo)</th>
@@ -45,7 +52,7 @@
       <th>Computed</th><th class="num">Profit</th><th>Owner</th></tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr class="acct {{ {'Team 1':'t1','Team 2':'t2','House':'house'}.get(r.team, 'shared') }}" draggable="true"
+      <tr class="acct {{ 'shared' if not r.team }}" draggable="true" style="{% if r.team %}--own:{{ colors.get(r.team, '#555') }}{% endif %}"
           data-account="{{ r.account }}" data-auto="{{ r.auto or '' }}" ondragstart="start(event)" ondragend="end(event)">
         <td>{{ r.customer }}<div class="mut" style="font-size:11px">{{ r.account }}</div></td>
         <td class="num mut">{{ r.orders }}</td>
@@ -56,7 +63,7 @@
             {% elif r.auto %}{{ r.auto }}
             {% else %}<span class="badge b-warn">shared</span>{% endif %}</td>
         <td class="num">${{ '{:,.0f}'.format(r.profit) }}</td>
-        <td class="owner"><b>{{ r.team or '—' }}</b>{% if r.manual %}<span class="pin">pinned</span>{% endif %}</td>
+        <td class="owner"><b>{{ r.team or '—' }}</b>{% if r.owner_kind == 'rep' %} <span class="mut" style="font-size:11px">(individual)</span>{% endif %}{% if r.manual %}<span class="pin">pinned</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="{{ 5 + teams|length }}" class="mut">Nothing here.</td></tr>
@@ -80,7 +87,7 @@ function drop(e){
   fetch('/accounts/assign.json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:acct,team:pin})})
    .then(function(r){return r.json();}).then(function(j){
      if(!j.ok){toast('Could not save');return;}
-     row.className='acct '+({'':'shared','Team 1':'t1','Team 2':'t2','House':'house'}[team]);
+     row.className='acct '+(team?'':'shared');
      row.querySelector('.owner').innerHTML='<b>'+(team||'—')+'</b>'+(pin?'<span class="pin">pinned</span>':'');
      toast((pin?'Pinned to ':'Back to the rule: ')+(team||'shared'));
      setTimeout(function(){location.reload();},900);

@@ -34,15 +34,16 @@ Base.metadata.create_all(engine)
 
 
 def _seed_targets():
-    """One-time: give each TEAM a growth target key at the default, so the manager sees editable rows on
-    /settings. Idempotent — only inserts a key if it's absent, so manager edits are never overwritten.
-    (The old per-rep target keys are left in place, unused, rather than deleted behind the manager's back.)"""
+    """One-time: give each earning TEAM a growth target key at the default, so the manager sees editable rows on
+    /settings. Idempotent — only inserts a key if it's absent, so manager edits are never overwritten."""
     from .db import SessionLocal
-    from .config import TEAMS, DEFAULTS
+    from .config import DEFAULTS
     db = SessionLocal()
     try:
-        for name in TEAMS:
-            key = f"growth_target::{name}"
+        for t in service.teams_table(db):
+            if t["kind"] != "team":
+                continue
+            key = f"growth_target::{t['name']}"
             if not db.get(M.Setting, key):
                 db.add(M.Setting(key=key, value=str(DEFAULTS["growth_target_default"])))
         db.commit()
@@ -163,13 +164,15 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
 
     # every rep on the roster gets a pay line (contribution is individual, so a house-team rep still earns it);
     # the growth share comes from their team, or is absent if they are not on a paid team.
-    rep_team = {row["associate"]: row["team"] for _, row in r["reps"].iterrows()} if len(r["reps"]) else {}
+    primary = service.team_of_rep(db)
+    rep_team = {rep: primary.get(rep) for rep in team}
     members_of = {t: len(ms) for t, ms in r.get("team_members", {}).items()}
+    rep_parts = {row["associate"]: row.get("teams", [row["team"]]) for _, row in r["reps"].iterrows()} if len(r["reps"]) else {}
     zero = dict(pay=0.0, cum_pay=0.0)
     rows = []
     for rep in team:
         t = r.get("rep_trajectory", {}).get(rep, [zero] * len(months))[mi]
-        x = dict(team=rep_team.get(rep), members=members_of.get(rep_team.get(rep), 1))
+        x = dict(team=rep_team.get(rep), members=members_of.get(rep_team.get(rep), 1), parts=rep_parts.get(rep, []))
         c = contrib.get((rep, m), dict(n_items=0, bonus=0.0))
         a_mo = acq_pay.get((rep, m), 0.0)
         growth_cycle = float(t["cum_pay"])                                              # through selected month
@@ -177,7 +180,7 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
         acq_cycle = sum(v for (rp, mmn), v in acq_pay.items() if rp == rep and mmn in thru)
         tot = ledger["totals"].get(rep, {})
         rows.append(dict(
-            associate=rep, team=x["team"], members=int(x["members"] or 1),
+            associate=rep, team=x["team"], members=int(x["members"] or 1), parts=x["parts"],
             pay_mo=float(t["pay"]), cum_pay=growth_cycle,
             n_items=c["n_items"], contrib_mo=c["bonus"], acq_mo=a_mo,
             total_mo=float(t["pay"]) + c["bonus"] + a_mo,
@@ -187,7 +190,8 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
             paid=tot.get("paid", 0.0), payable_now=tot.get("owed", 0.0),
             carried=tot.get("owed_prior", 0.0), unreleased=tot.get("unreleased", 0.0),
         ))
-    rows.sort(key=lambda z: (z["team"] is None, z["team"] or "", -z["earned_cycle"]))
+    order = {t["name"]: i for i, t in enumerate(service.teams_table(db))}
+    rows.sort(key=lambda z: (z["team"] is None, order.get(z["team"], 50), -z["earned_cycle"]))
 
     # --- each row is MONTH-SCOPED: the selected month's earnings, its own collection, what was paid against
     # it and what it still owes. A past month is read-only (whatever it still owes rolls forward and is paid
@@ -218,14 +222,15 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
         x["earlier"] = [mm for mm in mrows if mm["month"] < m]
 
     # group by team for display: a colored header row per team, members beneath it
-    palette = {"Team 1": "t1", "Team 2": "t2"}
+    colors = {t["name"]: t["color"] for t in service.teams_table(db)}
+    HOUSE = service.house_team_name(db)
     groups = []
     for x in rows:
-        key = x["team"] or "House"
+        key = x["team"] or HOUSE
         g = next((g for g in groups if g["team"] == key), None)
         if g is None:
-            g = dict(team=key, css=palette.get(key, "house"), rows=[],
-                     members=r.get("team_members", {}).get(key, []))
+            g = dict(team=key, css=("house" if key == HOUSE else "t" + str(len(groups) + 1)),
+                     color=colors.get(key, "#8a8f8c"), rows=[], members=r.get("team_members", {}).get(key, []))
             groups.append(g)
         g["rows"].append(x)
     for g in groups:
@@ -245,6 +250,7 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
         "rows": rows, "groups": groups, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
+        "colors": colors,
         "open_set": {x for x in open.split(",") if x},   # reps whose row is rendered already expanded
         "unassigned": service.unassigned_summary(db),
         "is_latest": is_latest, "growth_active": growth_active,
@@ -382,19 +388,33 @@ def accounts_page(request: Request, view: str = "shared", q: str = "", db: Sessi
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    from .config import TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS, HOUSE_TEAM
+    from .config import TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS
     rows = service.account_assignments(db)
-    teams = list(service.team_members(db)) + [HOUSE_TEAM]
+    HOUSE = service.house_team_name(db)
+    autos = service.auto_teams(db)
+    teams = autos + [HOUSE]                                   # the share columns
+    table = {t["name"]: t for t in service.teams_table(db)}
+    extra = [t["name"] for t in service.teams_table(db) if t["kind"] == "team" and not t["auto"]]
+    _, _, roster = service.attribution_maps(db)
     counts = dict(all=len(rows), shared=sum(1 for r in rows if r["shared"]))
-    for t in teams:
+    for t in teams + extra + roster:
         counts[t] = sum(1 for r in rows if r["team"] == t)
     shown = [r for r in rows if (view == "all" or (view == "shared" and r["shared"]) or r["team"] == view)]
     if q:
         needle = q.strip().lower()
         shown = [r for r in shown if needle in r["customer"].lower() or needle in r["account"].lower()]
+    tabs = [dict(key="shared", title="Needs assignment", team=None, css="shared", n=counts["shared"], sub=f"no team at {TEAM_OWNERSHIP_PCT*100:.0f}% — pays nobody")]
+    for t in autos:
+        tabs.append(dict(key=t, title=t, team=t, color=table[t]["color"], n=counts[t], sub=", ".join(table[t]["members"])))
+    for t in extra:
+        tabs.append(dict(key=t, title=t, team=t, color=table[t]["color"], n=counts[t],
+                         sub=("catches shared accounts · " if table[t]["fallback"] else "") + ", ".join(table[t]["members"])))
+    tabs.append(dict(key=HOUSE, title=HOUSE, team=HOUSE, color="#8a8f8c", n=counts[HOUSE], sub="earns no growth"))
+    people = [dict(key=r, title=r, team=r, color="#555", n=counts[r], sub="individual — pays this rep alone") for r in roster]
     return templates.TemplateResponse("backtest_accounts.html", {
         "request": request, "user": user, "page": "accounts", "rows": shown[:400], "n_shown": len(shown),
-        "teams": teams, "team_members": service.team_members(db), "view": view, "q": q, "counts": counts,
+        "teams": teams, "tabs": tabs, "people": people, "view": view, "q": q, "counts": counts,
+        "colors": {t["name"]: t["color"] for t in service.teams_table(db)},
         "pct": TEAM_OWNERSHIP_PCT * 100, "months": TEAM_WINDOW_MONTHS})
 
 
@@ -406,8 +426,9 @@ async def accounts_assign_json(request: Request, db: Session = Depends(get_db)):
         return JSONResponse({"ok": False}, status_code=401)
     body = await request.json()
     account, team = str(body.get("account", "")).strip(), str(body.get("team", "")).strip()
-    from .config import HOUSE_TEAM
-    if not account or (team and team not in list(service.team_members(db)) + [HOUSE_TEAM]):
+    _, _, roster = service.attribution_maps(db)
+    valid = set(service.team_members(db)) | {service.house_team_name(db)} | set(roster)
+    if not account or (team and team not in valid):
         return JSONResponse({"ok": False}, status_code=400)
     row = db.get(M.AccountAssignment, account) or M.AccountAssignment(account=account)
     row.team = team or None; row.user_id = user.user_id; row.updated_at = dt.datetime.utcnow()
@@ -463,6 +484,84 @@ def account_save(request: Request, current: str = Form(...), new: str = Form(...
         db.commit()
         return RedirectResponse(f"/account?saved=1&lang={lang}", status_code=303)
     return RedirectResponse(f"/account?err={err}&lang={lang}", status_code=303)
+
+
+# ---------- teams: who earns growth together ----------
+@app.get("/teams", response_class=HTMLResponse)
+def teams_page(request: Request, saved: str = "", err: str = "", db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    _, _, roster = service.attribution_maps(db)
+    everyone = sorted({a.name for a in db.query(M.Associate) if a.name and (a.status or "").lower() == "active"})
+    teams = service.teams_table(db)
+    primary = service.team_of_rep(db)
+    unplaced = [n for n in everyone if n not in primary]
+    counts = {}
+    for r in service.account_assignments(db):
+        counts[r["team"]] = counts.get(r["team"], 0) + 1
+    return templates.TemplateResponse("backtest_teams.html", {
+        "request": request, "user": user, "page": "teams", "teams": teams, "everyone": everyone, "roster": roster,
+        "unplaced": unplaced, "counts": counts, "saved": saved, "err": err,
+        "colors": service.TEAM_COLORS})
+
+
+@app.post("/teams/save")
+async def teams_save(request: Request, db: Session = Depends(get_db)):
+    """Create or update one team: name, kind, members, auto rule, fallback, color."""
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    form = await request.form()
+    original = (form.get("original") or "").strip()
+    name = (form.get("name") or "").strip()
+    if not name:
+        return RedirectResponse("/teams?err=A+team+needs+a+name", status_code=303)
+    kind = "house" if form.get("kind") == "house" else "team"
+    members = [m for m in form.getlist("members") if m]
+    row = db.get(M.Team, original) if original else None
+    if row is None:
+        if db.get(M.Team, name):
+            return RedirectResponse(f"/teams?err=There+is+already+a+team+called+{name}", status_code=303)
+        row = M.Team(name=name, sort=db.query(M.Team).count())
+        db.add(row)
+    elif original != name:
+        if db.get(M.Team, name):
+            return RedirectResponse(f"/teams?err=There+is+already+a+team+called+{name}", status_code=303)
+        # rename: carry the assignments and the target with it
+        for a in db.query(M.AccountAssignment).filter(M.AccountAssignment.team == original):
+            a.team = name
+        old = db.get(M.Setting, f"growth_target::{original}")
+        if old:
+            db.add(M.Setting(key=f"growth_target::{name}", value=old.value)); db.delete(old)
+        db.delete(row); db.flush()
+        row = M.Team(name=name, sort=0); db.add(row)
+    row.kind = kind
+    row.members = members
+    row.auto = (kind == "team") and bool(form.get("auto"))
+    row.fallback = (kind == "team") and bool(form.get("fallback"))
+    row.color = (form.get("color") or "").strip() or service.TEAM_COLORS[0]
+    row.updated_at = dt.datetime.utcnow()
+    db.commit()
+    service._ENGINE_CACHE.clear()
+    _seed_targets()
+    return RedirectResponse(f"/teams?saved={name}", status_code=303)
+
+
+@app.post("/teams/delete")
+def teams_delete(request: Request, name: str = Form(...), db: Session = Depends(get_db)):
+    user = _guard(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    row = db.get(M.Team, name)
+    if row is None or row.kind == "house":
+        return RedirectResponse("/teams?err=The+house+group+cannot+be+deleted", status_code=303)
+    n = db.query(M.AccountAssignment).filter(M.AccountAssignment.team == name).count()
+    if n:
+        return RedirectResponse(f"/teams?err={n}+accounts+are+pinned+to+{name}+—+move+them+first", status_code=303)
+    db.delete(row); db.commit()
+    service._ENGINE_CACHE.clear()
+    return RedirectResponse("/teams?saved=deleted", status_code=303)
 
 
 # ---------- logins (manager): one account per rep, reset a forgotten password ----------
@@ -559,7 +658,7 @@ def rep_underperformers(request: Request, lang: str = "zh", view: str = "both",
     if user.role != "rep":
         return RedirectResponse("/underperformers", status_code=303)
     r = service.run_cumulative_growth(db, with_comparison=False)
-    my_team = next((t for t, ms in r.get("team_members", {}).items() if user.associate_name in ms), None)
+    my_team = service.team_of_rep(db).get(user.associate_name)
     ctx = _underperf_context(db, view, team=my_team)
     return templates.TemplateResponse("backtest_underperformers.html", dict(
         ctx, request=request, user=user, page="mewatch", lang=lang, mine=True, team=my_team))
@@ -639,8 +738,9 @@ def settings_page(request: Request, saved: int = 0, db: Session = Depends(get_db
     _, _, team = service.attribution_maps(db)
     default_t = float(s.get("growth_target_default", 0.06))
     # targets are per TEAM now (growth is earned by the team and split equally among its members)
-    reps = [dict(name=t, target=float(s.get(f"growth_target::{t}", default_t)), members=", ".join(ms))
-            for t, ms in service.team_members(db).items()]
+    reps = [dict(name=t, target=float(s.get(f"growth_target::{t}", default_t)),
+                 members=("individual" if len(ms) == 1 and ms[0] == t else ", ".join(ms)))
+            for t, ms in service.earners(db).items()]
     return templates.TemplateResponse("backtest_settings.html", {
         "request": request, "user": user, "page": "settings", "saved": bool(saved), "reps": reps,
         "base_rate": float(s.get("cumulative_rate", 0.05)),
@@ -668,7 +768,7 @@ async def settings_save(request: Request, db: Session = Depends(get_db)):
     for key in ("acq_flat_small", "acq_flat_medium", "acq_flat_large", "late_after_days"):
         if form.get(key, "").strip():
             put(key, int(float(form[key])))
-    for name in service.team_members(db):
+    for name in service.earners(db):
         v = form.get(f"target::{name}", "").strip()
         if v:
             put(f"growth_target::{name}", float(v))
@@ -818,7 +918,7 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     name = user.associate_name
     r = service.run_cumulative_growth(db, with_comparison=False)
     months = r["months"]
-    my_team = next((t for t, ms in r.get("team_members", {}).items() if name in ms), None)
+    my_team = service.team_of_rep(db).get(name)
     if not months:
         return templates.TemplateResponse("backtest_me.html", {
             "request": request, "user": user, "page": "me", "lang": lang, "name": name,
@@ -936,8 +1036,7 @@ def rep_guide(request: Request, lang: str = "zh", db: Session = Depends(get_db))
     return templates.TemplateResponse("backtest_rep_guide.html", {
         "request": request, "user": user, "page": "repguide", "lang": lang,
         "teams": service.team_members(db),
-        "my_team": next((t for t, ms in service.team_members(db).items()
-                         if user.associate_name in ms), None),
+        "my_team": service.team_of_rep(db).get(user.associate_name),
         "growth_start": pd.Timestamp(s.get("growth_start", "2026-10-01")),
         "growth_live": pd.Timestamp(s.get("program_start", "2026-08-01")) >= pd.Timestamp(s.get("growth_start", "2026-10-01")),
         "rate": float(s.get("cumulative_rate", 0.05)), "accel": float(s.get("growth_accel_rate", 0.075)),

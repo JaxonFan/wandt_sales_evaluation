@@ -695,20 +695,30 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
     # TEAM MODE: what was computed above is per TEAM; split each team's pay EQUALLY among its members.
     out["teams"] = out["reps"].rename(columns={"associate": "team"})
     out["earners"] = trajectory                                  # keyed by team
-    rep_rows, rep_traj = [], {}
+    rep_rows, rep_traj, memberships = [], {}, {}
     for team_name, members in teams.items():
         n = len(members) or 1
         rows = trajectory.get(team_name, [])
+        team_row = next((x for x in reps if x["associate"] == team_name), None)
         for member in members:
-            rep_traj[member] = [dict(r, pay=r["pay"] / n, cum_pay=r["cum_pay"] / n, team=team_name,
-                                     team_pay=r["pay"], team_cum_pay=r["cum_pay"]) for r in rows]
-            team_row = next((x for x in reps if x["associate"] == team_name), None)
-            rep_rows.append(dict(associate=member, team=team_name, members=n,
-                                 n_accounts=(team_row or {}).get("n_accounts", 0),
-                                 cum_growth=(team_row or {}).get("cum_growth", 0.0),
-                                 earned=(team_row or {}).get("earned", 0.0) / n,
-                                 team_earned=(team_row or {}).get("earned", 0.0),
-                                 target=(team_row or {}).get("target")))
+            share = [dict(r, pay=r["pay"] / n, cum_pay=r["cum_pay"] / n, team=team_name,
+                          team_pay=r["pay"], team_cum_pay=r["cum_pay"]) for r in rows]
+            if member in rep_traj:        # second (or later) earner: add the shares month by month
+                rep_traj[member] = [dict(a, pay=a["pay"] + b["pay"], cum_pay=a["cum_pay"] + b["cum_pay"])
+                                    for a, b in zip(rep_traj[member], share)]
+            else:
+                rep_traj[member] = share
+            memberships.setdefault(member, []).append(dict(team=team_name, members=n,
+                                                            earned=(team_row or {}).get("earned", 0.0) / n))
+    for member, parts in memberships.items():
+        first = parts[0]
+        rep_rows.append(dict(associate=member, team=first["team"], members=first["members"],
+                             teams=[p["team"] for p in parts],
+                             n_accounts=sum(next((x for x in reps if x["associate"] == p["team"]), {}).get("n_accounts", 0) for p in parts),
+                             cum_growth=sum(next((x for x in reps if x["associate"] == p["team"]), {}).get("cum_growth", 0.0) for p in parts),
+                             earned=sum(p["earned"] for p in parts),
+                             team_earned=sum(next((x for x in reps if x["associate"] == p["team"]), {}).get("earned", 0.0) for p in parts),
+                             target=next((x for x in reps if x["associate"] == first["team"]), {}).get("target")))
     out["reps"] = pd.DataFrame(rep_rows)
     out["rep_trajectory"] = rep_traj
     out["team_members"] = teams

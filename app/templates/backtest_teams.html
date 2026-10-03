@@ -1,0 +1,72 @@
+{% extends "backtest_base.html" %}{% block body %}
+<style>
+  .tgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+  .tcard{border:1px solid var(--line);border-left:5px solid var(--line-2);border-radius:12px;padding:16px 18px;background:var(--card);box-shadow:var(--shadow)}
+  .tcard h3{margin:0 0 2px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .tcard .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .tcard .flags{font-size:12px;color:var(--muted);margin:2px 0 10px}
+  .tcard label.m{display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 0}
+  .tcard input[type=text]{width:100%}
+  .tcard .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .tcard .opt{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .sw{display:flex;gap:6px}
+  .sw label{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:inline-block}
+  .sw input{display:none} .sw input:checked + span{outline:2px solid var(--ink);outline-offset:2px;border-radius:50%}
+  .sw span{display:block;width:22px;height:22px;border-radius:50%}
+</style>
+<div class="card">
+  <h2>Teams — who earns growth together</h2>
+  <p class="hint">Growth is earned by a <b>team</b> on the accounts it owns and split equally among its members. A rep belongs to
+    exactly one <b>auto</b> team — that is the team the 80%-of-orders rule counts their orders for. A team with the
+    <b>fallback</b> flag (e.g. "Everyone") catches the accounts no auto team owns outright, when its members together
+    wrote 80%. Accounts can also be pinned to a <b>single rep by name</b> on the Assignment page — that rep earns
+    the growth alone. The <b>house</b> group earns no growth.</p>
+  {% if saved %}<div class="msg">Saved{% if saved != 'deleted' %}: <b>{{ saved }}</b>{% endif %}.</div>{% endif %}
+  {% if err %}<div class="msg" style="background:#fdecec;color:#c0392b;border-color:#f5c6c6">{{ err }}</div>{% endif %}
+  {% if unplaced %}<div class="msg" style="background:#FBEEE2;color:#8a4a1b;border-color:#f1d2b8">Not in any auto team or house:
+    <b>{{ unplaced|join(', ') }}</b> — their orders count for nobody in the ownership rule.</div>{% endif %}
+  <div class="tgrid">
+    {% for t in teams %}
+    <form class="tcard" method="post" action="/teams/save" style="border-left-color:{{ t.color }}">
+      <input type="hidden" name="original" value="{{ t.name }}">
+      <div class="k">{{ 'house group' if t.kind == 'house' else 'team' }} · {{ counts.get(t.name, 0) }} accounts</div>
+      <input type="text" name="name" value="{{ t.name }}" style="font-size:15px;font-weight:700;margin:4px 0 8px">
+      <input type="hidden" name="kind" value="{{ t.kind }}">
+      {% for p in everyone %}
+      <label class="m"><input type="checkbox" name="members" value="{{ p }}" {{ 'checked' if p in t.members }}> {{ p }}
+        <span class="mut" style="font-size:11.5px">{% if p not in roster %}manager{% endif %}</span></label>
+      {% endfor %}
+      {% if t.kind == 'team' %}
+      <div class="row">
+        <label class="opt"><input type="checkbox" name="auto" {{ 'checked' if t.auto }}> in the 80% rule</label>
+        <label class="opt"><input type="checkbox" name="fallback" {{ 'checked' if t.fallback }}> catches shared accounts</label>
+      </div>
+      {% endif %}
+      <div class="row">
+        <span class="sw">{% for c in colors %}<label><input type="radio" name="color" value="{{ c }}" {{ 'checked' if c == t.color }}><span style="background:{{ c }}"></span></label>{% endfor %}</span>
+        <button type="submit" style="margin-left:auto">Save</button>
+        {% if t.kind == 'team' %}<button type="submit" class="ghost" formaction="/teams/delete" formmethod="post" name="name" value="{{ t.name }}"
+           onclick="return confirm('Delete {{ t.name }}?')">Delete</button>{% endif %}
+      </div>
+    </form>
+    {% endfor %}
+    <form class="tcard" method="post" action="/teams/save" style="border-left-style:dashed">
+      <div class="k">new team</div>
+      <input type="text" name="name" placeholder="e.g. Everyone" style="font-size:15px;font-weight:700;margin:4px 0 8px">
+      <input type="hidden" name="kind" value="team">
+      {% for p in roster %}<label class="m"><input type="checkbox" name="members" value="{{ p }}"> {{ p }}</label>{% endfor %}
+      <div class="row">
+        <label class="opt"><input type="checkbox" name="auto"> in the 80% rule</label>
+        <label class="opt"><input type="checkbox" name="fallback" checked> catches shared accounts</label>
+      </div>
+      <div class="row">
+        <span class="sw">{% for c in colors %}<label><input type="radio" name="color" value="{{ c }}" {{ 'checked' if loop.index == 3 }}><span style="background:{{ c }}"></span></label>{% endfor %}</span>
+        <button type="submit" style="margin-left:auto">Create</button>
+      </div>
+    </form>
+  </div>
+  <p class="hint" style="margin-top:14px"><b>Changing teams mid-cycle</b> recomputes ownership and the split from the
+    start of the cycle: accounts can change owner, and each member's share changes. Money already paid stays paid
+    (owed never goes negative). Best done at a cycle boundary.</p>
+</div>
+{% endblock %}

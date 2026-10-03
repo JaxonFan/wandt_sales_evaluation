@@ -185,16 +185,16 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
     <tbody>
     {% set ncol = 9 + (1 if is_latest else 0) %}
     {% for g in groups %}
-      <tr class="grp {{ g.css }}"><td colspan="{{ ncol }}">
+      <tr class="grp {{ g.css }}" style="--tc:{{ g.color }}"><td colspan="{{ ncol }}">
         <b>{{ g.team }}</b>
         <span class="mut" style="float:right">earned ${{ '{:,.2f}'.format(g.sub.m_earned) }} · released ${{ '{:,.2f}'.format(g.sub.m_collectable) }} · owed ${{ '{:,.2f}'.format(g.sub.m_owed) }}{% if is_latest %} · pay now ${{ '{:,.2f}'.format(g.sub.pay_total) }}{% endif %}</span>
       </td></tr>
       {% for x in g.rows %}{% set rid = 'r-' ~ x.associate|replace(' ','_') %}
       {% set is_open = (rid[2:] in open_set) %}
-      <tr class="rep {{ g.css }}" onclick="rowtog(event,'{{ rid }}')" title="Click to see the invoices behind this">
+      <tr class="rep {{ g.css }}" style="--tc:{{ g.color }}" onclick="rowtog(event,'{{ rid }}')" title="Click to see the invoices behind this">
         <td><span class="tg {{ 'open' if is_open }}" id="tg-{{ rid }}">▸</span><strong>{{ x.associate }}</strong></td>
         <td class="num">${{ '{:,.2f}'.format(x.contrib_mo) }} <span class="mut">({{ '{:,}'.format(x.n_items) }})</span></td>
-        <td class="num">{% if growth_active %}${{ '{:,.2f}'.format(x.pay_mo) }}{% else %}<span class="mut" title="Starts {{ growth_start.strftime('%b %-d, %Y') }}">—</span>{% endif %}</td>
+        <td class="num">{% if growth_active %}<span title="{{ x.parts|join(' + ') }}">${{ '{:,.2f}'.format(x.pay_mo) }}</span>{% if x.parts|length > 1 %}<div class="mut" style="font-size:10.5px">{{ x.parts|join(' + ') }}</div>{% endif %}{% else %}<span class="mut" title="Starts {{ growth_start.strftime('%b %-d, %Y') }}">—</span>{% endif %}</td>
         <td class="num">{% if growth_active and x.acq_mo > 0 %}${{ '{:,.0f}'.format(x.acq_mo) }}{% else %}<span class="mut" {% if not growth_active %}title="Starts {{ growth_start.strftime('%b %-d, %Y') }}"{% endif %}>—</span>{% endif %}</td>
         <td class="num"><strong>${{ '{:,.2f}'.format(x.m_earned) }}</strong></td>
         <td class="num mut">{{ '%.0f'|format(x.m_collected_pct) }}%</td>
@@ -218,7 +218,7 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
           {% else %}<span class="mut">nothing owed</span>{% endif %}</td>
         {% endif %}
       </tr>
-      <tr class="detail {{ g.css }}" id="{{ rid }}" {{ '' if is_open else 'hidden' }}><td colspan="{{ ncol }}">
+      <tr class="detail {{ g.css }}" style="--tc:{{ g.color }}" id="{{ rid }}" {{ '' if is_open else 'hidden' }}><td colspan="{{ ncol }}">
         <div class="dwrap">
           <div class="dcol">
             <h4>{{ months[mi] }} for {{ x.associate }}</h4>

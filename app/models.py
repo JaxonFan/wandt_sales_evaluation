@@ -24,6 +24,26 @@ class Associate(Base):
     salary_raw = Column(String)                         # raw roster Salary string (e.g. "$23/hour"); for a future ROI view
 
 
+class Team(Base):
+    """An EARNING GROUP for growth pay, managed on Settings → Teams.
+
+    kind 'team'   : members split the growth of the accounts the team owns, equally.
+                    auto=True   -> takes part in the 80%-of-orders ownership rule (each rep in exactly one such team)
+                    fallback=True -> catches accounts no auto team owns outright when its members TOGETHER wrote
+                                     >= 80% of the orders (e.g. "Everyone" = Team 1 + Team 2)
+    kind 'house'  : earns no growth (managers; the house accounts). Exactly one.
+    Individuals are not rows here: an account pinned to a rep by name pays that rep alone."""
+    __tablename__ = "teams"
+    name = Column(String, primary_key=True)
+    kind = Column(String, default="team")              # team | house
+    members = Column(JSON, default=list)               # rep names
+    auto = Column(Boolean, default=True)               # in the 80% rule
+    fallback = Column(Boolean, default=False)          # catches shared accounts when its members together qualify
+    color = Column(String)                             # hex, for the UI
+    sort = Column(Integer, default=0)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class AccountAssignment(Base):
     """Manager's manual account -> team assignment. ALWAYS beats the computed 80%-of-orders rule, which is
     what makes the genuinely shared accounts (no team over 80%) payable at all."""

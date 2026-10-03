@@ -80,7 +80,7 @@
   @media (max-width:820px){body{flex-direction:column} #sidebar{width:auto;height:auto;position:static;flex-direction:row;flex-wrap:wrap;gap:4px;padding:10px} #sidebar .brand,#sidebar .brandsub,#sidebar .navlabel,#sidebar .me{display:none} .wrap,.topbar{padding-left:14px;padding-right:14px}}
 </style></head><body class="{{ 'big' if user and user.role == 'rep' else '' }}">
 {% set titles = {'dash':'Dashboard','pay':'Pay audit','accounts':'Account assignment','under':'Falling behind','quiet':'Quiet accounts','acq':'New accounts',
-                 'stock':'Limited stock','late':'Late payments','melate':'未付款的发票','upload':'Import','settings':'Pay dials','logins':'Logins','account':'My password','guide':'Manager guide','repguide':'What reps see',
+                 'stock':'Limited stock','late':'Late payments','melate':'未付款的发票','upload':'Import','settings':'Pay dials','teams':'Teams','logins':'Logins','account':'My password','guide':'Manager guide','repguide':'What reps see',
                  'me':'我的奖金','mewatch':'落后的客户','mequiet':'静默客户'} %}
 <nav id="sidebar">
   <div class="brand">W&T Scorecard</div>
@@ -98,8 +98,8 @@
       ('Accounts', '/accounts', ['accounts','late','under','quiet','acq','stock'],
          [('Assignment','/accounts','accounts'),('Late payments','/late','late'),('Falling behind','/underperformers','under'),('Quiet accounts','/quiet','quiet'),('New accounts','/acquisitions','acq'),('Limited stock','/constrained','stock')]),
       ('Import', '/upload', ['upload'], []),
-      ('Settings', '/settings', ['settings','logins','account'],
-         [('Pay dials','/settings','settings'),('Logins','/logins','logins'),('My password','/account','account')]),
+      ('Settings', '/settings', ['settings','teams','logins','account'],
+         [('Pay dials','/settings','settings'),('Teams','/teams','teams'),('Logins','/logins','logins'),('My password','/account','account')]),
       ('Guide', '/guide', ['guide','repguide'],
          [('Manager guide','/guide','guide'),('What reps see','/me/guide','repguide')]),
   ] %}
