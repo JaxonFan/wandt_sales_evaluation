@@ -32,6 +32,11 @@
         <td class="num">$<input name="acq_flat_medium" type="number" step="10" value="{{ acq_medium }}" style="width:90px"></td></tr>
       <tr><td>Large (≥ ${{ '{:,}'.format(tier_medium) }}/yr)</td>
         <td class="num">$<input name="acq_flat_large" type="number" step="10" value="{{ acq_large }}" style="width:90px"></td></tr>
+      <tr><th colspan="2">Plus a profit share on the new account (on top of the flat bonus)</th></tr>
+      <tr><td>Share of the account's monthly profit</td>
+        <td class="num"><input name="acq_profit_share" type="number" step="0.005" value="{{ acq_share }}" style="width:90px"> = {{ '%.1f'|format(acq_share*100) }}%</td></tr>
+      <tr><td>For this many months from the first order</td>
+        <td class="num"><input name="acq_share_months" type="number" step="1" value="{{ acq_share_months }}" style="width:90px"> months</td></tr>
     </table>
     <p style="margin-top:12px"><button type="submit">Save</button></p>
   </form>

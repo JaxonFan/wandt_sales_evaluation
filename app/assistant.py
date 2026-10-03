@@ -23,7 +23,9 @@ import pandas as pd
 
 from . import service
 
-MODEL = "claude-opus-5"
+MODEL = "claude-opus-5"                                             # when BACKBONE=claude
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")   # the default backbone (same as the procurement app)
+BACKBONE = os.environ.get("ASSISTANT_BACKBONE", "gemini")           # 'gemini' | 'claude'
 MAX_STEPS = 10
 MAX_TOKENS = 4000
 
@@ -41,7 +43,10 @@ def _secret(name: str) -> str | None:
 
 
 def configured() -> dict:
-    return {"claude": bool(_secret("ANTHROPIC_API_KEY")), "web": bool(_secret("SERPAPI_KEY"))}
+    gem, cla = bool(_secret("GEMINI_API_KEY")), bool(_secret("ANTHROPIC_API_KEY"))
+    backbone = "gemini" if (BACKBONE == "gemini" and gem) else ("claude" if cla else ("gemini" if gem else None))
+    return {"gemini": gem, "claude": cla, "backbone": backbone, "model": (GEMINI_MODEL if backbone == "gemini" else MODEL if backbone else None),
+            "web": bool(_secret("SERPAPI_KEY"))}
 
 
 SYSTEM = """You are the assistant inside the W&T Sales Scorecard, answering the sales manager (or a sales rep) at the computer.
@@ -302,10 +307,18 @@ class Tools:
 
     # ---- chart
     def chart(self, title: str, kind: str, labels: list, series: list, y_label: str | None = None, currency: bool = True):
+        import warnings
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         from matplotlib.ticker import FuncFormatter
+        # Chinese labels need a CJK-capable font: Noto Sans CJK in the image, PingFang/Hiragino on a Mac
+        plt.rcParams["font.family"] = ["Noto Sans CJK SC", "Noto Sans CJK JP", "PingFang SC", "Hiragino Sans GB",
+                                       "Microsoft YaHei", "DejaVu Sans", "sans-serif"]
+        plt.rcParams["axes.unicode_minus"] = False
+        warnings.filterwarnings("ignore", message="Glyph .* missing from font")
+        import logging
+        logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)   # "font not found" is expected while it walks the fallback list
         palette = ["#5A48B6", "#2B6CB0", "#1F9D57", "#C0682B", "#B83280", "#2C7A7B"]
         fig, ax = plt.subplots(figsize=(7.2, 3.6), dpi=140)
         x = list(range(len(labels)))
@@ -366,6 +379,57 @@ class Tools:
             return {"error": f"{type(e).__name__}: {e}"}
 
 
+def _gemini_tools() -> list:
+    """The same tools in Gemini's function-declaration shape (no empty parameter objects)."""
+    decls = []
+    for t in TOOLS:
+        d = {"name": t["name"], "description": t["description"]}
+        if t["input_schema"].get("properties"):
+            d["parameters"] = t["input_schema"]
+        decls.append(d)
+    return [{"functionDeclarations": decls}]
+
+
+def _gemini_post(body: dict) -> dict:
+    import urllib.request
+    key = _secret("GEMINI_API_KEY")
+    req = urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+                                 headers={"Content-Type": "application/json", "x-goog-api-key": key},
+                                 data=json.dumps(body).encode())
+    with urllib.request.urlopen(req, timeout=90) as r:
+        return json.loads(r.read())
+
+
+def _run_gemini(convo: list, tools: "Tools", system: str, used: list) -> str:
+    """The same loop against Gemini. The model's parts go back verbatim (that keeps its thought signatures,
+    which Gemini needs to continue a function-calling turn)."""
+    contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in convo]
+    body = {"systemInstruction": {"parts": [{"text": system}]}, "tools": _gemini_tools(), "contents": contents,
+            "generationConfig": {"maxOutputTokens": 6000, "temperature": 0.2, "thinkingConfig": {"thinkingLevel": "low"}}}
+    for _ in range(MAX_STEPS + 1):
+        resp = _gemini_post(body)
+        cand = (resp.get("candidates") or [{}])[0]
+        parts = (cand.get("content") or {}).get("parts") or []
+        calls = [p["functionCall"] for p in parts if "functionCall" in p]
+        text = "".join(p.get("text", "") for p in parts if "text" in p and not p.get("thought"))
+        if not calls:
+            return text
+        contents.append({"role": "model", "parts": parts})
+        parts_out = []
+        for c in calls:
+            args = dict(c.get("args") or {})
+            out = tools.call(c["name"], args)
+            used.append({"tool": c["name"], "args": args})
+            txt = json.dumps(out, ensure_ascii=False, default=str)
+            res = json.loads(txt) if len(txt) <= 14000 else {"truncated": txt[:14000]}
+            parts_out.append({"functionResponse": {"name": c["name"], "response": {"result": res}}})
+        contents.append({"role": "user", "parts": parts_out})
+    contents.append({"role": "user", "parts": [{"text": "Enough lookups. Answer now from what you already found; say clearly what you could not find."}]})
+    body["toolConfig"] = {"functionCallingConfig": {"mode": "NONE"}}
+    parts = ((_gemini_post(body).get("candidates") or [{}])[0].get("content") or {}).get("parts") or []
+    return "".join(p.get("text", "") for p in parts if "text" in p and not p.get("thought"))
+
+
 def run(messages: list, db, rep_only: str | None = None, client=None) -> dict:
     """One turn: the conversation so far (role/content pairs from the page) -> reply text, any charts, tools used."""
     tools = Tools(db, rep_only=rep_only)
@@ -373,18 +437,26 @@ def run(messages: list, db, rep_only: str | None = None, client=None) -> dict:
              if m.get("role") in ("user", "assistant") and m.get("content")]
     if not convo or convo[-1]["role"] != "user":
         return {"reply": "Ask me something.", "images": [], "used": []}
-    if client is None:
-        key = _secret("ANTHROPIC_API_KEY")
-        if not key:
-            return {"reply": "The assistant isn't connected yet — no ANTHROPIC_API_KEY is configured. "
-                             "Once it is, ask me about pay, accounts, invoices or collections.", "images": [], "used": [],
-                    "unconfigured": True}
-        import anthropic
-        client = anthropic.Anthropic(api_key=key, max_retries=1, timeout=90)
     today = datetime.now().strftime("%Y-%m-%d")
     system = SYSTEM + f"\nToday is {today}." + (f"\nThis session belongs to the sales rep {rep_only}: answer only about their own pay and accounts." if rep_only else
                                                  "\nThis session belongs to the manager.")
     used, reply = [], ""
+    cfg = configured()
+    if client is None and cfg["backbone"] == "gemini":
+        try:
+            reply = _run_gemini(convo, tools, system, used)
+        except Exception as e:
+            return {"reply": f"The assistant hit an error talking to Gemini ({type(e).__name__}). Try again in a moment.",
+                    "images": tools.images, "used": used}
+        return {"reply": reply or "(no answer)", "images": tools.images, "used": used, "model": GEMINI_MODEL}
+    if client is None:
+        key = _secret("ANTHROPIC_API_KEY")
+        if not key:
+            return {"reply": "The assistant isn't connected yet — no GEMINI_API_KEY (or ANTHROPIC_API_KEY) is configured. "
+                             "Once it is, ask me about pay, accounts, invoices or collections.", "images": [], "used": [],
+                    "unconfigured": True}
+        import anthropic
+        client = anthropic.Anthropic(api_key=key, max_retries=1, timeout=90)
     for _ in range(MAX_STEPS + 1):
         msg = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS, system=system, tools=TOOLS, messages=convo,
                                      thinking={"type": "adaptive"}, output_config={"effort": "medium"})

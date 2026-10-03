@@ -67,6 +67,7 @@
         <div class="pc"><div class="t">中</div><div class="f">${{ flat_medium }}</div><div class="d">年化 &lt; ${{ '{:,}'.format(tier_medium) }}</div></div>
         <div class="pc"><div class="t">大</div><div class="f">${{ flat_large }}</div><div class="d">年化 ≥ ${{ '{:,}'.format(tier_medium) }}</div></div>
       </div>
+      <p><b>另外</b>，从第一单起 <b>{{ acq_share_months }} 个月</b>内，这个客户每个月利润的 <b>{{ '%.1f'|format(acq_share*100) }}%</b> 归开发它的销售（在一次性奖之上；和其它奖金一样按收款发放）。</p>
       <ul><li>在 <a href="/acquisitions">New accounts</a> 页确认「rep-won」才发；<b>默认 house（不发）</b>，电话没法查证，由销售申报、你判断。</li>
         <li>新客户没有去年基数，它的利润同时自动计入小组增长。</li></ul>
     </section>
@@ -196,6 +197,7 @@
         <div class="pc"><div class="t">Medium</div><div class="f">${{ flat_medium }}</div><div class="d">&lt; ${{ '{:,}'.format(tier_medium) }}/yr</div></div>
         <div class="pc"><div class="t">Large</div><div class="f">${{ flat_large }}</div><div class="d">≥ ${{ '{:,}'.format(tier_medium) }}/yr</div></div>
       </div>
+      <p><b>Plus</b>, for <b>{{ acq_share_months }} months</b> from the first order, <b>{{ '%.1f'|format(acq_share*100) }}%</b> of the account's monthly profit goes to the rep who won it — on top of the flat bonus, paid on collection like everything else.</p>
       <ul><li>Paid only once you mark the account <b>rep-won</b> on <a href="/acquisitions">New accounts</a>. The <b>default is house</b> (no bonus) — a phone call can't be verified, so the rep claims it and you judge.</li>
         <li>A new account has no year-ago, so its profit also feeds the team's growth automatically.</li></ul>
     </section>

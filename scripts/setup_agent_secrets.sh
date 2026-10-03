@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # One-time: store the assistant's API keys in Secrets Manager and let the ECS exec role read them.
 # Run it yourself (it touches IAM + secrets):   ! scripts/setup_agent_secrets.sh
-# It prompts for the two keys (SerpAPI is optional — leave blank to skip web search).
+# It prompts for the keys; leave any blank to skip. Gemini is the default backbone.
 set -euo pipefail
 REGION=us-east-1; ROLE=wandt-ecs-exec
-read -rsp "ANTHROPIC_API_KEY: " ANTHROPIC; echo
-read -rsp "SERPAPI_KEY (optional): " SERP; echo
+read -rsp "GEMINI_API_KEY (the assistant's backbone): " GEMINI; echo
+read -rsp "ANTHROPIC_API_KEY (optional, only if ASSISTANT_BACKBONE=claude): " ANTHROPIC; echo
+read -rsp "SERPAPI_KEY (optional, web search): " SERP; echo
 put() { local name=$1 val=$2
   if aws secretsmanager describe-secret --secret-id "$name" --region $REGION >/dev/null 2>&1; then
     aws secretsmanager put-secret-value --secret-id "$name" --secret-string "$val" --region $REGION >/dev/null && echo "updated $name"
   else
     aws secretsmanager create-secret --name "$name" --secret-string "$val" --region $REGION >/dev/null && echo "created $name"
   fi; }
+[ -n "$GEMINI" ] && put wandt/GEMINI_API_KEY "$GEMINI"
 [ -n "$ANTHROPIC" ] && put wandt/ANTHROPIC_API_KEY "$ANTHROPIC"
 [ -n "$SERP" ] && put wandt/SERPAPI_KEY "$SERP"
 # the exec role's inline policy lists secret ARNs explicitly — rewrite it with every wandt/* secret

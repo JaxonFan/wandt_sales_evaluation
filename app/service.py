@@ -995,7 +995,7 @@ def late_invoices(db, late_after_days=None):
                              rep=g["rep"].mode().iat[0] if len(g["rep"].mode()) else None,
                              n=int(len(g)), amount=float(g["amount"].sum()),
                              n_late=int(len(late)), late_amount=float(late["amount"].sum()),
-                             oldest=int(g["age"].max())))
+                             oldest=int(g["age"].max()), oldest_date=g["date"].min(), newest_date=g["date"].max()))
     accounts.sort(key=lambda a: -a["late_amount"])
     invoices = [dict(sop_number=str(r.sop_number), date=r.date, amount=float(r.amount), account=r.account,
                      customer=names.get(r.account, r.account), rep=r.rep, age=int(r.age), late=bool(r.late))
@@ -1296,8 +1296,9 @@ def contribution_by_rep_month(db, months, team, item_rate):
 
 
 def acquisition_by_rep_month(db, months, team, s):
-    """Flat landing bonus by new-account size, paid ONCE at the ~quarter mark (first-sale month + 2),
-    only for accounts the manager confirmed rep-won (AcquisitionReview). Size = first-8-weeks revenue,
+    """New-account pay for rep-won accounts (AcquisitionReview): a flat landing bonus by size, paid ONCE at the
+    ~quarter mark (first-sale month + 2), PLUS acq_profit_share of the account's profit every month for
+    acq_share_months from the first order. Size = first-8-weeks revenue,
     annualized, into the same small/medium/large tiers as the scorecard. Returns (pay_map, review_rows).
     Fast (~0.2s) and NOT memoized on purpose: reads AcquisitionReview live so a mark shows immediately, and
     never pollutes the engine cache / evicts the (expensive) growth result."""
@@ -1320,7 +1321,34 @@ def acquisition_by_rep_month(db, months, team, s):
     teamrev = early[early["associate"].isin(team)].groupby(["account", "associate"])["extended_price"].sum()
     rep_by = (teamrev.reset_index().sort_values("extended_price").groupby("account").tail(1)
               .set_index("account")["associate"]) if len(teamrev) else pd.Series(dtype=object)
+    # the 12-month PROFIT SHARE: every month for acq_share_months after the first order, the winning rep earns
+    # acq_profit_share x that month's profit on the account (on top of the flat bonus; pays on collection)
+    share_rate = float(s.get("acq_profit_share", 0.0) or 0.0)
+    share_months = int(s.get("acq_share_months", 12) or 12)
+    # candidates for the share reach further back than the flat (an account landed 11 months ago still pays)
+    share_lo = pd.Period(months[0], "M") - share_months
+    share_cand = first[(first.dt.to_period("M") >= share_lo) & (first.dt.to_period("M") <= hi)]
+    sub_share = df[df["account"].isin(set(share_cand.index))]
+    prof_by = sub_share.assign(ym=sub_share["document_date"].dt.to_period("M").astype(str)).groupby(["account", "ym"])["line_profit"].sum()
+    early_share = sub_share[sub_share["document_date"] <= sub_share["account"].map(first) + pd.Timedelta(days=56)]
+    teamrev_share = early_share[early_share["associate"].isin(team)].groupby(["account", "associate"])["extended_price"].sum()
+    rep_by_share = (teamrev_share.reset_index().sort_values("extended_price").groupby("account").tail(1)
+                    .set_index("account")["associate"]) if len(teamrev_share) else pd.Series(dtype=object)
     pay, review = {}, []
+    share_paid = {}
+    if share_rate > 0:
+        for acct, fs in share_cand.items():
+            rep = rep_by_share.get(acct)
+            if not rep or acct not in self_acq:
+                continue
+            start = fs.to_period("M")
+            for m in months:
+                per = pd.Period(m, "M")
+                if start <= per < start + share_months:
+                    amt = share_rate * float(prof_by.get((acct, m), 0.0))
+                    if amt > 0:
+                        pay[(rep, m)] = pay.get((rep, m), 0.0) + amt
+                        share_paid[acct] = share_paid.get(acct, 0.0) + amt
     for acct, fs in cand.items():
         rep = rep_by.get(acct)
         rev8 = float(rev8_by.get(acct, 0.0))
@@ -1333,7 +1361,8 @@ def acquisition_by_rep_month(db, months, team, s):
             pay[(rep, pay_month)] = pay.get((rep, pay_month), 0.0) + flat
         review.append(dict(account=acct, customer=names.get(acct, acct), rep=rep or "—",
                            first_order=str(fs.date()), rev8=rev8, annualized=annual, tier=tier, flat=flat,
-                           pay_month=pay_month,
+                           pay_month=pay_month, share_so_far=share_paid.get(acct, 0.0),
+                           share_until=str(fs.to_period("M") + share_months - 1),
                            status=("rep-won" if flags.get(acct) is True
                                    else ("house" if flags.get(acct) is False else "unreviewed"))))
     review.sort(key=lambda r: -r["annualized"])

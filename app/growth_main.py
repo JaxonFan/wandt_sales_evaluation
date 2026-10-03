@@ -708,8 +708,8 @@ def rep_late(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
     by_acct = {}
     for i in mine:
         a = by_acct.setdefault(i["account"], dict(account=i["account"], customer=i["customer"], n=0, amount=0.0,
-                                                   n_late=0, late_amount=0.0, oldest=0, team=None, rep=user.associate_name))
-        a["n"] += 1; a["amount"] += i["amount"]; a["oldest"] = max(a["oldest"], i["age"])
+                                                   n_late=0, late_amount=0.0, oldest=0, oldest_date=i["date"], team=None, rep=user.associate_name))
+        a["n"] += 1; a["amount"] += i["amount"]; a["oldest"] = max(a["oldest"], i["age"]); a["oldest_date"] = min(a["oldest_date"], i["date"])
         if i["late"]:
             a["n_late"] += 1; a["late_amount"] += i["amount"]
     accounts = sorted(by_acct.values(), key=lambda a: -a["late_amount"])
@@ -764,6 +764,7 @@ def settings_page(request: Request, saved: int = 0, db: Session = Depends(get_db
         "base_rate": float(s.get("cumulative_rate", 0.05)),
         "accel_rate": float(s.get("growth_accel_rate", 0.075)), "default_target": default_t,
         "late_after": int(s.get("late_after_days", 30)),
+        "acq_share": float(s.get("acq_profit_share", 0.01)), "acq_share_months": int(s.get("acq_share_months", 12)),
         "acq_small": int(float(s["acq_flat_small"])), "acq_medium": int(float(s["acq_flat_medium"])),
         "acq_large": int(float(s["acq_flat_large"])),
         "tier_small": int(float(s["acq_tier_small_max"])), "tier_medium": int(float(s["acq_tier_medium_max"]))})
@@ -780,10 +781,10 @@ async def settings_save(request: Request, db: Session = Depends(get_db)):
         row = db.get(M.Setting, key) or M.Setting(key=key)
         row.value = str(val); db.merge(row)
 
-    for key in ("cumulative_rate", "growth_accel_rate", "growth_target_default"):
+    for key in ("cumulative_rate", "growth_accel_rate", "growth_target_default", "acq_profit_share"):
         if form.get(key, "").strip():
             put(key, float(form[key]))
-    for key in ("acq_flat_small", "acq_flat_medium", "acq_flat_large", "late_after_days"):
+    for key in ("acq_flat_small", "acq_flat_medium", "acq_flat_large", "late_after_days", "acq_share_months"):
         if form.get(key, "").strip():
             put(key, int(float(form[key])))
     for name in service.earners(db):
@@ -1042,6 +1043,7 @@ def guide(request: Request, lang: str = "en", db: Session = Depends(get_db)):
         "default_target": float(s.get("growth_target_default", 0.06)), "item_rate": float(s["item_rate"]),
         "flat_small": int(float(s["acq_flat_small"])), "flat_medium": int(float(s["acq_flat_medium"])),
         "flat_large": int(float(s["acq_flat_large"])),
+        "acq_share": float(s.get("acq_profit_share", 0.01)), "acq_share_months": int(s.get("acq_share_months", 12)),
         "tier_small": int(float(s["acq_tier_small_max"])), "tier_medium": int(float(s["acq_tier_medium_max"]))})
 
 
@@ -1060,4 +1062,5 @@ def rep_guide(request: Request, lang: str = "zh", db: Session = Depends(get_db))
         "rate": float(s.get("cumulative_rate", 0.05)), "accel": float(s.get("growth_accel_rate", 0.075)),
         "item_rate": float(s["item_rate"]),
         "flat_small": int(float(s["acq_flat_small"])), "flat_medium": int(float(s["acq_flat_medium"])),
-        "flat_large": int(float(s["acq_flat_large"]))})
+        "flat_large": int(float(s["acq_flat_large"])),
+        "acq_share": float(s.get("acq_profit_share", 0.01)), "acq_share_months": int(s.get("acq_share_months", 12))})

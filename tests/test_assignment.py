@@ -72,3 +72,20 @@ def test_audit_months_newest_first_and_invoices_by_date(db):
     for m in d["months"]:
         dates = [i["date"] for i in m["invoices"]]
         assert dates == sorted(dates, reverse=True)
+
+
+def test_new_account_profit_share_pays_the_winner_monthly():
+    """A rep-won account pays acq_profit_share of its monthly profit to the rep who won it, for acq_share_months."""
+    from webfix import build, teardown
+    client, Session = build(growth_live=True)
+    s = Session()
+    try:
+        s.add(M.AcquisitionReview(account="ACCT3", rep_won=True)); s.commit()
+        service._ENGINE_CACHE.clear()
+        months = {m["month"]: m for m in service.pay_ledger(s)["months"]["An Cao"]}
+        # ACCT3 first ordered 2026-09-26 (2 lines x $30 profit = $60) -> 1% = $0.60 in September, nothing in August
+        assert months["2026-09"]["acquisition"] == pytest.approx(0.60, abs=0.01)
+        assert months["2026-08"]["acquisition"] == pytest.approx(0.0)
+        assert months["2026-09"]["earned"] == pytest.approx(months["2026-09"]["contribution"] + months["2026-09"]["growth"] + 0.60, abs=0.01)
+    finally:
+        s.close(); teardown()

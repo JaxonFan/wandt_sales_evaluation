@@ -63,6 +63,7 @@
         <div class="pc"><div class="t">中客户</div><div class="f">${{ flat_medium }}</div></div>
         <div class="pc"><div class="t">大客户</div><div class="f">${{ flat_large }}</div></div>
       </div>
+      <p><b>另外</b>，从第一单起 <b>{{ acq_share_months }} 个月</b>内，这个客户每个月利润的 <b>{{ '%.1f'|format(acq_share*100) }}%</b> 也归你（按收款发放）。</p>
       <ul><li>默认不算开发（电话没法查证），要主动跟经理申报，由经理判断。</li>
         <li>之后这个客户的利润还会继续算进小组增长奖。</li></ul>
     </section>
@@ -170,6 +171,7 @@
         <div class="pc"><div class="t">Medium</div><div class="f">${{ flat_medium }}</div></div>
         <div class="pc"><div class="t">Large</div><div class="f">${{ flat_large }}</div></div>
       </div>
+      <p><b>Plus</b>, for <b>{{ acq_share_months }} months</b> from the first order, <b>{{ '%.1f'|format(acq_share*100) }}%</b> of the account's monthly profit is yours too (paid on collection).</p>
       <ul><li>The default is "house" (a phone call can't be verified) — tell the manager when you've won one, and they decide.</li>
         <li>Its profit keeps counting toward the team's growth too.</li></ul>
     </section>

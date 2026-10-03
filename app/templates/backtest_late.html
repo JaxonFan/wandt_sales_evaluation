@@ -31,17 +31,18 @@
     {% for t in teams %}<a href="/late?team={{ t|urlencode }}" class="{{ 'on' if team == t }}">{{ t }}</a>{% endfor %}
   </div>{% endif %}
   <table>
-    <thead><tr><th>{{ '客户' if zh else 'Customer' }}</th>{% if user.role != 'rep' %}<th>Team</th><th>Rep</th>{% endif %}
-      <th class="num">{{ '未付' if zh else 'Unpaid' }}</th><th class="num">{{ '其中逾期' if zh else 'of which late' }}</th>
-      <th class="num">{{ '最久' if zh else 'Oldest' }}</th></tr></thead>
-    <tbody>
+    <thead><tr><th class="sort" data-k="customer" data-t="s">{{ '客户' if zh else 'Customer' }}</th>{% if user.role != 'rep' %}<th class="sort" data-k="team" data-t="s">Team</th><th class="sort" data-k="rep" data-t="s">Rep</th>{% endif %}
+      <th class="num sort" data-k="amount" data-t="n">{{ '未付' if zh else 'Unpaid' }}</th><th class="num sort" data-k="late" data-t="n">{{ '其中逾期' if zh else 'of which late' }}</th>
+      <th class="num sort" data-k="date" data-t="n">{{ '最早的发票' if zh else 'Oldest invoice' }}</th></tr></thead>
+    <tbody id="latebody">
     {% for a in accounts %}{% set rid = 'a' ~ loop.index %}
-      <tr class="acct" onclick="tog('{{ rid }}')">
+      <tr class="acct" onclick="tog('{{ rid }}')" data-customer="{{ a.customer|lower }}" data-team="{{ (a.team or 'shared')|lower }}" data-rep="{{ (a.rep or '')|lower }}"
+          data-amount="{{ a.amount }}" data-late="{{ a.late_amount }}" data-date="{{ a.oldest_date.strftime('%Y%m%d') }}" data-rid="{{ rid }}">
         <td><b>{{ a.customer }}</b><div class="mut" style="font-size:11px">{{ a.account }}</div></td>
         {% if user.role != 'rep' %}<td class="mut">{{ a.team or 'shared' }}</td><td class="mut">{{ a.rep or '—' }}</td>{% endif %}
         <td class="num">${{ '{:,.0f}'.format(a.amount) }} <span class="mut">({{ a.n }})</span></td>
         <td class="num {{ 'neg' if a.late_amount > 0 }}"><b>${{ '{:,.0f}'.format(a.late_amount) }}</b> <span class="mut">({{ a.n_late }})</span></td>
-        <td class="num"><span class="age {{ 'late' if a.oldest > late_after }}">{{ a.oldest }}d</span></td>
+        <td class="num">{{ a.oldest_date.strftime('%b %-d, %Y') }} <span class="age {{ 'late' if a.oldest > late_after }}">{{ a.oldest }}d</span></td>
       </tr>
       <tr class="inv" id="{{ rid }}" hidden><td colspan="{{ 6 if user.role != 'rep' else 4 }}">
         <table class="mini">
@@ -65,5 +66,15 @@
   </table>
   <p class="hint" style="margin-top:8px">{{ '点客户看每张发票。' if zh else 'Click a customer for its invoices; click an invoice for its lines.' }}</p>
 </div>
-<script>function tog(id){var e=document.getElementById(id);e.hidden=!e.hidden;}</script>
+<style>th.sort{cursor:pointer;user-select:none} th.sort:hover{color:var(--ink)} th.sort.asc::after{content:' ▲';font-size:9px} th.sort.desc::after{content:' ▼';font-size:9px}</style>
+<script>
+function tog(id){var e=document.getElementById(id);e.hidden=!e.hidden;}
+// click a column header to sort the accounts (each account row drags its invoice row along)
+document.querySelectorAll('th.sort').forEach(function(th){th.addEventListener('click',function(){
+  var k=th.dataset.k,num=th.dataset.t==='n',dir=th.classList.contains('desc')?'asc':'desc';
+  document.querySelectorAll('th.sort').forEach(function(x){x.classList.remove('asc','desc');});th.classList.add(dir);
+  var body=document.getElementById('latebody'),rows=[].slice.call(body.querySelectorAll('tr.acct'));
+  rows.sort(function(a,b){var x=a.dataset[k],y=b.dataset[k];if(num){x=parseFloat(x)||0;y=parseFloat(y)||0;}return (x<y?-1:x>y?1:0)*(dir==='asc'?1:-1);});
+  rows.forEach(function(r){body.appendChild(r);body.appendChild(document.getElementById(r.dataset.rid));});});});
+</script>
 {% endblock %}

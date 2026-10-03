@@ -1,5 +1,7 @@
 FROM public.ecr.aws/docker/library/python:3.11-slim
 WORKDIR /srv
+# a CJK font for the assistant's charts (Chinese customer names and labels)
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/

@@ -55,6 +55,8 @@ DEFAULTS = {
     "acq_flat_large": 200,         # flat $ for a large new account
     "acq_revenue_pct": 0.01,       # (deprecated — acquisition is now a size-tiered flat amount, not a % of revenue)
     "acq_ramp_periods": 3,         # an account counts as "new" for ~1 quarter (3 periods), then graduates
+    "acq_profit_share": 0.01,      # ON TOP of the flat bonus: the winning rep earns this share of a rep-won account's PROFIT each month...
+    "acq_share_months": 12,        # ...for this many months from the account's first order (pays on collection like everything else)
 
     # --- Cumulative profit-growth (the growth-model service) ---
     "cumulative_rate": 0.05,       # BASE rate: $ earned per $ of NET cumulative YoY PROFIT growth up to the rep's target (rep-level netting; progressive true-up on the rep's peak, no clawback)
