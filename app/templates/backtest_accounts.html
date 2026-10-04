@@ -62,7 +62,7 @@
         <td>{{ r.customer }}<div class="mut" style="font-size:11px">{{ r.account }}</div></td>
         <td class="num mut">{{ r.orders }}</td>
         {% for t in teams %}
-        <td class="num {{ '' if r.shares[t] >= 0.8 else 'mut' }}">{% if r.shares[t] > 0 %}{{ '%.0f'|format(r.shares[t]*100) }}%{% else %}—{% endif %}</td>
+        <td class="num {{ '' if r.shares.get(t, 0) >= 0.8 else 'mut' }}">{% if r.shares.get(t, 0) > 0 %}{{ '%.0f'|format(r.shares.get(t, 0)*100) }}%{% else %}—{% endif %}</td>
         {% endfor %}
         <td>{% if r.house_by_policy %}<span class="badge">house account</span>
             {% elif r.auto %}{{ r.auto }}

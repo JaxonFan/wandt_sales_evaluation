@@ -624,7 +624,9 @@ def ownership_by_month(db, months):
                     owners[a] = pinned                              # a manual decision in force
                     continue
                 auto = rule.get(a, {}).get("auto")
-                owners[a] = auto if auto else prev.get(a)           # hysteresis: keep the last owner until another qualifies
+                # hysteresis: keep the last owner until another qualifies — but only while the account is still
+                # ordering (in the trailing window); a year of silence ends the ownership
+                owners[a] = auto if auto else (prev.get(a) if a in rule else None)
             out[m] = owners
             prev = owners
         return {m: out[m] for m in months}
@@ -651,8 +653,11 @@ def account_assignments(db):
         latest = str(hi.to_period("M"))
         today = ownership_by_month(db, [latest]).get(latest, {})
         rows = []
-        for account in sorted(set(rule) | set(pins) | set(today)):
-            d = rule.get(account, dict(orders=0, by_team={}, shares={}, auto=None, profit=0.0, revenue=0.0))
+        all_teams = auto_teams(db) + [HOUSE]
+        blank = dict(orders=0, by_team={t: 0 for t in all_teams}, shares={t: 0.0 for t in all_teams},
+                     auto=None, profit=0.0, revenue=0.0)
+        for account in sorted(set(rule) | set(pins) | {a for a, o in today.items() if o}):
+            d = rule.get(account, blank)
             manual, since = pins.get(account, (None, None))
             team = manual or today.get(account) or d["auto"]
             owner_kind = ("rep" if team in set(roster) else "house" if team == HOUSE else "team" if team else None)
