@@ -51,7 +51,8 @@ def configured() -> dict:
 
 SYSTEM = """You are the assistant inside the W&T Sales Scorecard, answering the sales manager (or a sales rep) at the computer.
 
-What the scorecard is: a monthly incentive. Per rep per month: Contribution = line items x rate (individual);
+What the scorecard is: a monthly incentive. Every invoice LINE is on file (item code, description, qty, price, cost, profit), so
+product questions — what sells, what an account buys, a SKU's trend — are answered with the product tools. Per rep per month: Contribution = line items x rate (individual);
 Growth share = the TEAM's cumulative year-over-year profit growth pay on the accounts it owns, split equally (from Oct 2026);
 New accounts = flat landing bonus (individual). Pay follows COLLECTION month by month: a month's earnings are RELEASED in
 proportion to how much of THAT month's invoices the customers have paid; OWED = released - paid; unpaid money never expires.
@@ -97,6 +98,14 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"min_days": {"type": "integer"}, "team": {"type": "string"}, "n": {"type": "integer"}}}},
     {"name": "new_accounts", "description": "Accounts that first ordered recently: first order, size tier, rep, reviewed as rep-won / house / unreviewed, landing bonus.",
      "input_schema": {"type": "object", "properties": {}}},
+    {"name": "find_products", "description": "Match a product by item code or description (English/Chinese, partial) to item codes. Call before asking about a product.",
+     "input_schema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}},
+    {"name": "product_sales", "description": "One product's sales by month: quantity, revenue, cost, profit, margin, invoices, and who sells it / who buys it. Optional rep or account filter, months back (default 12).",
+     "input_schema": {"type": "object", "properties": {"item": {"type": "string"}, "months": {"type": "integer"}, "rep": {"type": "string"}, "account": {"type": "string"}}, "required": ["item"]}},
+    {"name": "top_products", "description": "Best (or worst) selling products over the last N months, ranked by revenue, profit, or qty; optional rep or account filter. Also answers 'what does account X buy' and 'what does rep Y sell most'.",
+     "input_schema": {"type": "object", "properties": {"months": {"type": "integer"}, "n": {"type": "integer"}, "by": {"type": "string", "description": "revenue | profit | qty"}, "rep": {"type": "string"}, "account": {"type": "string"}, "bottom": {"type": "boolean"}}}},
+    {"name": "category_sales", "description": "ALL products whose description or code matches a term (e.g. 'shrimp', 'oyster', 'clam', 'tilapia'), added up: qty, revenue, profit by month, who sells it, who buys it, and the top SKUs inside the category. Use this for any question about a kind of product rather than one SKU. Optional rep/account filter, months back (default 12).",
+     "input_schema": {"type": "object", "properties": {"q": {"type": "string"}, "months": {"type": "integer"}, "rep": {"type": "string"}, "account": {"type": "string"}}, "required": ["q"]}},
     {"name": "settings", "description": "The pay dials: item rate, growth rates and targets, landing bonuses, late-after days, cycle dates.",
      "input_schema": {"type": "object", "properties": {}}},
     {"name": "chart", "description": "Draw a chart from data you already have and show it to the user. kind: 'bar', 'line', or 'barh'. series: list of {name, values}; labels: x-axis labels (same length as values).",
@@ -298,6 +307,86 @@ class Tools:
         if self.rep_only:
             review = [r for r in review if r["rep"] == self.rep_only]
         return {"count": len(review), "accounts": [{k: (_money(v) if isinstance(v, float) else v) for k, v in r.items()} for r in review]}
+
+    # ---- products (every invoice line carries item, qty, price, cost, profit)
+    def _lines(self, months: int | None = None, rep: str | None = None, account: str | None = None):
+        df = service.active_lines(self.db)
+        if self.rep_only:
+            rep = self.rep_only
+        if months:
+            df = df[df["document_date"] > df["document_date"].max() - pd.DateOffset(months=int(months))]
+        if rep:
+            df = df[df["associate"] == rep]
+        if account:
+            df = df[df["account"] == account]
+        return df
+
+    def find_products(self, q: str):
+        descs = service.item_descriptions(self.db)                 # {item_number: decoded description}
+        ql = q.strip().lower()
+        hits = [(i, d) for i, d in descs.items() if ql in str(d).lower() or ql in str(i).lower()]
+        return {"matches": [{"item": i, "description": d} for i, d in hits[:20]], "count": len(hits)}
+
+    def product_sales(self, item: str, months: int | None = 12, rep: str | None = None, account: str | None = None):
+        d = self._lines(months, rep, account)
+        d = d[d["item_number"] == item]
+        if not len(d):
+            return {"error": f"no sales of {item} in that window; use find_products to check the code"}
+        desc = service.item_descriptions(self.db).get(item, item)
+        d = d.assign(ym=d["document_date"].dt.to_period("M").astype(str))
+        by_m = d.groupby("ym").agg(qty=("qty", "sum"), revenue=("extended_price", "sum"), cost=("extended_cost", "sum"),
+                                   profit=("line_profit", "sum"), invoices=("sop_number", "nunique"))
+        names = service.customer_names(self.db)
+        sellers = d.groupby("associate")["extended_price"].sum().sort_values(ascending=False)
+        buyers = d.groupby("account")["extended_price"].sum().sort_values(ascending=False).head(8)
+        rev = float(d["extended_price"].sum()); prof = float(d["line_profit"].sum())
+        return {"item": item, "description": desc, "window_months": months, "qty": _money(d["qty"].sum()), "revenue": _money(rev),
+                "profit": _money(prof), "margin_pct": round(100 * prof / rev, 1) if rev else None, "invoices": int(d["sop_number"].nunique()),
+                "by_month": {m: {"qty": _money(r.qty), "revenue": _money(r.revenue), "profit": _money(r.profit), "invoices": int(r.invoices)} for m, r in by_m.iterrows()},
+                "sellers_revenue": {k: _money(v) for k, v in sellers.items()},
+                "top_buyers_revenue": {names.get(k, k): _money(v) for k, v in buyers.items()}}
+
+    def category_sales(self, q: str, months: int | None = 12, rep: str | None = None, account: str | None = None):
+        descs = service.item_descriptions(self.db)
+        ql = q.strip().lower()
+        items = {i for i, d in descs.items() if ql in str(d).lower() or ql in str(i).lower()}
+        if not items:
+            return {"error": f"no product matches '{q}'"}
+        d = self._lines(months, rep, account)
+        d = d[d["item_number"].isin(items)]
+        if not len(d):
+            return {"q": q, "matching_skus": len(items), "note": "no sales of these products in that window"}
+        d = d.assign(ym=d["document_date"].dt.to_period("M").astype(str))
+        by_m = d.groupby("ym").agg(qty=("qty", "sum"), revenue=("extended_price", "sum"), profit=("line_profit", "sum"), invoices=("sop_number", "nunique"))
+        names = service.customer_names(self.db)
+        sellers = d.groupby("associate")["extended_price"].sum().sort_values(ascending=False)
+        buyers = d.groupby("account")["extended_price"].sum().sort_values(ascending=False).head(8)
+        skus = d.groupby("item_number")["extended_price"].sum().sort_values(ascending=False).head(8)
+        rev = float(d["extended_price"].sum()); prof = float(d["line_profit"].sum())
+        return {"q": q, "matching_skus": len(items), "skus_sold": int(d["item_number"].nunique()), "window_months": months,
+                "rep": self.rep_only or rep, "account": account,
+                "qty": _money(d["qty"].sum()), "revenue": _money(rev), "profit": _money(prof),
+                "margin_pct": round(100 * prof / rev, 1) if rev else None, "invoices": int(d["sop_number"].nunique()),
+                "by_month": {m: {"qty": _money(r.qty), "revenue": _money(r.revenue), "profit": _money(r.profit), "invoices": int(r.invoices)} for m, r in by_m.iterrows()},
+                "sellers_revenue": {k: _money(v) for k, v in sellers.items()},
+                "top_buyers_revenue": {names.get(k, k): _money(v) for k, v in buyers.items()},
+                "top_skus_revenue": {f"{i} {descs.get(i, '')}": _money(v) for i, v in skus.items()}}
+
+    def top_products(self, months: int | None = 3, n: int | None = 15, by: str | None = "revenue", rep: str | None = None,
+                     account: str | None = None, bottom: bool = False):
+        d = self._lines(months, rep, account)
+        if not len(d):
+            return {"error": "no sales in that window"}
+        col = {"revenue": "extended_price", "profit": "line_profit", "qty": "qty"}.get((by or "revenue").lower(), "extended_price")
+        g = d.groupby("item_number").agg(qty=("qty", "sum"), revenue=("extended_price", "sum"), profit=("line_profit", "sum"),
+                                         invoices=("sop_number", "nunique"), accounts=("account", "nunique"))
+        g = g.sort_values(col.replace("extended_price", "revenue").replace("line_profit", "profit"), ascending=bool(bottom))
+        descs = service.item_descriptions(self.db)
+        n = max(1, min(n or 15, 50))
+        return {"window_months": months, "ranked_by": by, "rep": self.rep_only or rep, "account": account, "distinct_products": int(len(g)),
+                "products": [{"item": i, "description": descs.get(i, i), "qty": _money(r.qty), "revenue": _money(r.revenue),
+                              "profit": _money(r.profit), "margin_pct": round(100 * r.profit / r.revenue, 1) if r.revenue else None,
+                              "invoices": int(r.invoices), "accounts": int(r.accounts)} for i, r in g.head(n).iterrows()]}
 
     def settings(self):
         s = service.get_settings(self.db)

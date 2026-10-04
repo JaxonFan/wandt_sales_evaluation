@@ -125,3 +125,24 @@ def test_moving_a_person_is_dated(db):
     assert 0 < sep["shares"]["Team 1"] < 0.8 and sep["auto"] == "Team 2"
     hist = service.roster_history(db)
     assert [h[0] for h in hist["Team 1"]] == ["2000-01", "2026-09"]
+
+
+def test_assistant_product_tools_aggregate_lines():
+    """The product tools see every invoice line: a SKU, a category (search term), and the ranking agree."""
+    from webfix import build, teardown
+    from app import assistant as AS
+    _, Session = build()
+    s = Session()
+    try:
+        T = AS.Tools(s)
+        top = T.call("top_products", {"months": 24, "n": 5, "by": "revenue"})
+        assert top["distinct_products"] >= 1 and top["products"][0]["revenue"] > 0
+        item = top["products"][0]["item"]
+        one = T.call("product_sales", {"item": item, "months": 24})
+        assert one["revenue"] == pytest.approx(top["products"][0]["revenue"])
+        cat = T.call("category_sales", {"q": "IT", "months": 24})          # every fixture item is IT0..ITn
+        assert cat["revenue"] == pytest.approx(sum(p["revenue"] for p in T.call("top_products", {"months": 24, "n": 50})["products"]))
+        rep = AS.Tools(s, rep_only="An Cao").call("category_sales", {"q": "IT", "months": 24})
+        assert rep["rep"] == "An Cao" and set(rep["sellers_revenue"]) == {"An Cao"}
+    finally:
+        s.close(); teardown()
