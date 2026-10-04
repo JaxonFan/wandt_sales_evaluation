@@ -65,6 +65,9 @@ def build(growth_live=False, october=False):
     inv("Garmi Mei", "GM", "ACCT2", "2026-09-11", 10)
     if october:
         inv("An Cao", "AN", "ACCT1", "2026-10-06", 3)
+    # a DORMANT account: ordered in 2024 only. Ownership must expire, pages must not choke on it.
+    inv("An Cao", "AN", "GHOST", "2024-11-05", 2)
+    inv("An Cao", "AN", "GHOST", "2024-12-05", 2)
     for sop in paid:
         db.add(M.CollectedInvoice(sop_number=sop, reported_at=dt.datetime(2026, 10, 1)))
     db.commit()

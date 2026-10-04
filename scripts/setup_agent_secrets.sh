@@ -16,8 +16,14 @@ put() { local name=$1 val=$2
 [ -n "$GEMINI" ] && put wandt/GEMINI_API_KEY "$GEMINI"
 [ -n "$ANTHROPIC" ] && put wandt/ANTHROPIC_API_KEY "$ANTHROPIC"
 [ -n "$SERP" ] && put wandt/SERPAPI_KEY "$SERP"
-# the exec role's inline policy lists secret ARNs explicitly — rewrite it with every wandt/* secret
-ARNS=$(aws secretsmanager list-secrets --region $REGION --query 'SecretList[?starts_with(Name, `wandt/`)].ARN' --output json)
+# the exec role's inline policy lists secret ARNs explicitly — rewrite it with every wandt/* secret.
+# list-secrets is eventually consistent: wait until a just-created secret shows up before writing the policy.
+EXPECT=$(aws secretsmanager list-secrets --region $REGION --query 'length(SecretList[?starts_with(Name, `wandt/`)])' --output text)
+for i in 1 2 3 4 5 6; do
+  ARNS=$(aws secretsmanager list-secrets --region $REGION --query 'SecretList[?starts_with(Name, `wandt/`)].ARN' --output json)
+  if { [ -z "$GEMINI" ] || echo "$ARNS" | grep -q GEMINI_API_KEY; } && { [ -z "$ANTHROPIC" ] || echo "$ARNS" | grep -q ANTHROPIC_API_KEY; } && { [ -z "$SERP" ] || echo "$ARNS" | grep -q SERPAPI_KEY; }; then break; fi
+  echo "  waiting for the new secret to be listed…"; sleep 5
+done
 python3 - "$ARNS" <<'PY' > /tmp/wandt-read-secrets.json
 import json,sys; arns=json.loads(sys.argv[1])
 print(json.dumps({"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["secretsmanager:GetSecretValue"],"Resource":arns}]}))

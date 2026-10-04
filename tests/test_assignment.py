@@ -97,17 +97,10 @@ def test_new_account_profit_share_pays_the_winner_monthly():
 
 def test_silent_account_loses_ownership_and_page_still_renders():
     """Regression: an account whose last order is >12 months old carried an owner forever and 500'd /accounts."""
-    import datetime as dt
     from webfix import build, login, teardown
-    client, Session = build()
+    client, Session = build()      # the fixture includes GHOST, which last ordered in 2024
     s = Session()
     try:
-        for i in range(3):   # ordered in 2024 only
-            s.add(M.SalesLine(sop_type="Invoice", sop_number=f"OLD{i}", item_number="X", item_description="x", qty=1.0,
-                              unit_price=100.0, extended_price=100.0, unit_cost=70.0, extended_cost=70.0, line_profit=30.0,
-                              customer_number="GHOST", customer_name="GHOST", document_date=dt.date(2024, 11, 5 + i),
-                              batch_number="AN1105", associate="An Cao", imported_at=dt.datetime(2026, 10, 1)))
-        s.commit(); service._LINES_CACHE.clear(); service._ENGINE_CACHE.clear()
         by_month = service.ownership_by_month(s, ["2026-08", "2026-09"])
         assert by_month["2026-09"].get("GHOST") is None
         assert "GHOST" not in {r["account"] for r in service.account_assignments(s) if r["team"]}
