@@ -525,6 +525,8 @@ def teams_page(request: Request, saved: str = "", err: str = "", db: Session = D
     return templates.TemplateResponse("backtest_teams.html", {
         "request": request, "user": user, "page": "teams", "teams": teams, "everyone": everyone, "roster": roster,
         "unplaced": unplaced, "counts": counts, "saved": saved, "err": err,
+        "history": service.roster_history(db), "this_month": _this_month(),
+        "cycle_months": service.run_cumulative_growth(db, with_comparison=False)["months"],
         "colors": service.TEAM_COLORS})
 
 
@@ -553,17 +555,25 @@ async def teams_save(request: Request, db: Session = Depends(get_db)):
         # rename: carry the assignments and the target with it
         for a in db.query(M.OwnershipPin).filter(M.OwnershipPin.team == original):
             a.team = name
+        for r in db.query(M.TeamMembership).filter(M.TeamMembership.team == original):
+            r.team = name
         old = db.get(M.Setting, f"growth_target::{original}")
         if old:
             db.add(M.Setting(key=f"growth_target::{name}", value=old.value)); db.delete(old)
         db.delete(row); db.flush()
         row = M.Team(name=name, sort=0); db.add(row)
     row.kind = kind
+    changed = sorted(members) != sorted(list(row.members or []))
     row.members = members
     row.auto = (kind == "team") and bool(form.get("auto"))
     row.fallback = (kind == "team") and bool(form.get("fallback"))
     row.color = (form.get("color") or "").strip() or service.TEAM_COLORS[0]
     row.updated_at = dt.datetime.utcnow()
+    db.flush()
+    if changed or not db.query(M.TeamMembership).filter(M.TeamMembership.team == name).count():
+        # a roster change is DATED: it counts from the chosen month; earlier months keep the old roster
+        since = (form.get("since") or _this_month()).strip()
+        db.add(M.TeamMembership(team=name, members=members, effective_from=since, user_id=user.user_id))
     db.commit()
     service._ENGINE_CACHE.clear()
     _seed_targets()

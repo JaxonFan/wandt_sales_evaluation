@@ -1,5 +1,6 @@
 """Team ownership, batch-prefix attribution, and the month-level pay math — on the hermetic book."""
 import pytest
+import pandas as pd
 
 from webfix import build, teardown, ITEM_RATE
 from app import service, models as M
@@ -114,3 +115,20 @@ def test_silent_account_loses_ownership_and_page_still_renders():
         assert client.get("/accounts?view=all").status_code == 200
     finally:
         s.close(); teardown()
+
+
+def test_moving_a_person_is_dated(db):
+    """Garmi joins Team 1 from 2026-09: August orders still count for Team 2 in the rule; roster history kept."""
+    db.add(M.TeamMembership(team="Team 1", members=["An Cao", "Garmi Mei"], effective_from="2026-09"))
+    db.add(M.TeamMembership(team="Team 2", members=[], effective_from="2026-09"))
+    db.commit(); service._ENGINE_CACHE.clear()
+    assert service.team_of_rep(db, "2026-08")["Garmi Mei"] == "Team 2"
+    assert service.team_of_rep(db, "2026-09")["Garmi Mei"] == "Team 1"
+    # ACCT2 is 100% Garmi's orders: as of August it belongs to Team 2, by September Team 1's share is rising but
+    # the August orders were written on Team 2 and stay credited there (so the rule has not flipped it yet)
+    aug = service._rule_as_of(db, pd.Timestamp("2026-08-31"))["ACCT2"]
+    sep = service._rule_as_of(db, pd.Timestamp("2026-09-30"))["ACCT2"]
+    assert aug["auto"] == "Team 2" and aug["shares"]["Team 2"] == pytest.approx(1.0)
+    assert 0 < sep["shares"]["Team 1"] < 0.8 and sep["auto"] == "Team 2"
+    hist = service.roster_history(db)
+    assert [h[0] for h in hist["Team 1"]] == ["2000-01", "2026-09"]

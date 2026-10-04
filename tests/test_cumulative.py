@@ -275,3 +275,21 @@ def test_dated_ownership_counts_from_the_month_of_the_change():
     assert team_row(res, "Team 1")["earned"] > 0 and team_row(res, "Team 2")["earned"] > 0   # both earned their months
     static = run_teams(df, {"G": "Team 1"})
     assert team_row(res, "Team 1")["earned"] < team_row(static, "Team 1")["earned"]           # less than owning it all cycle
+
+
+def test_dated_roster_splits_each_month_by_who_was_there():
+    """Rep B joins Team 1 in month 3: months 1-2 split between A only (A alone), 3+ between A and B."""
+    lines = (mk("G", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("G", "Rep A", "X", FISCAL, AS_OF, 7, 125, 100))
+    df = df_from(lines)
+    months = [str(m) for m in pd.period_range(FISCAL.to_period("M"), AS_OF.to_period("M"), freq="M")]
+    teams = {"Team 1": ["Rep A", "Rep B"]}
+    rosters = {m: {"Team 1": (["Rep A"] if i < 2 else ["Rep A", "Rep B"])} for i, m in enumerate(months)}
+    res = engine.compute_cumulative_growth(df, FISCAL, AS_OF, ["Rep A", "Rep B"], cumulative_rate=RATE,
+                                           young_account_pct=RATE, teams=teams, account_team={"G": "Team 1"},
+                                           teams_by_month=rosters)
+    team = res["trajectory"]["Team 1"]; a = res["rep_trajectory"]["Rep A"]; b = res["rep_trajectory"]["Rep B"]
+    assert a[0]["pay"] == pytest.approx(team[0]["pay"]) and b[0]["pay"] == 0.0        # month 1: A alone
+    for i in range(2, len(months)):
+        assert a[i]["pay"] == pytest.approx(team[i]["pay"] / 2) and b[i]["pay"] == pytest.approx(team[i]["pay"] / 2)
+    assert a[-1]["cum_pay"] + b[-1]["cum_pay"] == pytest.approx(team[-1]["cum_pay"])  # nothing lost or doubled

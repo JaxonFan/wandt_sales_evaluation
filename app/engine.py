@@ -546,7 +546,7 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
                               young_account_pct, young_account_months=12,
                               constrained_item_numbers=frozenset(), accel_rate=None,
                               rep_targets=None, exempt_accounts=frozenset(),
-                              account_team=None, teams=None, owner_by_month=None):
+                              account_team=None, teams=None, owner_by_month=None, teams_by_month=None):
     """Cumulative profit-growth model (the 'what-if' replacement for the Growth piece).
 
     Measured PER ACCOUNT against the SAME account a year ago (not per-rep totals — 35% of the book
@@ -713,21 +713,30 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
     # TEAM MODE: what was computed above is per TEAM; split each team's pay EQUALLY among its members.
     out["teams"] = out["reps"].rename(columns={"associate": "team"})
     out["earners"] = trajectory                                  # keyed by team
+    # the SPLIT uses each month's roster (dated memberships) — a person who joins in month 3 shares month 3 on,
+    # and the people already there keep their larger shares of months 1-2
     rep_rows, rep_traj, memberships = [], {}, {}
+    month_keys = [str(m) for m in months]
     for team_name, members in teams.items():
-        n = len(members) or 1
         rows = trajectory.get(team_name, [])
-        team_row = next((x for x in reps if x["associate"] == team_name), None)
-        for member in members:
-            share = [dict(r, pay=r["pay"] / n, cum_pay=r["cum_pay"] / n, team=team_name,
-                          team_pay=r["pay"], team_cum_pay=r["cum_pay"]) for r in rows]
+        roster_at = [(teams_by_month or {}).get(mk, {}).get(team_name, members) or members for mk in month_keys]
+        everyone = sorted({m for r in roster_at for m in r} | set(members))
+        for member in everyone:
+            share, cum = [], 0.0
+            for i, r in enumerate(rows):
+                n = len(roster_at[i]) or 1
+                pay_i = r["pay"] / n if member in roster_at[i] else 0.0
+                cum += pay_i
+                share.append(dict(r, pay=pay_i, cum_pay=cum, team=team_name, team_pay=r["pay"], team_cum_pay=r["cum_pay"]))
+            if not any(x["pay"] > 0 or member in roster_at[i] for i, x in enumerate(share)):
+                continue
             if member in rep_traj:        # second (or later) earner: add the shares month by month
                 rep_traj[member] = [dict(a, pay=a["pay"] + b["pay"], cum_pay=a["cum_pay"] + b["cum_pay"])
                                     for a, b in zip(rep_traj[member], share)]
             else:
                 rep_traj[member] = share
-            memberships.setdefault(member, []).append(dict(team=team_name, members=n,
-                                                            earned=(team_row or {}).get("earned", 0.0) / n))
+            memberships.setdefault(member, []).append(dict(team=team_name, members=len(roster_at[-1]) or 1,
+                                                            earned=(share[-1]["cum_pay"] if share else 0.0)))
     for member, parts in memberships.items():
         first = parts[0]
         rep_rows.append(dict(associate=member, team=first["team"], members=first["members"],

@@ -42,6 +42,16 @@
         <label class="opt"><input type="checkbox" name="fallback" {{ 'checked' if t.fallback }}> catches shared accounts</label>
       </div>
       {% endif %}
+      {% if history.get(t.name) and history[t.name]|length > 1 %}
+      <div class="k" style="margin-top:8px">roster history</div>
+      {% for since, ms in history[t.name] %}<div class="mut" style="font-size:12px">{{ 'from the start' if since == '2000-01' else 'from ' ~ since }}: {{ ms|join(', ') or '—' }}</div>{% endfor %}
+      {% endif %}
+      <div class="row">
+        <label class="opt">a member change counts from
+          <select name="since" style="padding:4px 6px;font-size:12px">
+            {% set seen = [] %}{% for m in cycle_months + [this_month] %}{% if m not in seen %}{% set _ = seen.append(m) %}<option value="{{ m }}" {{ 'selected' if m == this_month }}>{{ m }}</option>{% endif %}{% endfor %}
+          </select></label>
+      </div>
       <div class="row">
         <span class="sw">{% for c in colors %}<label><input type="radio" name="color" value="{{ c }}" {{ 'checked' if c == t.color }}><span style="background:{{ c }}"></span></label>{% endfor %}</span>
         <button type="submit" style="margin-left:auto">Save</button>
@@ -65,8 +75,9 @@
       </div>
     </form>
   </div>
-  <p class="hint" style="margin-top:14px"><b>Changing teams mid-cycle</b> recomputes ownership and the split from the
-    start of the cycle: accounts can change owner, and each member's share changes. Money already paid stays paid
-    (owed never goes negative). Best done at a cycle boundary.</p>
+  <p class="hint" style="margin-top:14px"><b>Moving a person is dated.</b> A roster change counts from the month you
+    choose: the 80% rule credits each past order to the team the person was on <i>when they wrote it</i>, and each
+    month's split uses that month's roster — so months before the move keep their numbers. Money already paid stays
+    paid. The only effect on the past is what you'd expect: none.</p>
 </div>
 {% endblock %}

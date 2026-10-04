@@ -500,7 +500,41 @@ def teams_table(db):
 
 
 def _team_version(db):
-    return tuple((t["name"], t["kind"], tuple(t["members"]), t["auto"], t["fallback"]) for t in teams_table(db))
+    return (tuple((t["name"], t["kind"], tuple(t["members"]), t["auto"], t["fallback"]) for t in teams_table(db)),
+            tuple((r.team, tuple(r.members or []), r.effective_from) for r in db.query(M.TeamMembership).all()))
+
+
+def _seed_memberships(db):
+    """Any team without a roster row gets one effective from the beginning of time, from its current members."""
+    have = {r.team for r in db.query(M.TeamMembership.team).filter(M.TeamMembership.effective_from == "2000-01").all()}
+    missing = [t for t in teams_table(db) if t["name"] not in have]       # every team needs a baseline roster
+    for t in missing:
+        db.add(M.TeamMembership(team=t["name"], members=list(t["members"]), effective_from="2000-01"))
+    if missing:
+        db.commit()
+
+
+def memberships_by_month(db, months):
+    """{month: {team: [members]}} — each team's roster as of each month (latest roster row <= that month)."""
+    _seed_memberships(db)
+    rows = sorted(db.query(M.TeamMembership).all(), key=lambda r: (r.effective_from or "", r.id))
+    out = {}
+    for m in months:
+        roster = {}
+        for r in rows:
+            if (r.effective_from or "") <= m:
+                roster[r.team] = list(r.members or [])
+        out[m] = roster
+    return out
+
+
+def roster_history(db):
+    """{team: [(effective_from, members)]} oldest first, for the Teams page."""
+    _seed_memberships(db)
+    out = {}
+    for r in sorted(db.query(M.TeamMembership).all(), key=lambda r: (r.effective_from or "", r.id)):
+        out.setdefault(r.team, []).append((r.effective_from, list(r.members or [])))
+    return out
 
 
 def house_team_name(db):
@@ -530,13 +564,38 @@ def fallback_teams(db):
     return [t["name"] for t in teams_table(db) if t["kind"] == "team" and t["fallback"]]
 
 
-def team_of_rep(db):
-    """{rep: auto team or house} — the rep's PRIMARY group, used for the ownership rule and for grouping."""
+def team_of_rep(db, month=None):
+    """{rep: auto team or house} — the rep's PRIMARY group, as of `month` (YYYY-MM) or today."""
+    kinds = {t["name"]: t for t in teams_table(db)}
+    if month is None:
+        rosters = {t["name"]: t["members"] for t in teams_table(db)}
+    else:
+        rosters = memberships_by_month(db, [month])[month]
     out = {}
-    for t in teams_table(db):
-        if t["kind"] == "house" or (t["kind"] == "team" and t["auto"]):
-            for m in t["members"]:
-                out.setdefault(m, t["name"])
+    for name, members in rosters.items():
+        t = kinds.get(name)
+        if t and (t["kind"] == "house" or (t["kind"] == "team" and t["auto"])):
+            for m in members:
+                out.setdefault(m, name)
+    return out
+
+
+def _earners_by_month(db, earners_now, months):
+    """{month: {earner: [members as of that month]}} — teams from the dated rosters (active reps only),
+    individuals as themselves."""
+    _, _, roster = attribution_maps(db)
+    active = set(roster)
+    rosters = memberships_by_month(db, months)
+    out = {}
+    for m in months:
+        per = {}
+        for name, members in earners_now.items():
+            if len(members) == 1 and members[0] == name:          # an individual earner
+                per[name] = [name]
+            else:
+                present = [x for x in rosters[m].get(name, members) if x in active]
+                per[name] = present or members
+        out[m] = per
     return out
 
 
@@ -556,7 +615,6 @@ def _rule_as_of(db, month_end):
     share detail per account. Fallback teams catch accounts whose members' auto teams together clear the bar."""
     from .config import HOUSE_ACCOUNTS, TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS
     df = active_lines(db)
-    rep_team = team_of_rep(db)
     HOUSE = house_team_name(db)
     autos = auto_teams(db)
     all_teams = autos + [HOUSE]
@@ -564,7 +622,10 @@ def _rule_as_of(db, month_end):
     fallbacks = fallback_teams(db)
     window_start = month_end - pd.DateOffset(months=TEAM_WINDOW_MONTHS)
     win = df[(df["document_date"] > window_start) & (df["document_date"] <= month_end)].copy()
-    win["team"] = win["associate"].map(rep_team)
+    # an order counts for the team the rep was on in the month it was WRITTEN (dated rosters)
+    win["ym"] = win["document_date"].dt.to_period("M").astype(str)
+    by_m = {m: team_of_rep(db, m) for m in sorted(win["ym"].unique())}
+    win["team"] = [by_m[m].get(a) for a, m in zip(win["associate"], win["ym"])]
     orders = win.dropna(subset=["team"]).drop_duplicates(["account", "sop_number"])
     counts = orders.groupby(["account", "team"]).size().unstack(fill_value=0) if len(orders) else pd.DataFrame()
     for t in all_teams:
@@ -1002,7 +1063,8 @@ def run_cumulative_growth(db, with_comparison=True):
                                          exempt_accounts=GROWTH_EXEMPT_ACCOUNTS,
                                          young_account_pct=young_pct, young_account_months=young_months,
                                          constrained_item_numbers=get_constrained_items(db),
-                                         teams=teams, owner_by_month=ownership_by_month(db, months))
+                                         teams=teams, owner_by_month=ownership_by_month(db, months),
+                                         teams_by_month=_earners_by_month(db, teams, months))
 
     fiscal_start, as_of = cycle_window()
     if fiscal_start < growth_start:
@@ -1160,6 +1222,7 @@ def _chapter_growth(db, start, end, growth_active):
         s = get_settings(db)
         default_target = float(s.get("growth_target_default", 0.06))
         teams = earners(db)
+        months_ = [str(m) for m in pd.period_range(start.to_period("M"), end.to_period("M"), freq="M")]
         _, _, roster = attribution_maps(db)
         res = compute_cumulative_growth(
             active_lines(db), start, end, roster,
@@ -1170,8 +1233,7 @@ def _chapter_growth(db, start, end, growth_active):
             young_account_pct=float(s.get("young_account_pct", 0.01)),
             young_account_months=int(s.get("young_account_months", 12)),
             constrained_item_numbers=get_constrained_items(db),
-            teams=teams, owner_by_month=ownership_by_month(
-                db, [str(m) for m in pd.period_range(start.to_period("M"), end.to_period("M"), freq="M")]))
+            teams=teams, owner_by_month=ownership_by_month(db, months_), teams_by_month=_earners_by_month(db, teams, months_))
         return {rep: {row["month"]: float(row["pay"]) for row in rows}
                 for rep, rows in res.get("rep_trajectory", {}).items()}
 

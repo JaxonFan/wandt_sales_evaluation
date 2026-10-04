@@ -58,6 +58,20 @@ class OwnershipPin(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
+class TeamMembership(Base):
+    """A team's roster from `effective_from` (YYYY-MM) on. Append-only, like ownership pins: moving a person
+    writes a new roster row for each team involved, and months before it keep the roster they had. The 80% rule
+    credits an order to the team the rep was on in the month it was written; the equal split for a month uses
+    that month's roster."""
+    __tablename__ = "team_memberships"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    team = Column(String, index=True)
+    members = Column(JSON, default=list)
+    effective_from = Column(String, index=True)        # YYYY-MM
+    user_id = Column(Integer)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class AccountAssignment(Base):
     """Manager's manual account -> team assignment. ALWAYS beats the computed 80%-of-orders rule, which is
     what makes the genuinely shared accounts (no team over 80%) payable at all."""
