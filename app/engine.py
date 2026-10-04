@@ -546,7 +546,7 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
                               young_account_pct, young_account_months=12,
                               constrained_item_numbers=frozenset(), accel_rate=None,
                               rep_targets=None, exempt_accounts=frozenset(),
-                              account_team=None, teams=None):
+                              account_team=None, teams=None, owner_by_month=None):
     """Cumulative profit-growth model (the 'what-if' replacement for the Growth piece).
 
     Measured PER ACCOUNT against the SAME account a year ago (not per-rep totals — 35% of the book
@@ -566,8 +566,9 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
       no target entry is treated as target=inf (=> flat base rate). exempt_accounts are dropped from growth
       entirely (house accounts run by non-reps). A brand-new account has no year-ago, so its gap == its own profit.
 
-    TEAM MODE (`teams` = {team: [members]} and `account_team` = {account: team}): the EARNER is the team, not
-    the rep. An account's whole gap goes to the team that owns it (the 80%-of-orders rule + the manager's
+    TEAM MODE (`teams` = {team: [members]} and `account_team` = {account: team}, or `owner_by_month` =
+    {month: {account: team}} when ownership is dated — a reassignment counts from the month it was made and
+    earlier months stay with the previous owner): the EARNER is the team, not the rep. An account's whole gap goes to the team that owns it (the 80%-of-orders rule + the manager's
     assignments — see service.account_assignments), no work-share split and no matter who wrote the order; an
     account no team owns earns nothing for anyone. Everything else is identical — netting, target, two-tier
     rate and true-up all happen at team level — and the team's pay is then split EQUALLY among its members.
@@ -584,6 +585,7 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
     team_mode = bool(teams)
     teams = {t: list(members) for t, members in (teams or {}).items()}
     account_team = account_team or {}
+    owner_by_month = owner_by_month or {}
     earners = sorted(teams) if team_mode else sorted(team)
 
     def tier(G, target):
@@ -625,10 +627,14 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
         if acct in exempt_accounts:                              # house accounts: out of the growth calc
             continue
         if team_mode:
-            owner = account_team.get(acct)
-            if owner not in teams:                               # unassigned / house -> nobody earns on it
+            # the owner each month: dated ownership if given, else the single static owner for every month
+            owners = [(owner_by_month.get(str(m), {}).get(acct) if owner_by_month else account_team.get(acct))
+                      for m in months]
+            owners = [o if o in teams else None for o in owners]   # unassigned / house -> nobody that month
+            if not any(owners):
                 continue
-            shares, primary = {owner: 1.0}, owner
+            primary = next((o for o in reversed(owners) if o), None)   # latest owner, for display
+            shares = {primary: 1.0}
         else:
             rp = rep_prof.loc[acct]                              # Series: rep -> this-cycle profit
             pos = rp[rp > 0]
@@ -649,24 +655,36 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
             s_ty += ty_i; s_ly += ly_i
             cum.append(s_ty - s_ly)
         per_acct[acct] = dict(shares=shares, primary=primary, is_young=is_young, cum=cum,
-                              mo_ty=mo_ty, mo_ly=mo_ly,
+                              mo_ty=mo_ty, mo_ly=mo_ly, owners=(owners if team_mode else None),
                               gap=cum[-1] if cum else 0.0, ty_profit=s_ty, ly_profit=s_ly)
 
     reps, trajectory = [], {}
     INF = float("inf")
+    def weight(v, rep, i):
+        """How much of account v belongs to `rep` in month i: dated ownership in team mode, work-share otherwise."""
+        if team_mode:
+            return 1.0 if v["owners"][i] == rep else 0.0
+        return v["shares"].get(rep, 0.0)
+
     for rep in earners:
-        held = [(a, v) for a, v in per_acct.items() if rep in v["shares"]]
+        held = [(a, v) for a, v in per_acct.items()
+                if (any(o == rep for o in v["owners"]) if team_mode else rep in v["shares"])]
         target_pct = rep_targets.get(rep)                        # None -> flat (target = inf)
         # rep-level netting + TWO-TIER true-up: earned = base x min(peak,target$) + accel x max(0,peak-target$).
         # target$ scales with the rep's cumulative last-year book so the accelerator grows through the cycle.
+        # Each MONTH's increment (ty - ly) goes to that month's owner, so a reassignment counts from the month
+        # it was made and the months before stay with the previous owner.
         rows, run_max, cum_pay, cum_ly = [], 0.0, 0.0, 0.0
-        net_traj = [sum(v["cum"][i] * v["shares"][rep] for _, v in held) for i in range(len(months))]
+        net_traj, running = [], 0.0
+        for i in range(len(months)):
+            running += sum((v["mo_ty"][i] - v["mo_ly"][i]) * weight(v, rep, i) for _, v in held)
+            net_traj.append(running)
         target_final = 0.0
         for i, m in enumerate(months):
             run_max = max(run_max, net_traj[i])
-            # the rep's BOOK this month, both years (share-weighted, same accounts) -> ty - ly == the month gap
-            ty_book = sum(v["mo_ty"][i] * v["shares"][rep] for _, v in held)
-            ly_book = sum(v["mo_ly"][i] * v["shares"][rep] for _, v in held)
+            # the rep's BOOK this month, both years (same accounts, that month's ownership) -> ty - ly == the month gap
+            ty_book = sum(v["mo_ty"][i] * weight(v, rep, i) for _, v in held)
+            ly_book = sum(v["mo_ly"][i] * weight(v, rep, i) for _, v in held)
             cum_ly += ly_book
             target = target_pct * max(0.0, cum_ly) if target_pct is not None else INF
             target_final = target

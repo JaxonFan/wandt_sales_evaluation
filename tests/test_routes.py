@@ -142,8 +142,9 @@ def test_assignment_pin_and_unpin_via_json(web):
         return html[html.index("<tbody>"):html.index("</tbody>")]
     assert client.post("/accounts/assign.json", json={"account": "ACCT1", "team": "Team 2"}).json()["ok"]
     body = rows("Team 2")
-    assert "ACCT1" in body and re.search(r'ACCT1.*?<span class="pin">pinned', body, re.S)
-    assert client.post("/accounts/assign.json", json={"account": "ACCT1", "team": ""}).json() == {"ok": True, "team": None}
+    assert "ACCT1" in body and re.search(r'ACCT1.*?<span class="pin"[^>]*>pinned since', body, re.S)
+    back = client.post("/accounts/assign.json", json={"account": "ACCT1", "team": ""}).json()
+    assert back["ok"] and back["team"] is None and back["since"]
     body = rows("Team 1")
     assert "ACCT1" in body and 'class="pin"' not in body
     assert client.post("/accounts/assign.json", json={"account": "ACCT1", "team": "Team 9"}).status_code == 400

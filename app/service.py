@@ -440,8 +440,38 @@ def _growth_version(db):
 
 
 def _assignment_version(db):
-    """Signature of the manager's manual account -> team assignments (tiny table)."""
-    return frozenset((a.account, a.team) for a in db.query(M.AccountAssignment).all())
+    """Signature of the manager's ownership pins (tiny table)."""
+    return frozenset((p.account, p.team, p.effective_from) for p in db.query(M.OwnershipPin).all())
+
+
+def _migrate_pins(db):
+    """One-time: the old single-row assignments become dated pins effective from the program start."""
+    if db.query(M.OwnershipPin).count() or not db.query(M.AccountAssignment).count():
+        return
+    start = str(pd.Timestamp(get_settings(db).get("program_start", "2026-08-01")).to_period("M"))
+    for a in db.query(M.AccountAssignment).all():
+        if a.team:
+            db.add(M.OwnershipPin(account=a.account, team=a.team, effective_from=start, user_id=a.user_id))
+    db.commit()
+
+
+def pins_in_force(db, month):
+    """{account: team or None} — the latest pin with effective_from <= month, per account."""
+    _migrate_pins(db)
+    out = {}
+    for p in sorted(db.query(M.OwnershipPin).all(), key=lambda p: (p.effective_from or "", p.id)):
+        if (p.effective_from or "") <= month:
+            out[p.account] = p.team
+    return out
+
+
+def current_pins(db):
+    """{account: (team, since)} for accounts whose latest pin names an owner (None pins = back to the rule)."""
+    _migrate_pins(db)
+    latest = {}
+    for p in sorted(db.query(M.OwnershipPin).all(), key=lambda p: (p.effective_from or "", p.id)):
+        latest[p.account] = (p.team, p.effective_from)
+    return {a: v for a, v in latest.items() if v[0]}
 
 
 # ---------- teams: who owns which account ----------
@@ -515,73 +545,121 @@ def earners(db):
     account pinned to them BY NAME (an individual earner is a team of one)."""
     out = dict(team_members(db))
     _, _, roster = attribution_maps(db)
-    pinned = {a.team for a in db.query(M.AccountAssignment).all() if a.team in set(roster)}
+    pinned = {p.team for p in db.query(M.OwnershipPin).all() if p.team in set(roster)}
     for rep in sorted(pinned):
         out[rep] = [rep]
     return out
 
 
-def account_assignments(db):
-    """Every account's team, by the 80%-of-orders rule with the manager's manual assignment on top.
-
-    An ORDER is one invoice (not a line, not a dollar): over the trailing TEAM_WINDOW_MONTHS we count each
-    account's invoices by the team of the rep who wrote them, and a team that wrote >= TEAM_OWNERSHIP_PCT of
-    them owns the account. Orders written by nobody on the roster (departed reps, unmapped batches) are left
-    OUT of the denominator so old history can't block a team from reaching the bar.
-
-    Returns rows: account, customer, orders, per-team counts/shares, auto, manual, team (final), profit/revenue
-    over the window, plus `shared` (no team at the bar). Memoized by data + assignment version."""
+def _rule_as_of(db, month_end):
+    """The 80%-of-orders rule evaluated on the 12 months ending `month_end`: {account: owner or None}, plus the
+    share detail per account. Fallback teams catch accounts whose members' auto teams together clear the bar."""
     from .config import HOUSE_ACCOUNTS, TEAM_OWNERSHIP_PCT, TEAM_WINDOW_MONTHS
+    df = active_lines(db)
+    rep_team = team_of_rep(db)
+    HOUSE = house_team_name(db)
+    autos = auto_teams(db)
+    all_teams = autos + [HOUSE]
+    members_of = {t["name"]: set(t["members"]) for t in teams_table(db)}
+    fallbacks = fallback_teams(db)
+    window_start = month_end - pd.DateOffset(months=TEAM_WINDOW_MONTHS)
+    win = df[(df["document_date"] > window_start) & (df["document_date"] <= month_end)].copy()
+    win["team"] = win["associate"].map(rep_team)
+    orders = win.dropna(subset=["team"]).drop_duplicates(["account", "sop_number"])
+    counts = orders.groupby(["account", "team"]).size().unstack(fill_value=0) if len(orders) else pd.DataFrame()
+    for t in all_teams:
+        if t not in counts.columns:
+            counts[t] = 0
+    totals = counts[all_teams].sum(axis=1) if len(counts) else pd.Series(dtype=float)
+    detail = {}
+    for account in set(win["account"]):
+        n_orders = int(totals.get(account, 0))
+        by_team = {t: int(counts[t].get(account, 0)) for t in all_teams} if account in counts.index else {t: 0 for t in all_teams}
+        shares = {t: (by_team[t] / n_orders if n_orders else 0.0) for t in all_teams}
+        if account in HOUSE_ACCOUNTS:
+            auto = HOUSE
+        else:
+            auto = next((t for t in all_teams if shares[t] >= TEAM_OWNERSHIP_PCT), None)
+            if auto is None:
+                for fb in fallbacks:
+                    covered = sum(shares[t] for t in autos if members_of[t] & members_of[fb])
+                    if covered >= TEAM_OWNERSHIP_PCT:
+                        auto = fb
+                        break
+        detail[account] = dict(orders=n_orders, by_team=by_team, shares=shares, auto=auto,
+                               profit=0.0, revenue=0.0)
+    prof = win.groupby("account")["line_profit"].sum(); rev = win.groupby("account")["extended_price"].sum()
+    for a, d in detail.items():
+        d["profit"] = float(prof.get(a, 0.0)); d["revenue"] = float(rev.get(a, 0.0))
+    return detail
+
+
+OWNERSHIP_WARMUP_MONTHS = 12
+
+
+def ownership_by_month(db, months):
+    """{month: {account: owner}} — who owns each account in each month.
+
+    A pin in force that month wins. Otherwise the 80% rule as of that month's end decides, WITH HYSTERESIS: an
+    account keeps its rule-owner until a *different* owner clears the bar. Dropping below 80% with nobody else
+    above it does not make the account "shared" — that would strand it (and its pay) on noise. So ownership
+    moves gradually as the orders move, and a reassignment (manual or by the rule) counts from the month it
+    happens; earlier months keep their previous owner. The walk starts OWNERSHIP_WARMUP_MONTHS before the first
+    requested month so the carry-forward has history."""
+    key = ("ownership_by_month", _data_version(db), _assignment_version(db), _team_version(db), tuple(months))
+
+    def _compute():
+        if not months:
+            return {}
+        first = pd.Period(months[0], "M")
+        walk = [str(p) for p in pd.period_range(first - OWNERSHIP_WARMUP_MONTHS, pd.Period(months[-1], "M"), freq="M")]
+        out, prev = {}, {}
+        for m in walk:
+            rule = _rule_as_of(db, pd.Period(m, "M").end_time.normalize())
+            pins = pins_in_force(db, m)
+            owners = {}
+            for a in set(rule) | set(prev) | set(pins):
+                pinned = pins.get(a, "unpinned")
+                if pinned != "unpinned" and pinned:
+                    owners[a] = pinned                              # a manual decision in force
+                    continue
+                auto = rule.get(a, {}).get("auto")
+                owners[a] = auto if auto else prev.get(a)           # hysteresis: keep the last owner until another qualifies
+            out[m] = owners
+            prev = owners
+        return {m: out[m] for m in months}
+
+    return _memo(key, _compute)
+
+
+def account_assignments(db):
+    """Every account's owner TODAY: the manager's pin if one is in force, else the 80%-of-orders rule on the
+    trailing 12 months. Rows: account, customer, orders, per-team counts/shares, auto, manual (+since), team,
+    owner_kind, shared, profit/revenue. Memoized by data + pins + teams."""
+    from .config import HOUSE_ACCOUNTS
 
     def _compute():
         df = active_lines(db)
-        rep_team = team_of_rep(db)
-        HOUSE = house_team_name(db)
-        autos = auto_teams(db)
-        all_teams = autos + [HOUSE]
-        members_of = {t["name"]: set(t["members"]) for t in teams_table(db)}
-        fallbacks = fallback_teams(db)
-        _, _, roster = attribution_maps(db)
-        manual = {a.account: a.team for a in db.query(M.AccountAssignment).all() if a.team}
-        names = customer_names(db)
         if not len(df):
             return []
         _lo, hi = data_bounds(db)
-        window_start = hi - pd.DateOffset(months=TEAM_WINDOW_MONTHS)
-        win = df[df["document_date"] > window_start].copy()
-        win["team"] = win["associate"].map(rep_team)
-        orders = win.dropna(subset=["team"]).drop_duplicates(["account", "sop_number"])
-        counts = orders.groupby(["account", "team"]).size().unstack(fill_value=0)
-        for t in all_teams:
-            if t not in counts.columns:
-                counts[t] = 0
-        totals = counts[all_teams].sum(axis=1)
-        profit = win.groupby("account")["line_profit"].sum()
-        revenue = win.groupby("account")["extended_price"].sum()
+        HOUSE = house_team_name(db)
+        _, _, roster = attribution_maps(db)
+        names = customer_names(db)
+        rule = _rule_as_of(db, hi)
+        pins = current_pins(db)
+        latest = str(hi.to_period("M"))
+        today = ownership_by_month(db, [latest]).get(latest, {})
         rows = []
-        for account in sorted(set(win["account"]) | set(manual)):
-            n_orders = int(totals.get(account, 0))
-            by_team = {t: int(counts[t].get(account, 0)) for t in all_teams} if account in counts.index \
-                else {t: 0 for t in all_teams}
-            shares = {t: (by_team[t] / n_orders if n_orders else 0.0) for t in all_teams}
-            if account in HOUSE_ACCOUNTS:
-                auto = HOUSE                            # house by policy, whoever writes the order
-            else:
-                auto = next((t for t in all_teams if shares[t] >= TEAM_OWNERSHIP_PCT), None)
-                if auto is None:
-                    # a FALLBACK team (e.g. "Everyone") catches the account when its members' auto teams
-                    # together wrote >= the bar
-                    for fb in fallbacks:
-                        covered = sum(shares[t] for t in autos if members_of[t] & members_of[fb])
-                        if covered >= TEAM_OWNERSHIP_PCT:
-                            auto = fb
-                            break
-            team = manual.get(account) or auto
+        for account in sorted(set(rule) | set(pins) | set(today)):
+            d = rule.get(account, dict(orders=0, by_team={}, shares={}, auto=None, profit=0.0, revenue=0.0))
+            manual, since = pins.get(account, (None, None))
+            team = manual or today.get(account) or d["auto"]
             owner_kind = ("rep" if team in set(roster) else "house" if team == HOUSE else "team" if team else None)
-            rows.append(dict(account=account, customer=names.get(account, account), orders=n_orders,
-                             by_team=by_team, shares=shares, auto=auto, manual=manual.get(account),
+            rows.append(dict(account=account, customer=names.get(account, account), orders=d["orders"],
+                             by_team=d["by_team"], shares=d["shares"], auto=d["auto"], manual=manual, since=since,
                              team=team, owner_kind=owner_kind, shared=(team is None),
-                             profit=float(profit.get(account, 0.0)), revenue=float(revenue.get(account, 0.0)),
+                             profit=d["profit"], revenue=d["revenue"],
                              house_by_policy=(account in HOUSE_ACCOUNTS)))
         rows.sort(key=lambda r: -r["profit"])
         return rows
@@ -913,12 +991,13 @@ def run_cumulative_growth(db, with_comparison=True):
         # the target % is per earner (Setting key 'growth_target::Team 1' / 'growth_target::An Cao')
         targets = {name: float(s.get(f"growth_target::{name}", default_target)) for name in teams}
         fiscal_start, as_of = cycle_window()
+        months = [str(m) for m in pd.period_range(fiscal_start.to_period("M"), as_of.to_period("M"), freq="M")]
         return compute_cumulative_growth(df, fiscal_start, as_of, team, cumulative_rate=rate,
                                          accel_rate=accel, rep_targets=targets,
                                          exempt_accounts=GROWTH_EXEMPT_ACCOUNTS,
                                          young_account_pct=young_pct, young_account_months=young_months,
                                          constrained_item_numbers=get_constrained_items(db),
-                                         teams=teams, account_team=account_team_map(db))
+                                         teams=teams, owner_by_month=ownership_by_month(db, months))
 
     fiscal_start, as_of = cycle_window()
     if fiscal_start < growth_start:
@@ -1086,7 +1165,8 @@ def _chapter_growth(db, start, end, growth_active):
             young_account_pct=float(s.get("young_account_pct", 0.01)),
             young_account_months=int(s.get("young_account_months", 12)),
             constrained_item_numbers=get_constrained_items(db),
-            teams=teams, account_team=account_team_map(db))
+            teams=teams, owner_by_month=ownership_by_month(
+                db, [str(m) for m in pd.period_range(start.to_period("M"), end.to_period("M"), freq="M")]))
         return {rep: {row["month"]: float(row["pay"]) for row in rows}
                 for rep, rows in res.get("rep_trajectory", {}).items()}
 

@@ -19,10 +19,11 @@
   <h2>Which team owns which account</h2>
   <p class="hint">An account belongs to the team that wrote <b>{{ '%.0f'|format(pct) }}% or more of its orders</b>
     over the last <b>{{ months }} months</b> (an order = one invoice, whatever its size). Accounts no team owns outright
-    are <b>shared</b> — they pay <b>nobody</b> until you assign them. <b>Drag a row onto a team tab</b> to assign it;
-    your assignment always beats the computed one (<span class="pin">pinned</span>). Drag a pinned row onto the tab
-    its share puts it in to let the rule decide again. Growth follows this ownership; contribution and new-account
-    bonuses stay with whoever did the work.</p>
+    are <b>shared</b> — they pay <b>nobody</b> until you assign them. <b>Drag a row onto a team tab</b> to assign it.
+    A drop is a decision, not a formula: it holds until you change it, and it counts <b>from the month you choose</b>
+    (earlier months keep their previous owner). Drag a pinned row onto the tab its share puts it in to hand it back
+    to the rule. Unpinned accounts keep following the rule month by month, so ownership can shift as the orders do.
+    Growth follows this ownership; contribution and new-account bonuses stay with whoever did the work.</p>
   <div class="teamtabs">
     {% for t in tabs %}
     <a href="/accounts?view={{ t.key|urlencode }}" class="{{ 'on' if view == t.key }} {{ t.css if t.css }}"
@@ -32,7 +33,11 @@
     </a>
     {% endfor %}
     <a href="/accounts?view=all" class="{{ 'on' if view=='all' }}"><b>All ({{ counts.all }})</b><small>every account</small></a>
-    <form method="get" action="/accounts" style="margin-left:auto">
+    <form method="get" action="/accounts" style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <label class="mut" style="font-size:12px">a drop counts from
+        <select id="since" style="padding:5px 8px;font-size:12.5px">
+          {% set seen = [] %}{% for m in cycle_months + [this_month] %}{% if m not in seen %}{% set _ = seen.append(m) %}<option value="{{ m }}" {{ 'selected' if m == this_month }}>{{ m }}</option>{% endif %}{% endfor %}
+        </select></label>
       <input type="hidden" name="view" value="{{ view }}">
       <input name="q" value="{{ q }}" placeholder="search customer…">
     </form>
@@ -63,7 +68,7 @@
             {% elif r.auto %}{{ r.auto }}
             {% else %}<span class="badge b-warn">shared</span>{% endif %}</td>
         <td class="num">${{ '{:,.0f}'.format(r.profit) }}</td>
-        <td class="owner"><b>{{ r.team or '—' }}</b>{% if r.owner_kind == 'rep' %} <span class="mut" style="font-size:11px">(individual)</span>{% endif %}{% if r.manual %}<span class="pin">pinned</span>{% endif %}</td>
+        <td class="owner"><b>{{ r.team or '—' }}</b>{% if r.owner_kind == 'rep' %} <span class="mut" style="font-size:11px">(individual)</span>{% endif %}{% if r.manual %}<span class="pin" title="a manual decision; earlier months keep their previous owner">pinned since {{ r.since }}</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="{{ 5 + teams|length }}" class="mut">Nothing here.</td></tr>
@@ -84,12 +89,13 @@ function drop(e){
   e.preventDefault();var tab=e.currentTarget;tab.classList.remove('over');if(!dragging||tab.dataset.team===undefined)return;
   var team=tab.dataset.team, row=dragging, acct=row.dataset.account, auto=row.dataset.auto;
   var pin=(team!==auto)?team:'';   // dropping on the tab the rule already chose = clear the override
-  fetch('/accounts/assign.json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:acct,team:pin})})
+  var since=(document.getElementById('since')||{}).value;
+  fetch('/accounts/assign.json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:acct,team:pin,since:since})})
    .then(function(r){return r.json();}).then(function(j){
      if(!j.ok){toast('Could not save');return;}
      row.className='acct '+(team?'':'shared');
-     row.querySelector('.owner').innerHTML='<b>'+(team||'—')+'</b>'+(pin?'<span class="pin">pinned</span>':'');
-     toast((pin?'Pinned to ':'Back to the rule: ')+(team||'shared'));
+     row.querySelector('.owner').innerHTML='<b>'+(team||'—')+'</b>'+(pin?'<span class="pin">pinned since '+j.since+'</span>':'');
+     toast((pin?'Pinned to ':'Back to the rule: ')+(team||'shared')+' from '+j.since);
      setTimeout(function(){location.reload();},900);
    });
 }

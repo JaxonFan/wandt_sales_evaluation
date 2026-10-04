@@ -44,6 +44,20 @@ class Team(Base):
     updated_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
+class OwnershipPin(Base):
+    """A manual ownership decision: from `effective_from` (YYYY-MM) on, `account` belongs to `team` (a team
+    name, the house group, or a rep's name for an individual earner). team=None means "back to the 80% rule".
+    Rows are never edited — a new decision is a new row — so earlier months keep the owner they had.
+    The 80% rule governs every account-month that has no pin in force."""
+    __tablename__ = "ownership_pins"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    account = Column(String, index=True)
+    team = Column(String)
+    effective_from = Column(String, index=True)        # YYYY-MM
+    user_id = Column(Integer)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+
+
 class AccountAssignment(Base):
     """Manager's manual account -> team assignment. ALWAYS beats the computed 80%-of-orders rule, which is
     what makes the genuinely shared accounts (no team over 80%) payable at all."""

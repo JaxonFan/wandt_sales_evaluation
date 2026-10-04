@@ -415,6 +415,7 @@ def accounts_page(request: Request, view: str = "shared", q: str = "", db: Sessi
         "request": request, "user": user, "page": "accounts", "rows": shown[:400], "n_shown": len(shown),
         "teams": teams, "tabs": tabs, "people": people, "view": view, "q": q, "counts": counts,
         "colors": {t["name"]: t["color"] for t in service.teams_table(db)},
+        "this_month": _this_month(), "cycle_months": service.run_cumulative_growth(db, with_comparison=False)["months"],
         "pct": TEAM_OWNERSHIP_PCT * 100, "months": TEAM_WINDOW_MONTHS})
 
 
@@ -430,10 +431,10 @@ async def accounts_assign_json(request: Request, db: Session = Depends(get_db)):
     valid = set(service.team_members(db)) | {service.house_team_name(db)} | set(roster)
     if not account or (team and team not in valid):
         return JSONResponse({"ok": False}, status_code=400)
-    row = db.get(M.AccountAssignment, account) or M.AccountAssignment(account=account)
-    row.team = team or None; row.user_id = user.user_id; row.updated_at = dt.datetime.utcnow()
-    db.merge(row); db.commit()
-    return JSONResponse({"ok": True, "team": team or None})
+    since = str(body.get("since") or _this_month())      # the month the decision counts from (YYYY-MM)
+    db.add(M.OwnershipPin(account=account, team=team or None, effective_from=since, user_id=user.user_id))
+    db.commit()
+    return JSONResponse({"ok": True, "team": team or None, "since": since})
 
 
 @app.post("/accounts/assign")
@@ -442,12 +443,14 @@ def accounts_assign(request: Request, account: str = Form(...), team: str = Form
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    row = db.get(M.AccountAssignment, account) or M.AccountAssignment(account=account)
-    row.team = team or None                       # empty -> clear the override, fall back to the 80% rule
-    row.user_id = user.user_id
-    row.updated_at = dt.datetime.utcnow()
-    db.merge(row); db.commit()
+    db.add(M.OwnershipPin(account=account, team=team or None, effective_from=_this_month(),
+                          user_id=user.user_id))      # empty team -> "back to the 80% rule" from this month
+    db.commit()
     return RedirectResponse(f"/accounts?view={view}", status_code=303)
+
+
+def _this_month():
+    return dt.date.today().strftime("%Y-%m")
 
 
 # ---------- my account: change my own password ----------
@@ -548,7 +551,7 @@ async def teams_save(request: Request, db: Session = Depends(get_db)):
         if db.get(M.Team, name):
             return RedirectResponse(f"/teams?err=There+is+already+a+team+called+{name}", status_code=303)
         # rename: carry the assignments and the target with it
-        for a in db.query(M.AccountAssignment).filter(M.AccountAssignment.team == original):
+        for a in db.query(M.OwnershipPin).filter(M.OwnershipPin.team == original):
             a.team = name
         old = db.get(M.Setting, f"growth_target::{original}")
         if old:
@@ -575,7 +578,7 @@ def teams_delete(request: Request, name: str = Form(...), db: Session = Depends(
     row = db.get(M.Team, name)
     if row is None or row.kind == "house":
         return RedirectResponse("/teams?err=The+house+group+cannot+be+deleted", status_code=303)
-    n = db.query(M.AccountAssignment).filter(M.AccountAssignment.team == name).count()
+    n = sum(1 for a, (t, _s) in service.current_pins(db).items() if t == name)
     if n:
         return RedirectResponse(f"/teams?err={n}+accounts+are+pinned+to+{name}+—+move+them+first", status_code=303)
     db.delete(row); db.commit()

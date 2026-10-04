@@ -26,11 +26,14 @@ def test_eighty_percent_of_orders_rule(db):
     assert rows["ACCT3"]["team"] == "Team 1"          # the AC-prefixed invoice counts for An Cao's team
 
 
-def test_manual_pin_beats_the_rule_and_clears(db):
-    db.add(M.AccountAssignment(account="ACCT1", team="Team 2")); db.commit()
+def test_manual_pin_beats_the_rule_and_hands_back(db):
+    db.add(M.OwnershipPin(account="ACCT1", team="Team 2", effective_from="2026-08")); db.commit()
     assert {r["account"]: r["team"] for r in service.account_assignments(db)}["ACCT1"] == "Team 2"
-    db.query(M.AccountAssignment).delete(); db.commit()
+    db.add(M.OwnershipPin(account="ACCT1", team=None, effective_from="2026-09")); db.commit()   # back to the rule
     assert {r["account"]: r["team"] for r in service.account_assignments(db)}["ACCT1"] == "Team 1"
+    # history: August still Team 2's, September the rule's (Team 1)
+    by_month = service.ownership_by_month(db, ["2026-08", "2026-09"])
+    assert by_month["2026-08"]["ACCT1"] == "Team 2" and by_month["2026-09"]["ACCT1"] == "Team 1"
 
 
 def test_house_accounts_are_house_whoever_writes_them(db):

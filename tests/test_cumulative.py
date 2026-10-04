@@ -257,3 +257,21 @@ def test_house_account_is_exempt_in_team_mode():
                     exempt_accounts={"HOUSE"})
     assert acct(res, "HOUSE") is None
     assert acct(res, "KEEP") is not None
+
+
+def test_dated_ownership_counts_from_the_month_of_the_change():
+    """An account handed from Team 2 to Team 1 in month 3: months 1-2 stay with Team 2, 3+ go to Team 1."""
+    lines = (mk("G", "Rep C", "X", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("G", "Rep C", "X", FISCAL, AS_OF, 7, 125, 100))          # +$20/wk all cycle
+    df = df_from(lines)
+    months = [str(m) for m in pd.period_range(FISCAL.to_period("M"), AS_OF.to_period("M"), freq="M")]
+    owners = {m: {"G": ("Team 2" if i < 2 else "Team 1")} for i, m in enumerate(months)}
+    res = engine.compute_cumulative_growth(df, FISCAL, AS_OF, sum(TEAMS.values(), []), cumulative_rate=RATE,
+                                           young_account_pct=RATE, teams=TEAMS, owner_by_month=owners)
+    t1 = res["trajectory"]["Team 1"]; t2 = res["trajectory"]["Team 2"]
+    assert t2[0]["ty_book"] > 0 and t1[0]["ty_book"] == 0                 # month 1: Team 2 holds it
+    assert t1[2]["ty_book"] > 0 and t2[2]["ty_book"] == 0                 # month 3: Team 1 holds it
+    assert t2[-1]["cum_growth"] == pytest.approx(t2[1]["cum_growth"])     # Team 2's gap froze at the handover
+    assert team_row(res, "Team 1")["earned"] > 0 and team_row(res, "Team 2")["earned"] > 0   # both earned their months
+    static = run_teams(df, {"G": "Team 1"})
+    assert team_row(res, "Team 1")["earned"] < team_row(static, "Team 1")["earned"]           # less than owning it all cycle
