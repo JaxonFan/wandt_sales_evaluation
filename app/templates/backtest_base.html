@@ -135,14 +135,20 @@
 </aside>
 <style>
   #askbtn{position:fixed;right:22px;bottom:22px;z-index:40;border-radius:999px;padding:11px 18px;font-size:14px;box-shadow:var(--shadow-lg)}
-  #aidrawer{position:fixed;top:0;right:0;bottom:0;width:440px;max-width:96vw;background:var(--card);border-left:1px solid var(--line);box-shadow:var(--shadow-lg);z-index:50;display:flex;flex-direction:column;transition:transform .2s ease}
+  #aidrawer{position:fixed;top:0;right:0;bottom:0;width:560px;max-width:96vw;background:var(--card);border-left:1px solid var(--line);box-shadow:var(--shadow-lg);z-index:50;display:flex;flex-direction:column;transition:transform .2s ease}
   #aidrawer.closed{transform:translateX(105%)}
   .ai-head{display:flex;align-items:baseline;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)} .ai-head small{color:var(--muted);font-size:11.5px;flex:1} .ai-head button{background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;box-shadow:none;padding:0}
   .ai-msgs{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.55}
   .ai-hint{color:var(--muted);font-size:13px;line-height:1.7}
   .ai-u{align-self:flex-end;background:var(--ink);color:#fff;border-radius:14px 14px 4px 14px;padding:8px 12px;max-width:85%;white-space:pre-wrap}
-  .ai-a{align-self:flex-start;background:var(--paper);border-radius:14px 14px 14px 4px;padding:9px 12px;max-width:95%;white-space:pre-wrap}
-  .ai-a img{display:block;max-width:100%;border-radius:8px;margin-top:8px;border:1px solid var(--line)}
+  .ai-a{align-self:flex-start;background:var(--paper);border-radius:14px 14px 14px 4px;padding:10px 14px;max-width:100%;line-height:1.5}
+  .ai-a p{margin:0 0 8px} .ai-a p:last-child{margin-bottom:0} .ai-a ul,.ai-a ol{margin:4px 0 8px 18px;padding:0} .ai-a li{margin:2px 0}
+  .ai-a table{width:100%;border-collapse:collapse;font-size:12.5px;margin:6px 0 10px;background:var(--card);border-radius:8px;overflow:hidden}
+  .ai-a th{text-align:left;font-size:11px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line);background:#f7f7fa}
+  .ai-a td{padding:6px 8px;border-bottom:1px solid #f0f0f3;vertical-align:top} .ai-a td.n,.ai-a th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .ai-a code{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:0 4px;font-size:12px}
+  .ai-a em.src{display:block;color:var(--muted);font-size:12px;margin-top:6px}
+  .ai-a img{display:block;max-width:100%;border-radius:8px;margin-top:8px;border:1px solid var(--line);cursor:zoom-in}
   .ai-a .used{font-size:11px;color:var(--muted);margin-top:6px}
   .ai-form{display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--line)} .ai-form input{flex:1}
 </style>
@@ -150,12 +156,29 @@
 var aiHist=[];
 function aiOpen(){document.getElementById('aidrawer').classList.remove('closed');setTimeout(function(){document.getElementById('ai-in').focus();},120);}
 function aiClose(){document.getElementById('aidrawer').classList.add('closed');}
-function aiAdd(cls,text){var box=document.getElementById('ai-msgs'),d=document.createElement('div');d.className=cls;d.textContent=text;box.appendChild(d);box.scrollTop=box.scrollHeight;return d;}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function inline(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g,'$1<em>$2</em>');}
+function isNum(c){return /^[\s$€£¥+\-−]*[\d.,]+\s*(%|[a-zA-Z]{0,4}|dozen|lbs|units)?\s*$/.test(c)||/^\$[\d,]+/.test(c.trim());}
+function md(text){var lines=(text||'').replace(/\r/g,'').split('\n'),out=[],i=0;
+  while(i<lines.length){var l=lines[i];
+    if(/^\s*\|.*\|\s*$/.test(l)){var rows=[];while(i<lines.length&&/^\s*\|.*\|\s*$/.test(lines[i])){rows.push(lines[i]);i++;}
+      var cells=rows.map(function(r){return r.trim().replace(/^\||\|$/g,'').split('|').map(function(c){return c.trim();});});
+      if(cells.length>1&&/^[\s:\-|]+$/.test(rows[1]))cells.splice(1,1);
+      var h='<table><thead><tr>'+cells[0].map(function(c,ci){var num=cells.slice(1).some(function(r){return r[ci]&&isNum(r[ci]);});return '<th'+(num?' class="n"':'')+'>'+inline(c)+'</th>';}).join('')+'</tr></thead><tbody>';
+      cells.slice(1).forEach(function(r){h+='<tr>'+r.map(function(c){return '<td'+(isNum(c)?' class="n"':'')+'>'+inline(c)+'</td>';}).join('')+'</tr>';});out.push(h+'</tbody></table>');continue;}
+    if(/^\s*([-*·•]|\d+[.)])\s+/.test(l)){var ol=/^\s*\d+[.)]/.test(l),items=[];while(i<lines.length&&/^\s*([-*·•]|\d+[.)])\s+/.test(lines[i])){items.push(lines[i].replace(/^\s*([-*·•]|\d+[.)])\s+/,''));i++;}
+      out.push('<'+(ol?'ol':'ul')+'>'+items.map(function(x){return '<li>'+inline(x)+'</li>';}).join('')+'</'+(ol?'ol':'ul')+'>');continue;}
+    if(/^\s*$/.test(l)){i++;continue;}
+    var para=[];while(i<lines.length&&!/^\s*$/.test(lines[i])&&!/^\s*\|/.test(lines[i])&&!/^\s*([-*·•]|\d+[.)])\s+/.test(lines[i])){para.push(lines[i]);i++;}
+    var ptxt=para.join(' ').replace(/^#+\s*/,'');
+    if(/^\*[^*].*\*$/.test(ptxt.trim())&&/source|assum|来源|假设/i.test(ptxt))out.push('<em class="src">'+inline(ptxt.trim().replace(/^\*|\*$/g,''))+'</em>');else out.push('<p>'+inline(ptxt)+'</p>');}
+  return out.join('');}
+function aiAdd(cls,text){var box=document.getElementById('ai-msgs'),d=document.createElement('div');d.className=cls;if(cls==='ai-a')d.innerHTML=md(text);else d.textContent=text;box.appendChild(d);box.scrollTop=box.scrollHeight;return d;}
 function aiSend(e){e.preventDefault();var inp=document.getElementById('ai-in'),q=inp.value.trim();if(!q)return false;inp.value='';
   aiAdd('ai-u',q);aiHist.push({role:'user',content:q});var wait=aiAdd('ai-a','…');var btn=document.getElementById('ai-send');btn.disabled=true;
   fetch('/assistant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:aiHist})})
    .then(function(r){return r.json();}).then(function(j){
-     wait.textContent=j.reply||'(no answer)';(j.images||[]).forEach(function(src){var im=document.createElement('img');im.src=src;wait.appendChild(im);});
+     wait.innerHTML=md(j.reply||'(no answer)');(j.images||[]).forEach(function(src){var im=document.createElement('img');im.src=src;im.onclick=function(){window.open(src,'_blank');};wait.appendChild(im);});
      if(j.used&&j.used.length){var u=document.createElement('div');u.className='used';u.textContent='looked at: '+j.used.map(function(x){return x.tool;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', ');wait.appendChild(u);}
      aiHist.push({role:'assistant',content:j.reply||''});document.getElementById('ai-msgs').scrollTop=1e9;})
    .catch(function(){wait.textContent='Something went wrong — try again.';}).finally(function(){btn.disabled=false;});

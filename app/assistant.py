@@ -68,8 +68,14 @@ Rules:
 4. You change nothing. If asked to pay, assign, or edit, explain where in the app the manager does it.
 5. Arithmetic you do yourself (totals, differences, percentages) is labelled "my calculation" with the inputs shown.
 6. When a chart would say it better than a table, call chart. Keep tables to 8 rows or fewer; the chart can hold more.
-7. If the question is ambiguous, say what you assumed in one line and answer; don't interrogate.
-8. Plain text only — no markdown headings, bold, or tables. Lists: one item per line starting with "·"."""
+7. If the question is ambiguous, answer first, then say what you assumed in one short italic line at the end.
+8. Format for a narrow side panel, in light Markdown:
+   - Open with a one-line answer in **bold** (the number the person asked for).
+   - Three or more items that carry numbers go in a compact table — at most 4 columns, short headers
+     (e.g. Product | Revenue | Profit | Margin). Put the item code in the name only when asked.
+   - Otherwise short bullet lists ("- "). No headings, no nested lists, no long paragraphs.
+   - One source note at the end in italics, e.g. *Source: Sep 2026 ledger*, instead of repeating it after every number.
+   - When you have drawn a chart, don't re-list its numbers; one sentence pointing to it is enough."""
 
 TOOLS = [
     {"name": "reps", "description": "The sales reps, their teams, and the house group. Call first when a question names a person or team.",
@@ -409,7 +415,10 @@ class Tools:
         import logging
         logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)   # "font not found" is expected while it walks the fallback list
         palette = ["#5A48B6", "#2B6CB0", "#1F9D57", "#C0682B", "#B83280", "#2C7A7B"]
-        fig, ax = plt.subplots(figsize=(7.2, 3.6), dpi=140)
+        labels = [str(l)[:30] + ("…" if len(str(l)) > 30 else "") for l in labels]
+        tall = kind == "barh" and len(labels) > 6
+        fig, ax = plt.subplots(figsize=(6.2, 4.4 if tall else 3.4), dpi=150)
+        plt.rcParams.update({"font.size": 10})
         x = list(range(len(labels)))
         k = max(1, len(series))
         for i, s in enumerate(series):
@@ -421,16 +430,17 @@ class Tools:
             else:
                 ax.bar([xi + i / k * 0.8 - 0.4 + 0.4 / k for xi in x[:len(vals)]], vals, width=0.8 / k, color=palette[i % 6], label=s["name"])
         if kind == "barh":
-            ax.set_yticks([xi + 0.4 - 0.4 / k for xi in x]); ax.set_yticklabels(labels, fontsize=8)
+            ax.set_yticks([xi + 0.4 - 0.4 / k for xi in x]); ax.set_yticklabels(labels, fontsize=9.5)
             if currency: ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"${v:,.0f}"))
         else:
-            ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=8, rotation=0 if len(labels) <= 8 else 45, ha="center" if len(labels) <= 8 else "right")
+            ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=9.5, rotation=0 if len(labels) <= 6 else 45, ha="center" if len(labels) <= 6 else "right")
             if currency: ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"${v:,.0f}"))
-        ax.set_title(title, fontsize=11, loc="left", fontweight="bold")
+        ax.set_title(title, fontsize=12, loc="left", fontweight="bold")
+        ax.tick_params(axis="both", labelsize=9.5)
         if y_label: ax.set_ylabel(y_label, fontsize=9)
         for sp in ("top", "right"): ax.spines[sp].set_visible(False)
         ax.grid(axis="x" if kind == "barh" else "y", color="#eee"); ax.set_axisbelow(True)
-        if len(series) > 1: ax.legend(fontsize=8, frameon=False)
+        if len(series) > 1: ax.legend(fontsize=9.5, frameon=False)
         fig.tight_layout()
         buf = io.BytesIO(); fig.savefig(buf, format="png"); plt.close(fig)
         self.images.append("data:image/png;base64," + base64.b64encode(buf.getvalue()).decode())
