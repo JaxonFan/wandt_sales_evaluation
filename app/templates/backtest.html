@@ -10,6 +10,7 @@
   .mchip small{font-weight:500;font-size:10.5px;color:var(--muted);margin-top:1px}
   .mchip:hover{border-color:var(--accent);color:var(--accent-2)} .mchip.on{background:var(--ink);border-color:var(--ink);color:#fff} .mchip.on small{color:#b9c2bd}
   .navhint{flex-basis:100%;font-size:12px;color:var(--muted);padding:2px 4px 0}
+  .chdiv{color:var(--line-2);font-size:28px;line-height:1;padding:0 2px;align-self:center}
   /* pay cell + audit button */
   .paycell form{display:inline}
   .paybtn{background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:700;box-shadow:var(--shadow);white-space:nowrap}
@@ -126,13 +127,13 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
 <div class="card monthnav" id="monthnav">
   <a class="arrow {{ 'dis' if not nav.prev }}" href="{{ '/?m=' ~ nav.prev if nav.prev else 'javascript:void(0)' }}" title="Previous month (←)">‹</a>
   <div class="strip" id="strip">
-    {% for mo in months %}<a href="/?m={{ mo }}" class="mchip {{ 'on' if mo==m }}">{{ mo[5:] | int | month_name }}<small>{{ mo[:4] }}</small></a>{% endfor %}
+    {% for mo in months %}{% if mo in chapter_starts and not loop.first %}<span class="chdiv" title="a new cycle starts here">│</span>{% endif %}<a href="/?m={{ mo }}" class="mchip {{ 'on' if mo==m }}">{{ mo[5:] | int | month_name }}<small>{{ mo[:4] }}</small></a>{% endfor %}
   </div>
   <select class="psel" onchange="location.href='/?m='+this.value" title="Jump to a month">
     {% for mo in months %}<option value="{{ mo }}" {{ 'selected' if mo==m }}>{{ mo }}</option>{% endfor %}
   </select>
   <a class="arrow {{ 'dis' if not nav.next }}" href="{{ '/?m=' ~ nav.next if nav.next else 'javascript:void(0)' }}" title="Next month (→)">›</a>
-  <div class="navhint">{% if growth_active %}Cycle {{ months[0] }} → {{ months[-1] }}{% else %}{{ months[0] }} → {{ months[-1] }} · contribution only{% endif %} · <b>Swipe or drag the table</b> left/right, press <b>← →</b>, or click a month — open rows stay open</div>
+  <div class="navhint">{% if growth_active %}Cycle {{ chapter_months[0] }} → {{ chapter_months[-1] }}{% else %}{{ chapter_months[0] }} → {{ chapter_months[-1] }} · contribution only{% endif %}{% if chapter_closed %} · <b>closed chapter</b> — its unpaid money rolls into the latest month{% endif %} · <b>Swipe or drag the table</b> left/right, press <b>← →</b>, or click a month — open rows stay open</div>
 </div>
 
 {% if growth_active and team_rows %}
@@ -160,7 +161,7 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
 <div class="card" id="paycard">
   <h2>Pay — {{ m }}</h2>
   {% if not growth_active %}
-  <p class="hint"><b>{{ months[0] }} → {{ months[-1] }} is contribution only</b> — line items × rate. The
+  <p class="hint"><b>{{ chapter_months[0] }} → {{ chapter_months[-1] }} is contribution only</b> — line items × rate. The
     <b>Growth share</b> and <b>New accounts</b> columns are here but empty until {{ growth_start.strftime('%B %-d, %Y') }}.
     Pay follows <b>collection</b>: what's owed is earned × the share of that rep's billing the customers have paid,
     minus what's already been paid.</p>

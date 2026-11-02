@@ -127,8 +127,16 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
     user = _guard(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    r = service.run_cumulative_growth(db, with_comparison=False)   # window = fiscal_start_month -> data end
-    months = r["months"]
+    r = service.run_cumulative_growth(db, with_comparison=False)   # the CURRENT cycle (team growth lives here)
+    cycle_months = r["months"]
+    # the month strip spans EVERY chapter — a closed chapter is still readable (read-only), its money still on
+    # the ledger. Per-month pay numbers come from the ledger, which covers all chapters alike.
+    chapters = service.pay_chapters(db)
+    chapter_of = {}
+    for ch in chapters:
+        for mm in pd.period_range(ch["start"].to_period("M"), ch["end"].to_period("M"), freq="M"):
+            chapter_of[str(mm)] = ch
+    months = sorted(chapter_of)
     if not months:
         return templates.TemplateResponse("backtest.html", {"request": request, "user": user, "months": [],
                                                             "rows": [], "m": None, "nav": {}, "rate": 0,
@@ -136,25 +144,23 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
     if m not in months:
         m = months[-1]
     mi = months.index(m)
-    s = service.get_settings(db)
+    ch_m = chapter_of[m]
+    in_cycle = m in cycle_months
+    ci = cycle_months.index(m) if in_cycle else None
     _, _, team = service.attribution_maps(db)
-    growth_active = r.get("growth_active", True)
-    contrib = contribution_by_rep_month(db, months, team, float(s["item_rate"]))
-    # Before growth_start the program is CONTRIBUTION ONLY — no growth, no landing bonuses (an account that
-    # lands now still gets reviewed on the New accounts tab and pays once the growth cycle opens).
-    acq_pay = acquisition_by_rep_month(db, months, team, s)[0] if growth_active else {}
-
-    thru = months[:mi + 1]
+    growth_active = bool(ch_m["growth_active"])
+    chapter_months = [mm for mm in months if chapter_of[mm] is ch_m]
     # PAY is a live, whole-program number, not a per-month one: the ledger keeps every chapter open until it
     # is fully collected AND fully paid, so money earned in a closed chapter still releases here.
     ledger = service.pay_ledger(db)
+    lm = {rep: {row["month"]: row for row in rows_} for rep, rows_ in ledger["months"].items()}
 
     # GROWTH is earned by the TEAM (the accounts it owns) and split equally; CONTRIBUTION and ACQUISITION
     # stay individual. So there are two views: the team's growth, then each rep's own pay line.
     team_rows = []
-    for _, x in r.get("teams", pd.DataFrame()).iterrows():
+    for _, x in (r.get("teams", pd.DataFrame()).iterrows() if in_cycle else []):
         tname = x["team"]
-        t = r["trajectory"][tname][mi]
+        t = r["trajectory"][tname][ci]
         team_rows.append(dict(
             team=tname, members=r["team_members"].get(tname, []), n_accounts=int(x["n_accounts"]),
             profit_mo=float(t["ty_book"]), profit_mo_ly=float(t["ly_book"]),
@@ -167,24 +173,24 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
     primary = service.team_of_rep(db)
     rep_team = {rep: primary.get(rep) for rep in team}
     members_of = {t: len(ms) for t, ms in r.get("team_members", {}).items()}
-    rep_parts = {row["associate"]: row.get("teams", [row["team"]]) for _, row in r["reps"].iterrows()} if len(r["reps"]) else {}
-    zero = dict(pay=0.0, cum_pay=0.0)
+    rep_parts = ({row["associate"]: row.get("teams", [row["team"]]) for _, row in r["reps"].iterrows()}
+                 if (in_cycle and len(r["reps"])) else {})
     rows = []
     for rep in team:
-        t = r.get("rep_trajectory", {}).get(rep, [zero] * len(months))[mi]
+        row_m = lm.get(rep, {}).get(m, {})
         x = dict(team=rep_team.get(rep), members=members_of.get(rep_team.get(rep), 1), parts=rep_parts.get(rep, []))
-        c = contrib.get((rep, m), dict(n_items=0, bonus=0.0))
-        a_mo = acq_pay.get((rep, m), 0.0)
-        growth_cycle = float(t["cum_pay"])                                              # through selected month
-        contrib_cycle = sum(contrib.get((rep, mm), {}).get("bonus", 0.0) for mm in thru)
-        acq_cycle = sum(v for (rp, mmn), v in acq_pay.items() if rp == rep and mmn in thru)
+        growth_mo = float(row_m.get("growth", 0.0)); contrib_mo = float(row_m.get("contribution", 0.0))
+        a_mo = float(row_m.get("acquisition", 0.0))
+        thru = [mm for mm in chapter_months if mm <= m]
+        earned_cycle = sum(float(lm.get(rep, {}).get(mm, {}).get("earned", 0.0)) for mm in thru)
+        growth_cycle = sum(float(lm.get(rep, {}).get(mm, {}).get("growth", 0.0)) for mm in thru)
         tot = ledger["totals"].get(rep, {})
         rows.append(dict(
             associate=rep, team=x["team"], members=int(x["members"] or 1), parts=x["parts"],
-            pay_mo=float(t["pay"]), cum_pay=growth_cycle,
-            n_items=c["n_items"], contrib_mo=c["bonus"], acq_mo=a_mo,
-            total_mo=float(t["pay"]) + c["bonus"] + a_mo,
-            earned_cycle=growth_cycle + contrib_cycle + acq_cycle,
+            pay_mo=growth_mo, cum_pay=growth_cycle,
+            n_items=int(row_m.get("n_items", 0)), contrib_mo=contrib_mo, acq_mo=a_mo,
+            total_mo=growth_mo + contrib_mo + a_mo,
+            earned_cycle=earned_cycle,
             earned_all=tot.get("earned", 0.0),
             collected_pct=(100.0 * tot.get("collectable", 0.0) / tot["earned"]) if tot.get("earned") else 0.0,
             paid=tot.get("paid", 0.0), payable_now=tot.get("owed", 0.0),
@@ -250,10 +256,12 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
         "rows": rows, "groups": groups, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
+        "chapter_months": chapter_months, "chapter_label": ch_m["label"], "in_cycle": in_cycle,
+        "chapter_starts": {mm for mm in months if mm == min(mx for mx in months if chapter_of[mx] is chapter_of[mm])},
         "colors": colors,
         "open_set": {x for x in open.split(",") if x},   # reps whose row is rendered already expanded
         "unassigned": service.unassigned_summary(db),
-        "is_latest": is_latest, "growth_active": growth_active,
+        "is_latest": is_latest, "growth_active": growth_active, "chapter_closed": bool(ch_m["closed"]),
         "ledger": ledger, "payments": [
             dict(associate=p.associate, chapter=str(p.fiscal_start), paid=float(p.paid_cum or 0.0),
                  by={u.user_id: u.username for u in db.query(M.User).all()}.get(p.user_id, "—"),
@@ -956,26 +964,24 @@ def me(request: Request, lang: str = "zh", db: Session = Depends(get_db)):
             "request": request, "user": user, "page": "me", "lang": lang, "name": name,
             "months": [], "traj": [], "accounts": [], "k": {}, "my_team": my_team, "members": [],
             "growth_active": r.get("growth_active", True), "growth_start": r["growth_start"]})
-    s = service.get_settings(db)
     _, _, team = service.attribution_maps(db)
     growth_active = r.get("growth_active", True)
-    contrib = contribution_by_rep_month(db, months, team, float(s["item_rate"]))
-    acq_pay = acquisition_by_rep_month(db, months, team, s)[0] if growth_active else {}
     # growth numbers are the TEAM's; the rep's share of the pay is an equal split. ty/ly/gap columns show the
     # team's book so the rep can see what the share was earned on.
     members = r.get("team_members", {}).get(my_team, [])
     team_traj = r["trajectory"].get(my_team) if my_team else None
     my_traj = r.get("rep_trajectory", {}).get(name)
+    # every ledger month (all chapters), oldest first; team book figures only for months in the current cycle
+    ledger_rows = sorted(service.pay_ledger(db)["months"].get(name, []), key=lambda x: x["month"])
     traj = []
-    for i, mm in enumerate(months):
-        t = team_traj[i] if team_traj else dict(ty_book=0.0, ly_book=0.0, cum_growth=0.0)
-        my_pay = float(my_traj[i]["pay"]) if my_traj else 0.0
-        c = contrib.get((name, mm), dict(n_items=0, bonus=0.0))
-        a_mo = acq_pay.get((name, mm), 0.0)
+    for row in ledger_rows:
+        mm = row["month"]
+        i = months.index(mm) if mm in months else None
+        t = team_traj[i] if (team_traj and i is not None) else dict(ty_book=0.0, ly_book=0.0, cum_growth=0.0)
         traj.append(dict(month=mm, ty=float(t["ty_book"]), ly=float(t["ly_book"]),
                          gap=float(t["ty_book"]) - float(t["ly_book"]), cum=float(t["cum_growth"]),
-                         pay=my_pay, n_items=c["n_items"], contrib=c["bonus"], acq=a_mo,
-                         total=my_pay + c["bonus"] + a_mo))
+                         pay=float(row["growth"]), n_items=int(row["n_items"]), contrib=float(row["contribution"]),
+                         acq=float(row["acquisition"]), total=float(row["earned"])))
     # the rep's month-by-month pay picture is the SAME ledger the manager pays from (collected / released /
     # paid / owed per month), so a payment recorded on the dashboard shows up here on the next load
     ledger_months = {mm["month"]: mm for mm in service.pay_ledger(db)["months"].get(name, [])}

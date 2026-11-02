@@ -148,3 +148,22 @@ def test_assignment_pin_and_unpin_via_json(web):
     body = rows("Team 1")
     assert "ACCT1" in body and 'class="pin"' not in body
     assert client.post("/accounts/assign.json", json={"account": "ACCT1", "team": "Team 9"}).status_code == 400
+
+
+def test_month_strip_spans_closed_chapters_after_a_rollover():
+    """October opens a new cycle: the strip still offers Aug and Sep (read-only), Oct carries the pay button."""
+    client, _ = build(october=True)
+    try:
+        login(client)
+        html = client.get("/?m=2026-10").text
+        chips = re.findall(r'class="mchip[^"]*">(\w+)<small>', html)
+        assert chips == ["Aug", "Sep", "Oct"] and 'class="chdiv"' in html          # divider where the cycle starts
+        assert 'class="paybtn"' in html                                            # latest month pays
+        sep = client.get("/?m=2026-09").text
+        assert 'class="paybtn"' not in sep and "closed chapter" in sep             # past chapter: read-only
+        th, td, tf, labels = _pay_table(sep)
+        assert th == td == tf and "Earned Sep" in labels
+        rep_page = client.post("/login", data={"username": "an", "password": "pw"}) and client.get("/me?lang=en").text
+        assert "2026-08" in rep_page and "2026-10" in rep_page                    # the rep sees every month too
+    finally:
+        teardown()
