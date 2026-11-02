@@ -12,7 +12,7 @@
   .pick label{cursor:pointer;border:1px dashed #b9b3d0;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--purple);background:var(--accent-soft);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pick label.has{border-style:solid;color:var(--ink);background:#fff}
   .pick button{white-space:nowrap}
-  .msg{margin:0 0 14px}
+  .msg{margin:0 0 14px} .msg.warn{background:#FBEEE2;color:#8a4a1b;border:1px solid #f1d2b8;font-weight:600}
   details.how{margin-top:16px;font-size:12.5px;color:var(--muted)} details.how summary{cursor:pointer;color:var(--blue)}
   details.how ul{margin:8px 0 0 18px;line-height:1.6}
 </style>
@@ -20,7 +20,7 @@
   <h2>Import — the monthly data drop</h2>
   <p class="hint">Three exports from Dynamics GP. Drop each one in its box; re-uploading is always safe.</p>
   {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
-  {% if ar_msg %}<div class="msg">{{ ar_msg }}</div>{% endif %}
+  {% if ar_msg %}<div class="msg {{ 'warn' if 'WARNING' in ar_msg }}">{{ ar_msg }}</div>{% endif %}
   {% if void_msg %}<div class="msg">{{ void_msg }}</div>{% endif %}
 
   <div class="drops">

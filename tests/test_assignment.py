@@ -146,3 +146,24 @@ def test_assistant_product_tools_aggregate_lines():
         assert rep["rep"] == "An Cao" and set(rep["sellers_revenue"]) == {"An Cao"}
     finally:
         s.close(); teardown()
+
+
+def test_paid_file_that_skips_older_months_is_called_out():
+    """A paid report filtered to the newest month must not silently leave older collections un-recorded."""
+    from webfix import build, teardown
+    _, Session = build(october=True)
+    s = Session()
+    try:
+        s.query(M.CollectedInvoice).delete(); s.commit(); service._LINES_CACHE.clear(); service._ENGINE_CACHE.clear()
+        oct_sops = [r.sop_number for r in s.query(M.SalesLine).filter(M.SalesLine.document_date >= "2026-10-01").distinct()]
+        res = service.apply_collected_upload(s, pd.DataFrame({"Document Number": oct_sops}))
+        assert res["file_months"] == ["2026-10"]
+        assert res["untouched"][0] <= "2026-08" and res["untouched"][-1] == "2026-09" and res["untouched_unpaid"] > 0
+        msg = service.collected_upload_message(res)
+        assert "WARNING" in msg and "2026-09" in msg
+        # a cumulative file (everything) raises no warning
+        all_sops = [r.sop_number for r in s.query(M.SalesLine.sop_number).distinct()]
+        res2 = service.apply_collected_upload(s, pd.DataFrame({"Document Number": all_sops}))
+        assert res2["untouched"] == [] and "WARNING" not in service.collected_upload_message(res2)
+    finally:
+        s.close(); teardown()

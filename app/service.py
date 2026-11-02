@@ -132,6 +132,18 @@ def apply_collected_upload(db, raw):
         if missing and len(held) - len(missing) >= PAID_FULL_MONTH_PCT * len(held):
             reversed_invoices |= missing
     added = collected - existing
+    # COVERAGE CHECK: which invoice-months does this file actually speak for, and which months still have
+    # unpaid invoices the file never mentions? A paid report filtered to one month of invoices silently
+    # leaves older collections un-recorded — the manager must know, in words.
+    file_months = sorted({(invoice_date[s].year, invoice_date[s].month) for s in collected if invoice_date.get(s)})
+    newest = max(file_months) if file_months else None
+    all_sops = set(invoice_date)
+    unpaid_by_month = {}
+    for sop in all_sops - collected - existing:
+        d = invoice_date[sop]
+        unpaid_by_month.setdefault((d.year, d.month), 0)
+        unpaid_by_month[(d.year, d.month)] += 1
+    untouched = sorted(m for m, n in unpaid_by_month.items() if newest and m < newest and m not in set(file_months) and n > 0)
     if reversed_invoices:
         db.query(M.CollectedInvoice).filter(M.CollectedInvoice.sop_number.in_(reversed_invoices)) \
             .delete(synchronize_session=False)
@@ -141,16 +153,24 @@ def apply_collected_upload(db, raw):
     db.commit()
     _ENGINE_CACHE.clear()
     return dict(in_file=len(collected), added=len(added), reversed=len(reversed_invoices),
-                total=len(existing) + len(added) - len(reversed_invoices))
+                total=len(existing) + len(added) - len(reversed_invoices),
+                file_months=[f"{y}-{m:02d}" for y, m in file_months],
+                untouched=[f"{y}-{m:02d}" for y, m in untouched],
+                untouched_unpaid=sum(unpaid_by_month.get(m, 0) for m in untouched))
 
 
 def collected_upload_message(res):
-    """One plain sentence telling the manager what a paid upload did."""
-    msg = (f"Read {res['in_file']:,} paid invoices: {res['added']:,} new, "
-           f"{res['in_file'] - res['added']:,} already recorded")
-    if res["reversed"]:
-        msg += f", {res['reversed']:,} reversed (no longer paid) and removed"
-    return msg + f". Collected invoices on file now: {res['total']:,}."
+    msg = (f"Paid file: {res['in_file']:,} invoices; {res['added']:,} newly marked collected, "
+           f"{res['reversed']:,} reversed; {res['total']:,} collected on file.")
+    if res.get("file_months"):
+        fm = res["file_months"]
+        msg += f" The file covers invoices dated {fm[0]} → {fm[-1]}."
+    if res.get("untouched"):
+        u = res["untouched"]
+        msg += (f" WARNING: it contains no invoices from {u[0]} → {u[-1]}, where {res['untouched_unpaid']:,} invoices "
+                f"are still unpaid — those months were left exactly as they were. If customers have paid any of "
+                f"them, upload a paid report that covers all invoices to date (June onward), not just the newest month.")
+    return msg
 
 
 def import_sales_frame(db, raw):
