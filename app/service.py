@@ -152,24 +152,30 @@ def apply_collected_upload(db, raw):
         db.add(M.CollectedInvoice(sop_number=sop, reported_at=now))
     db.commit()
     _ENGINE_CACHE.clear()
+    unmatched = sorted(collected - all_sops)          # numbers in the paid file that are not a sales invoice we hold
     return dict(in_file=len(collected), added=len(added), reversed=len(reversed_invoices),
                 total=len(existing) + len(added) - len(reversed_invoices),
+                matched=len(collected & all_sops), unmatched=len(unmatched), unmatched_sample=unmatched[:6],
                 file_months=[f"{y}-{m:02d}" for y, m in file_months],
                 untouched=[f"{y}-{m:02d}" for y, m in untouched],
                 untouched_unpaid=sum(unpaid_by_month.get(m, 0) for m in untouched))
 
 
 def collected_upload_message(res):
-    msg = (f"Paid file: {res['in_file']:,} invoices; {res['added']:,} newly marked collected, "
-           f"{res['reversed']:,} reversed; {res['total']:,} collected on file.")
+    msg = (f"Paid file: {res['in_file']:,} numbers, {res.get('matched', 0):,} matched a sales invoice; "
+           f"{res['added']:,} newly marked collected, {res['reversed']:,} reversed; {res['total']:,} collected on file.")
+    if res.get("unmatched"):
+        msg += (f" {res['unmatched']:,} numbers matched nothing (e.g. {', '.join(res['unmatched_sample'])}) — "
+                f"payments, credits and fees are expected here; invoice numbers in a different format are not.")
     if res.get("file_months"):
         fm = res["file_months"]
-        msg += f" The file covers invoices dated {fm[0]} → {fm[-1]}."
+        msg += f" The matched invoices are dated {fm[0]} → {fm[-1]}."
     if res.get("untouched"):
         u = res["untouched"]
-        msg += (f" WARNING: it contains no invoices from {u[0]} → {u[-1]}, where {res['untouched_unpaid']:,} invoices "
-                f"are still unpaid — those months were left exactly as they were. If customers have paid any of "
-                f"them, upload a paid report that covers all invoices to date (June onward), not just the newest month.")
+        msg += (f" WARNING: the file has no invoices from {u[0]} → {u[-1]}, where {res['untouched_unpaid']:,} invoices "
+                f"are still unpaid — those months were left exactly as they were. If customers paid any of them, "
+                f"the paid report must list those invoices too (a monthly report by payment date or a cumulative "
+                f"one both work — what matters is that older invoices are in it).")
     return msg
 
 
