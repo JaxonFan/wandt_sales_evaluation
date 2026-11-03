@@ -258,6 +258,7 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
         "rows": rows, "groups": groups, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
+        "shared_row": next((t for t in team_rows if t["shared"]), None),   # the shared book, as a group in the pay table
         "chapter_months": chapter_months, "chapter_label": ch_m["label"], "in_cycle": in_cycle,
         "chapter_starts": {mm for mm in months if mm == min(mx for mx in months if chapter_of[mx] is chapter_of[mm])},
         "colors": colors,

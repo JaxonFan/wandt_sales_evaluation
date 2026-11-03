@@ -30,6 +30,7 @@
   tfoot th{font-size:15px;padding:12px 10px;background:var(--paper);text-transform:none;letter-spacing:0}
   tr.grp > td{font-size:13px;padding:7px 10px;border-top:2px solid #fff}
   tr.grp.t1 > td{background:#efe9fb;color:#3b2a6e} tr.grp.t2 > td{background:#e6f0fb;color:#1e3f66} tr.grp.house > td{background:#f0f0f0;color:#444}
+  tr.grp.shared > td{background:#FBF3EC;color:#6e3d14;border-left:3px solid #C0682B} tr.grp.shared a{color:#8a4a1b}
   tr.rep.t1 > td:first-child{box-shadow:inset 4px 0 0 var(--accent)} tr.rep.t2 > td:first-child{box-shadow:inset 4px 0 0 var(--blue)} tr.rep.house > td:first-child{box-shadow:inset 4px 0 0 #9a9a9a}
   tr.rep{cursor:pointer} tr.rep:hover > td{background:#fafafc}
   .tg{display:inline-block;width:14px;color:var(--muted);font-size:12px;margin-right:4px;transition:transform .15s}
@@ -300,6 +301,16 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
       </td></tr>
       {% endfor %}
     {% endfor %}
+    {% if shared_row %}
+      <tr class="grp shared"><td colspan="{{ ncol }}">
+        <b><a href="/team/{{ shared_row.team }}?m={{ m }}" style="text-decoration:none">Shared</a></b>
+        <span class="mut"> · {{ shared_row.n_accounts }} accounts no team owns at the bar · pays nobody</span>
+        <span class="mut" style="float:right">book ${{ '{:,.0f}'.format(shared_row.profit_mo) }} vs ${{ '{:,.0f}'.format(shared_row.profit_mo_ly) }} last year →
+          <span class="{{ 'neg' if shared_row.gap_mo < 0 else ('pos' if shared_row.gap_mo > 0 else 'mut') }}"><b>{{ '−$' + '{:,.0f}'.format(-shared_row.gap_mo) if shared_row.gap_mo < 0 else '+$' + '{:,.0f}'.format(shared_row.gap_mo) }}</b></span>
+          · cumulative <b>{{ '−$' + '{:,.0f}'.format(-shared_row.cum_gap) if shared_row.cum_gap < 0 else '$' + '{:,.0f}'.format(shared_row.cum_gap) }}</b>
+          · <a href="/team/{{ shared_row.team }}?m={{ m }}">accounts</a> · <a href="/accounts?view=shared">assignment</a></span>
+      </td></tr>
+    {% endif %}
     </tbody>
     {% if rows %}
     <tfoot><tr>

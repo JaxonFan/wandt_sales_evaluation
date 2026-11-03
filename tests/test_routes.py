@@ -179,6 +179,10 @@ def test_shared_book_shows_on_the_dashboard_and_pays_nobody():
         card = re.search(r'<a href="/team/Shared\?m=[^"]+"[^>]*><b>Shared</b></a>(.*?)</div>\s*</div>', html, re.S)
         assert card and "pays nobody" in card.group(0) and "1 accounts" in card.group(0)
         assert "assign them" not in html and "Needs assignment" not in html
+        pay = html[html.index("<h2>Pay —"):]
+        assert 'class="grp shared"' in pay and "1 accounts no team owns" in pay and "+$180" in pay
+        # the row belongs to the OUTER pay table: after the last rep's row, before the totals footer
+        assert pay.rindex('class="rep ') < pay.index('class="grp shared"') < pay.index("<tfoot>")
         drill = client.get("/team/Shared").text
         assert "SPLIT" in drill and "no growth pay" in drill and "split equally" not in drill
         acc = client.get("/accounts").text
