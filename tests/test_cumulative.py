@@ -219,8 +219,22 @@ def test_unassigned_account_earns_nothing_for_anyone():
     lines = (mk("SHARED", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
              + mk("SHARED", "Rep A", "X", FISCAL, AS_OF, 7, 135, 100))
     res = run_teams(df_from(lines), {})                       # no team owns it
-    assert acct(res, "SHARED") is None
     assert all(team_row(res, t)["earned"] == pytest.approx(0.0) for t in TEAMS)
+    assert all(r["pay"] == 0 for r in res["rep_trajectory"].get("Rep A", []))
+    # ...but the shared book is TRACKED under its own label so the manager can watch it: growth yes, pay no
+    assert res["shared_name"] == engine.SHARED_TEAM == "Shared"
+    assert acct(res, "SHARED")["holder"] == "Shared"
+    shared = team_row(res, "Shared")
+    assert shared["cum_growth"] > 0 and shared["earned"] == pytest.approx(0.0)
+    assert all(r["pay"] == 0 for r in res["trajectory"]["Shared"])
+    assert "Shared" not in res["team_members"]               # it is not a team: nobody is on it
+
+
+def test_shared_label_absent_when_every_account_is_owned():
+    lines = (mk("G", "Rep A", "X", HIST, FISCAL - DAY, 7, 105, 100)
+             + mk("G", "Rep A", "X", FISCAL, AS_OF, 7, 125, 100))
+    res = run_teams(df_from(lines), {"G": "Team 1"})
+    assert "Shared" not in res["trajectory"] and not len(res["teams"][res["teams"]["team"] == "Shared"])
 
 
 def test_team_pay_splits_equally_among_members():

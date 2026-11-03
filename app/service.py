@@ -829,15 +829,6 @@ def underperforming_accounts(db):
                   months, min_profit, n_bands), _compute)
 
 
-def unassigned_summary(db):
-    """How much book is sitting in accounts no team owns yet — the nudge to the Accounts tab (they earn
-    nothing for anyone until the manager assigns them)."""
-    rows = [r for r in account_assignments(db) if r["shared"]]
-    return dict(n=len(rows), profit=sum(r["profit"] for r in rows),
-                top=[dict(account=r["account"], customer=r["customer"], profit=r["profit"],
-                          shares=r["shares"]) for r in rows[:5]])
-
-
 def account_team_map(db):
     """{account: team} for accounts a team owns (unassigned accounts are simply absent)."""
     return {r["account"]: r["team"] for r in account_assignments(db) if r["team"]}

@@ -106,7 +106,7 @@
       <h2><span class="n">6</span>每月流程</h2>
       <ol class="steps">
         <li>从 GP 导出三个文件，在 <a href="/upload">Import</a> 逐个导入：销售发票、已收款、作废发票。</li>
-        <li>打开 <a href="/accounts">Accounts</a>，把「Needs assignment」里的共有客户拖到小组（不指定就没人拿增长奖）。</li>
+        <li>看 <a href="/accounts">Accounts</a>：共有客户（Shared）没人拿增长奖，这是正常的，首页会单独显示共有客户的表现；只有确实属于某个小组或个人的，才拖过去。</li>
         <li>看 <a href="/acquisitions">New accounts</a>，标注 rep-won / house。</li>
         <li>看 <a href="/underperformers">Falling behind</a> 和 <a href="/quiet">Quiet accounts</a>，安排跟进。</li>
         <li>回到 <a href="/">Dashboard</a>，核对每个人的 Pay now（点开行看发票），然后点 Pay 记录发放。</li>
@@ -170,7 +170,7 @@
         <li><b>House</b>: managers plus the house accounts (First Choice, Enson, the walk-in CASH &amp; CARRY) — earns no growth.</li></ul>
       <h3>Who owns an account</h3>
       <ul><li>The team that wrote <b>{{ '%.0f'|format(pct) }}% or more of its orders</b> over the last <b>{{ window_months }} months</b> — counted in <b>orders</b>, not dollars.</li>
-        <li>No team at the bar → the account is <b>shared</b>. Drag it onto a team on the <a href="/accounts">Accounts</a> page — <b>until you do, it pays nobody</b>. Your choice always beats the rule (shown as <i>pinned</i>).</li></ul>
+        <li>No team at the bar → the account is <b>shared</b>: it pays nobody, and it stays that way. The dashboard shows the shared book's growth as its own card so you can keep an eye on it. Assign a shared account on the <a href="/accounts">Accounts</a> page only when it really belongs to a team or a person; your choice always beats the rule (shown as <i>pinned</i>).</li></ul>
       <h3>The math</h3>
       <div class="formula">team net growth <span class="c">=</span> Σ over its accounts (profit this cycle − same account, same months last year)<br>
         target <span class="c">=</span> target% × the team's last-year profit on those accounts (default {{ '%.0f'|format(default_target*100) }}%, per team in <a href="/settings" style="color:#fff">Settings</a>)<br>
@@ -236,7 +236,7 @@
       <h2><span class="n">6</span>Monthly routine</h2>
       <ol class="steps">
         <li>Export the three files from GP and drop each into <a href="/upload">Import</a>: sales invoices, paid invoices, voided invoices.</li>
-        <li>Open <a href="/accounts">Accounts</a> and drag every "Needs assignment" account onto a team — unassigned accounts pay nobody.</li>
+        <li>Glance at <a href="/accounts">Accounts</a>: shared accounts pay nobody and need no action; assign one only if it really belongs to a team or a person.</li>
         <li>Review <a href="/acquisitions">New accounts</a>: rep-won or house.</li>
         <li>Check <a href="/underperformers">Falling behind</a> and <a href="/quiet">Quiet accounts</a> — who follows up.</li>
         <li>Back on the <a href="/">Dashboard</a>, open each rep's row to check Pay now against the invoices, then press Pay to record it.</li>

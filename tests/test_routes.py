@@ -167,3 +167,27 @@ def test_month_strip_spans_closed_chapters_after_a_rollover():
         assert "2026-08" in rep_page and "2026-10" in rep_page                    # the rep sees every month too
     finally:
         teardown()
+
+
+def test_shared_book_shows_on_the_dashboard_and_pays_nobody():
+    """Accounts no team owns at the bar stay shared: the dashboard carries a Shared card (growth tracked, no
+    pay), /team/Shared drills into it, and the Accounts tab calls them Shared — no "needs assignment" nag."""
+    client, Session = build(growth_live=True, shared=True)
+    try:
+        login(client)
+        html = client.get("/").text
+        card = re.search(r'<a href="/team/Shared\?m=[^"]+"[^>]*><b>Shared</b></a>(.*?)</div>\s*</div>', html, re.S)
+        assert card and "pays nobody" in card.group(0) and "1 accounts" in card.group(0)
+        assert "assign them" not in html and "Needs assignment" not in html
+        drill = client.get("/team/Shared").text
+        assert "SPLIT" in drill and "no growth pay" in drill and "split equally" not in drill
+        acc = client.get("/accounts").text
+        assert "Shared" in acc and "nothing to do" in acc and "Needs assignment" not in acc
+        # the shared account is tracked (growth measured) but earns nothing for anyone
+        from app import service
+        r = service.run_cumulative_growth(Session(), with_comparison=False)
+        shared = r["teams"][r["teams"]["team"] == "Shared"].iloc[0]
+        assert int(shared["n_accounts"]) == 1 and shared["cum_growth"] > 0 and shared["earned"] == 0
+        assert all(x["pay"] == 0 for x in r["trajectory"]["Shared"]) and "Shared" not in r["team_members"]
+    finally:
+        teardown()

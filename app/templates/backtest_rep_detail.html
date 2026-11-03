@@ -15,12 +15,15 @@
 
 <div class="card">
   <h2>{{ name }} — account by account, {{ m }}</h2>
-  <p class="hint">Every account <b>{{ name }}</b> ({{ members|join(', ') }}) owns: profit this month vs the
-    <b>same account, same month last year</b>. Sorted best-first — the top rows are carrying the book, the red
+  <p class="hint">{% if shared %}Every account <b>no team owns at the bar</b>: profit this month vs the
+    <b>same account, same month last year</b>. These accounts stay shared — they earn <b>no growth pay for
+    anyone</b> — but this is how the shared book is doing, so you can watch it like a team's.
+    {% else %}Every account <b>{{ name }}</b> ({{ members|join(', ') }}) owns: profit this month vs the
+    <b>same account, same month last year</b>.{% endif %} Sorted best-first — the top rows are carrying the book, the red
     rows at the bottom are dragging it. <b>Cycle gap</b> = that account's running net vs last year (cycle to
-    date). This month the team earned <b>${{ '{:,.0f}'.format(pay_mo) }}</b> growth
+    date).{% if not shared %} This month the team earned <b>${{ '{:,.0f}'.format(pay_mo) }}</b> growth
     (cycle to date ${{ '{:,.0f}'.format(cum_pay) }}) — <b>${{ '{:,.0f}'.format(share_each) }}</b> each this
-    month, split equally.</p>
+    month, split equally.{% endif %}</p>
   <table>
     <thead><tr><th>Customer</th>
       <th class="num">This month</th><th class="num">Same month last yr</th>

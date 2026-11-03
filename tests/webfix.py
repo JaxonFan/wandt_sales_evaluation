@@ -17,9 +17,10 @@ from app.growth_main import app
 ITEM_RATE = 0.10
 
 
-def build(growth_live=False, october=False):
+def build(growth_live=False, october=False, shared=False):
     """Returns (client, SessionLocal). growth_live=True pins growth_start before the data so the growth
-    columns are active; october=True adds an October invoice so the cycle rolls into a second chapter."""
+    columns are active; october=True adds an October invoice so the cycle rolls into a second chapter;
+    shared=True adds an account An Cao and Garmi Mei split evenly, so no team reaches the 80% bar."""
     eng = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(eng)
     Session = sessionmaker(bind=eng)
@@ -65,6 +66,12 @@ def build(growth_live=False, october=False):
     inv("Garmi Mei", "GM", "ACCT2", "2026-09-11", 10)
     if october:
         inv("An Cao", "AN", "ACCT1", "2026-10-06", 3)
+    if shared:
+        for mo in range(10, 22):                              # Oct 2025 .. Sep 2026: one order from EACH team
+            y, m = (2025, mo) if mo <= 12 else (2026, mo - 12)
+            price = 150.0 if y == 2026 and m >= 8 else 100.0   # grows in the cycle, so the shared book has a gap
+            inv("An Cao", "AN", "SPLIT", f"{y}-{m:02d}-15", 2, price=price)
+            inv("Garmi Mei", "GM", "SPLIT", f"{y}-{m:02d}-16", 2, price=price)
     # a DORMANT account: ordered in 2024 only. Ownership must expire, pages must not choke on it.
     inv("An Cao", "AN", "GHOST", "2024-11-05", 2)
     inv("An Cao", "AN", "GHOST", "2024-12-05", 2)

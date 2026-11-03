@@ -13,8 +13,12 @@ Expected DataFrame columns (snake_case):
   item_number  [, customer_name]
 """
 from __future__ import annotations
+
 import numpy as np
 import pandas as pd
+
+SHARED_TEAM = "Shared"   # growth-tracking label for accounts no team owns at the bar; pays nobody
+_NOT_YET = object()      # an account absent from a month's ownership map: not ordering yet / expired
 
 
 def exclude_constrained_items(df, constrained_item_numbers):
@@ -587,6 +591,8 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
     account_team = account_team or {}
     owner_by_month = owner_by_month or {}
     earners = sorted(teams) if team_mode else sorted(team)
+    # TEAM MODE: accounts no team owns are tracked under SHARED_TEAM so the manager can watch that book's
+    # growth like a team's — but it pays nobody (no members, no pay), and it is never in `teams`.
 
     def tier(G, target):
         G = max(0.0, G)
@@ -628,9 +634,11 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
             continue
         if team_mode:
             # the owner each month: dated ownership if given, else the single static owner for every month
-            owners = [(owner_by_month.get(str(m), {}).get(acct) if owner_by_month else account_team.get(acct))
+            # dated ownership lists an account only in months it is ordering: absent -> not on anyone's book yet
+            # (or expired); present with no owner -> the Shared book; a house team (not an earner) -> nobody
+            owners = [(owner_by_month.get(str(m), {}).get(acct, _NOT_YET) if owner_by_month else account_team.get(acct))
                       for m in months]
-            owners = [o if o in teams else None for o in owners]   # unassigned / house -> nobody that month
+            owners = [o if o in teams else (SHARED_TEAM if o is None else None) for o in owners]
             if not any(owners):
                 continue
             primary = next((o for o in reversed(owners) if o), None)   # latest owner, for display
@@ -658,6 +666,8 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
                               mo_ty=mo_ty, mo_ly=mo_ly, owners=(owners if team_mode else None),
                               gap=cum[-1] if cum else 0.0, ty_profit=s_ty, ly_profit=s_ly)
 
+    if team_mode and any(SHARED_TEAM in v["owners"] for v in per_acct.values()):
+        earners.append(SHARED_TEAM)
     reps, trajectory = [], {}
     INF = float("inf")
     def weight(v, rep, i):
@@ -688,7 +698,7 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
             cum_ly += ly_book
             target = target_pct * max(0.0, cum_ly) if target_pct is not None else INF
             target_final = target
-            earned = tier(run_max, target)
+            earned = 0.0 if rep == SHARED_TEAM else tier(run_max, target)   # the shared book pays nobody
             pay = max(0.0, earned - cum_pay)                     # true-up: only new ground, never clawed back
             cum_pay += pay
             rows.append(dict(month=str(m), pay=pay, cum_pay=cum_pay, cum_growth=net_traj[i],
@@ -712,7 +722,8 @@ def compute_cumulative_growth(df, fiscal_start, as_of, sales_team, *, cumulative
         return out
     # TEAM MODE: what was computed above is per TEAM; split each team's pay EQUALLY among its members.
     out["teams"] = out["reps"].rename(columns={"associate": "team"})
-    out["earners"] = trajectory                                  # keyed by team
+    out["earners"] = trajectory                                  # keyed by team (+ SHARED_TEAM when it has accounts)
+    out["shared_name"] = SHARED_TEAM
     # the SPLIT uses each month's roster (dated memberships) — a person who joins in month 3 shares month 3 on,
     # and the people already there keep their larger shares of months 1-2
     rep_rows, rep_traj, memberships = [], {}, {}

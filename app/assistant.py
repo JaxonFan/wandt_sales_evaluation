@@ -92,7 +92,7 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}},
     {"name": "account", "description": "One account: owner team, order shares per team, monthly profit for the last 24 months, first order, who sells it.",
      "input_schema": {"type": "object", "properties": {"account": {"type": "string"}}, "required": ["account"]}},
-    {"name": "assignments", "description": "Account ownership: which team owns which account, the shared (unassigned) ones, pins. Filter by team name, 'shared', or a rep name.",
+    {"name": "assignments", "description": "Account ownership: which team owns which account, the shared ones (no team at the bar; they pay nobody and need no action), pins. Filter by team name, 'shared', or a rep name.",
      "input_schema": {"type": "object", "properties": {"view": {"type": "string"}, "n": {"type": "integer"}}}},
     {"name": "growth", "description": "Team growth this cycle: each team's book profit vs the same accounts last year, net gap, target, growth pay, and the accounts driving it (top gainers and losers).",
      "input_schema": {"type": "object", "properties": {"team": {"type": "string"}, "n": {"type": "integer"}}}},
@@ -259,7 +259,8 @@ class Tools:
             accts = [(a, v) for a, v in r["account_monthly"].items() if v["primary"] == t["team"]]
             accts.sort(key=lambda av: -av[1]["gap"])
             k = max(1, min(n or 5, 25))
-            out["teams"].append({"team": t["team"], "accounts": int(t["n_accounts"]), "cumulative_net_gap": _money(t["cum_growth"]),
+            out["teams"].append({"team": t["team"], **({"note": "shared book — accounts no team owns; tracked, pays nobody"} if t["team"] == r.get("shared_name") else {}),
+                                 "accounts": int(t["n_accounts"]), "cumulative_net_gap": _money(t["cum_growth"]),
                                  "target": (_money(t["target"]) if t["target"] is not None else None), "growth_pay_so_far": _money(t["earned"]),
                                  "top_gainers": [{"customer": names.get(a, a), "gap": _money(v["gap"])} for a, v in accts[:k]],
                                  "top_losers": [{"customer": names.get(a, a), "gap": _money(v["gap"])} for a, v in accts[-k:][::-1] if v["gap"] < 0]})

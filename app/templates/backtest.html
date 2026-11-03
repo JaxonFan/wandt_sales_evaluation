@@ -141,20 +141,19 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
   <h2>Team growth — {{ m }}</h2>
   <div>
   {% for t in team_rows %}
-    <div class="kpi" style="min-width:300px;padding:12px 16px">
-      <div class="label"><a href="/team/{{ t.team }}?m={{ m }}" style="text-decoration:none;color:var(--blue)"><b>{{ t.team }}</b></a> · {{ t.members|join(', ') }} · {{ t.n_accounts }} accounts</div>
+    <div class="kpi" style="min-width:300px;padding:12px 16px{% if t.shared %};border-style:dashed{% endif %}">
+      <div class="label"><a href="/team/{{ t.team }}?m={{ m }}" style="text-decoration:none;color:var(--blue)"><b>{{ t.team }}</b></a> · {% if t.shared %}no team at the bar · pays nobody{% else %}{{ t.members|join(', ') }}{% endif %} · {{ t.n_accounts }} accounts</div>
       <div style="margin-top:6px;font-size:13.5px;line-height:1.7">
         Book this month <b>${{ '{:,.0f}'.format(t.profit_mo) }}</b> vs <span class="mut">${{ '{:,.0f}'.format(t.profit_mo_ly) }}</span> last year
         → <span class="{{ 'neg' if t.gap_mo < 0 else ('pos' if t.gap_mo > 0 else 'mut') }}"><b>{{ '−$' + '{:,.0f}'.format(-t.gap_mo) if t.gap_mo < 0 else '+$' + '{:,.0f}'.format(t.gap_mo) }}</b></span><br>
         Cumulative <span class="{{ 'neg' if t.cum_gap < 0 else '' }}"><b>{{ '−$' + '{:,.0f}'.format(-t.cum_gap) if t.cum_gap < 0 else '$' + '{:,.0f}'.format(t.cum_gap) }}</b></span>
         {% if t.target %}· target ${{ '{:,.0f}'.format(t.target) }}{% endif %}<br>
-        Growth pay <b>${{ '{:,.0f}'.format(t.pay_mo) }}</b> this month · <b>${{ '{:,.0f}'.format(t.cum_pay) }}</b> so far, split equally
+        {% if t.shared %}Shared book — tracked so you can watch it; it earns no growth pay. <a href="/accounts?view=shared">See the accounts</a>
+        {% else %}Growth pay <b>${{ '{:,.0f}'.format(t.pay_mo) }}</b> this month · <b>${{ '{:,.0f}'.format(t.cum_pay) }}</b> so far, split equally{% endif %}
       </div>
     </div>
   {% endfor %}
   </div>
-  {% if unassigned.n %}<p class="hint" style="margin:6px 0 0"><b>{{ unassigned.n }} accounts (${{ '{:,.0f}'.format(unassigned.profit) }} profit)</b>
-    are not owned by any team and earn nothing — <a href="/accounts">assign them</a>.</p>{% endif %}
 </div>
 {% endif %}
 

@@ -158,11 +158,13 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
     # GROWTH is earned by the TEAM (the accounts it owns) and split equally; CONTRIBUTION and ACQUISITION
     # stay individual. So there are two views: the team's growth, then each rep's own pay line.
     team_rows = []
+    shared_name = r.get("shared_name")
     for _, x in (r.get("teams", pd.DataFrame()).iterrows() if in_cycle else []):
         tname = x["team"]
         t = r["trajectory"][tname][ci]
         team_rows.append(dict(
-            team=tname, members=r["team_members"].get(tname, []), n_accounts=int(x["n_accounts"]),
+            team=tname, shared=(tname == shared_name),
+            members=r["team_members"].get(tname, []), n_accounts=int(x["n_accounts"]),
             profit_mo=float(t["ty_book"]), profit_mo_ly=float(t["ly_book"]),
             gap_mo=float(t["ty_book"]) - float(t["ly_book"]), cum_gap=float(t["cum_growth"]),
             pay_mo=float(t["pay"]), cum_pay=float(t["cum_pay"]),
@@ -260,7 +262,6 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
         "chapter_starts": {mm for mm in months if mm == min(mx for mx in months if chapter_of[mx] is chapter_of[mm])},
         "colors": colors,
         "open_set": {x for x in open.split(",") if x},   # reps whose row is rendered already expanded
-        "unassigned": service.unassigned_summary(db),
         "is_latest": is_latest, "growth_active": growth_active, "chapter_closed": bool(ch_m["closed"]),
         "ledger": ledger, "payments": [
             dict(associate=p.associate, chapter=str(p.fiscal_start), paid=float(p.paid_cum or 0.0),
@@ -326,9 +327,10 @@ def team_detail(request: Request, team_name: str, m: str = None, db: Session = D
     tot = {k: sum(z[k] for z in rows) for k in ("ty_mo", "ly_mo", "gap_mo", "cum_gap")}
     t = r["trajectory"][team_name][mi]
     members = r["team_members"].get(team_name, [])
+    shared = (team_name == r.get("shared_name"))
     nav = dict(prev=(months[mi - 1] if mi > 0 else None), next=(months[mi + 1] if mi + 1 < len(months) else None))
     return templates.TemplateResponse("backtest_rep_detail.html", {
-        "request": request, "user": user, "page": "dash", "name": team_name, "members": members,
+        "request": request, "user": user, "page": "dash", "name": team_name, "members": members, "shared": shared,
         "m": m, "months": months, "nav": nav,
         "rows": rows, "tot": tot, "pay_mo": float(t["pay"]), "cum_pay": float(t["cum_pay"]),
         "share_each": (float(t["pay"]) / len(members)) if members else 0.0,
@@ -411,7 +413,7 @@ def accounts_page(request: Request, view: str = "shared", q: str = "", db: Sessi
     if q:
         needle = q.strip().lower()
         shown = [r for r in shown if needle in r["customer"].lower() or needle in r["account"].lower()]
-    tabs = [dict(key="shared", title="Needs assignment", team=None, css="shared", n=counts["shared"], sub=f"no team at {TEAM_OWNERSHIP_PCT*100:.0f}% — pays nobody")]
+    tabs = [dict(key="shared", title="Shared", team=None, css="shared", n=counts["shared"], sub=f"no team at {TEAM_OWNERSHIP_PCT*100:.0f}% — pays nobody; nothing to do")]
     for t in autos:
         tabs.append(dict(key=t, title=t, team=t, color=table[t]["color"], n=counts[t], sub=", ".join(table[t]["members"])))
     for t in extra:
