@@ -205,6 +205,11 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
     # it and what it still owes. A past month is read-only (whatever it still owes rolls forward and is paid
     # from the latest month, which is the only view with a pay button and the all-months total).
     is_latest = (mi == len(months) - 1)
+    # the shared book this month (accounts no team owns at the bar) — the Shared row's expansion, and the
+    # set that tags a rep's own invoices on shared accounts
+    shared_row = next((t for t in team_rows if t["shared"]), None)
+    shared_book = service.shared_book(db, m) if shared_row else None
+    shared_accts = {z["account"] for z in shared_book["rows"]} if shared_book else set()
     for x in rows:
         rep = x["associate"]
         detail = service.rep_pay_detail(db, rep, show="all") or dict(months=[])
@@ -223,6 +228,7 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
             # the newest 25 of EACH status, so the Missing / Collected filter always has something to show
             newest = cur["invoices"]
             keep = [i for i in newest if not i["paid"]][:25] + [i for i in newest if i["paid"]][:25]
+            keep = [dict(i, shared=(i.get("account") in shared_accts)) for i in keep]   # copies: the detail is memoized
             keep.sort(key=lambda i: (i["date"], i["sop_number"]), reverse=True)
             x["statement"] = [dict(cur, invoices=keep)]
         else:
@@ -258,7 +264,8 @@ def backtest(request: Request, m: str = None, open: str = "", db: Session = Depe
     return templates.TemplateResponse("backtest.html", {
         "request": request, "user": user, "months": months, "m": m, "mi": mi, "nav": nav,
         "rows": rows, "groups": groups, "team": team_row, "team_rows": team_rows, "rate": r["cumulative_rate"], "page": "dash",
-        "shared_row": next((t for t in team_rows if t["shared"]), None),   # the shared book, as a group in the pay table
+        "shared_row": shared_row, "shared_book": shared_book,   # the shared book, as a group in the pay table
+        "pct": float(cfg.TEAM_OWNERSHIP_PCT) * 100,
         "chapter_months": chapter_months, "chapter_label": ch_m["label"], "in_cycle": in_cycle,
         "chapter_starts": {mm for mm in months if mm == min(mx for mx in months if chapter_of[mx] is chapter_of[mm])},
         "colors": colors,

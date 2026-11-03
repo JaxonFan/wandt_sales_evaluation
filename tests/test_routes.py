@@ -183,6 +183,15 @@ def test_shared_book_shows_on_the_dashboard_and_pays_nobody():
         assert 'class="grp shared"' in pay and "1 accounts no team owns" in pay and "+$180" in pay
         # the row belongs to the OUTER pay table: after the last rep's row, before the totals footer
         assert pay.rindex('class="rep ') < pay.index('class="grp shared"') < pay.index("<tfoot>")
+        # it expands like a rep row: the shared accounts, who sells each, and the month's invoices
+        opened = client.get("/?open=Shared").text
+        panel = opened[opened.index('id="r-Shared"'):opened.index("<tfoot>")]
+        assert "hidden" not in panel[:60] and "SPLIT" in panel and "An Cao 50%" in panel and "Garmi Mei 50%" in panel
+        assert panel.count("invtog(") == 2 and "Written by" in panel        # both reps' invoices, drillable
+        # and a rep's own statement tags the invoices on shared accounts
+        an = client.get("/?open=An_Cao").text
+        an_panel = an[an.index('id="r-An_Cao"'):an.index('class="grp ', an.index('id="r-An_Cao"'))]
+        assert 'class="st shared"' in an_panel
         drill = client.get("/team/Shared").text
         assert "SPLIT" in drill and "no growth pay" in drill and "split equally" not in drill
         acc = client.get("/accounts").text

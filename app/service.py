@@ -1379,7 +1379,8 @@ def _rep_pay_detail_compute(db, associate):
                 account=("account", "first"), lines=("sop_number", "size"))
             for sop, inv in per_invoice.iterrows():
                 invoices.append(dict(sop_number=str(sop), date=inv["date"], amount=float(inv["amount"]),
-                                     lines=int(inv["lines"]), customer=names.get(inv["account"], inv["account"]),
+                                     lines=int(inv["lines"]), account=str(inv["account"]),
+                                     customer=names.get(inv["account"], inv["account"]),
                                      paid=(str(sop) in collected), written_off=(str(sop) in written_off)))
             invoices.sort(key=lambda i: (i["date"], i["sop_number"]), reverse=True)   # newest first
         pay = payments.get(mr["chapter_start"].date())
@@ -1531,6 +1532,61 @@ def acquisition_by_rep_month(db, months, team, s):
                                    else ("house" if flags.get(acct) is False else "unreviewed"))))
     review.sort(key=lambda r: -r["annualized"])
     return pay, review
+
+
+def shared_book(db, month):
+    """The shared book in `month` — every account no team owned at the bar that month — account by account:
+    profit this month vs the same month last year, the cycle gap, WHO SELLS IT (each rep's share of its orders
+    over the trailing ownership window, so the manager can see whether it is genuinely shared or one rep's
+    account short of the bar) and the month's invoices. Pays nobody; this is the Shared row's expansion."""
+    from .config import TEAM_WINDOW_MONTHS
+
+    def _compute():
+        r = run_cumulative_growth(db, with_comparison=False)
+        months = r["months"]
+        shared = r.get("shared_name")
+        if month not in months or not r.get("growth_active", True) or not shared:
+            return None
+        mi = months.index(month)
+        df = active_lines(db)
+        names = customer_names(db)
+        collected = {str(x) for x in collected_set(db)}
+        written_off = {str(x) for x in written_off_set(db)}
+        per = pd.Period(month, "M")
+        win = df[(df["document_date"] > per.end_time - pd.DateOffset(months=TEAM_WINDOW_MONTHS))
+                 & (df["document_date"] <= per.end_time)]
+        orders = win.drop_duplicates(["account", "sop_number"]).groupby(["account", "associate"]).size()
+        mo = df[(df["document_date"] >= per.start_time) & (df["document_date"] <= per.end_time)]
+        rows = []
+        for acct, v in r["account_monthly"].items():
+            if (v.get("owners") or [None] * len(months))[mi] != shared:
+                continue
+            sellers = []
+            if acct in orders.index.get_level_values(0):
+                by_rep = orders.loc[acct]
+                total = int(by_rep.sum()) or 1
+                sellers = sorted(((rep, int(n), n / total) for rep, n in by_rep.items()), key=lambda t: -t[1])
+            invoices = []
+            w = mo[mo["account"] == acct]
+            if len(w):
+                per_inv = w.groupby("sop_number").agg(amount=("extended_price", "sum"), profit=("line_profit", "sum"),
+                                                      date=("document_date", "min"), associate=("associate", "first"))
+                for sop, inv in per_inv.iterrows():
+                    invoices.append(dict(sop_number=str(sop), date=inv["date"], amount=float(inv["amount"]),
+                                         profit=float(inv["profit"]), associate=inv["associate"],
+                                         paid=(str(sop) in collected), written_off=(str(sop) in written_off)))
+                invoices.sort(key=lambda i: (i["date"], i["sop_number"]), reverse=True)
+            ty_mo, ly_mo = float(v["mo_ty"][mi]), float(v["mo_ly"][mi])
+            rows.append(dict(account=acct, customer=names.get(acct, acct), ty_mo=ty_mo, ly_mo=ly_mo,
+                             gap_mo=ty_mo - ly_mo, cum_gap=float(v["cum"][mi]), is_young=bool(v["is_young"]),
+                             sellers=sellers, invoices=invoices, n_orders=int(sum(n for _, n, _ in sellers))))
+        rows.sort(key=lambda z: -z["gap_mo"])
+        t = r["trajectory"][shared][mi]
+        return dict(month=month, label=per.strftime("%B %Y"), rows=rows, n=len(rows),
+                    book=float(t["ty_book"]), ly_book=float(t["ly_book"]),
+                    gap=float(t["ty_book"]) - float(t["ly_book"]), cum_gap=float(t["cum_growth"]))
+
+    return _memo(("shared_book", _pay_version(db), _assignment_version(db), _team_version(db), month), _compute)
 
 
 def written_off_set(db):

@@ -30,7 +30,13 @@
   tfoot th{font-size:15px;padding:12px 10px;background:var(--paper);text-transform:none;letter-spacing:0}
   tr.grp > td{font-size:13px;padding:7px 10px;border-top:2px solid #fff}
   tr.grp.t1 > td{background:#efe9fb;color:#3b2a6e} tr.grp.t2 > td{background:#e6f0fb;color:#1e3f66} tr.grp.house > td{background:#f0f0f0;color:#444}
-  tr.grp.shared > td{background:#FBF3EC;color:#6e3d14;border-left:3px solid #C0682B} tr.grp.shared a{color:#8a4a1b}
+  tr.grp.shared > td{background:#FBF3EC;color:#6e3d14;border-left:3px solid #C0682B;cursor:pointer} tr.grp.shared a{color:#8a4a1b}
+  tr.detail.shared > td{box-shadow:inset 4px 0 0 #C0682B}
+  .st.shared{background:#FBEEE2;color:#8a4a1b;margin-left:6px}
+  table.sb{width:100%;border-collapse:collapse;font-size:12.5px} table.sb th{font-weight:600;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;background:#f7f7fa}
+  table.sb td{padding:7px 10px;border-bottom:1px solid #f0f0f3;background:none} table.sb .num{text-align:right;font-variant-numeric:tabular-nums}
+  table.sb tr.acct{cursor:pointer} table.sb tr.acct:hover td{background:#fbfaf7}
+  table.sb tr.ainv > td{padding:4px 10px 12px 34px;background:#fff} .sellers{color:var(--muted);white-space:nowrap}
   tr.rep.t1 > td:first-child{box-shadow:inset 4px 0 0 var(--accent)} tr.rep.t2 > td:first-child{box-shadow:inset 4px 0 0 var(--blue)} tr.rep.house > td:first-child{box-shadow:inset 4px 0 0 #9a9a9a}
   tr.rep{cursor:pointer} tr.rep:hover > td{background:#fafafc}
   .tg{display:inline-block;width:14px;color:var(--muted);font-size:12px;margin-right:4px;transition:transform .15s}
@@ -78,6 +84,7 @@ function setOpen(id,on){var e=document.getElementById(id);if(!e)return;e.hidden=
   var key=id.slice(2),ids=openList().filter(function(x){return x!==key;});if(on)ids.push(key);
   history.replaceState({m:CUR},'',urlFor(CUR,ids));cache={};prefetch();}      // prefetched pages had the old open set
 function rowtog(ev,id){if(ev.target.closest('a,button,form,input,select'))return;var e=document.getElementById(id);setOpen(id,e.hidden);}
+function acctog(ev,id){if(ev.target.closest('a'))return;var e=document.getElementById(id);e.hidden=!e.hidden;var t=document.getElementById('tg-'+id);if(t)t.classList.toggle('open',!e.hidden);}
 function invtog(ev,sop){ev.preventDefault();var a=ev.currentTarget,tr=a.closest('tr'),nxt=tr.nextElementSibling;
   if(nxt&&nxt.classList.contains('invx')){nxt.remove();return;}
   var cols=tr.children.length,x=document.createElement('tr');x.className='invx';x.innerHTML='<td colspan="'+cols+'" class="mut">loading…</td>';tr.after(x);
@@ -269,7 +276,7 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
                 {% for i in st.invoices %}
                   <tr class="{{ 'ok' if i.paid else 'miss' }}">
                     <td class="mut">{{ i.date.strftime('%b %-d') }}</td><td><a href="/invoice/{{ i.sop_number }}" onclick="invtog(event,'{{ i.sop_number }}')" style="color:var(--accent-2);text-decoration:none;font-weight:600" title="Click to see the lines on this invoice">{{ i.sop_number }}</a></td>
-                    <td class="cust" title="{{ i.customer }}">{{ i.customer }}</td><td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
+                    <td class="cust" title="{{ i.customer }}">{{ i.customer }}{% if i.shared %}<span class="st shared" title="No team owns this account at the bar — contribution is still paid on it">shared</span>{% endif %}</td><td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
                     <td>{% if i.written_off %}<span class="st wo">written off</span>{% elif i.paid %}<span class="st ok">collected</span>{% else %}<span class="st miss">missing</span>{% endif %}</td>
                   </tr>
                 {% endfor %}
@@ -302,13 +309,68 @@ document.addEventListener('DOMContentLoaded',function(){wireDrag();prefetch();hi
       {% endfor %}
     {% endfor %}
     {% if shared_row %}
-      <tr class="grp shared"><td colspan="{{ ncol }}">
-        <b><a href="/team/{{ shared_row.team }}?m={{ m }}" style="text-decoration:none">Shared</a></b>
+      {% set is_open = ('Shared' in open_set) %}
+      <tr class="grp shared" onclick="rowtog(event,'r-Shared')" title="Click to see the shared accounts"><td colspan="{{ ncol }}">
+        <span class="tg {{ 'open' if is_open }}" id="tg-r-Shared">▸</span><b>Shared</b>
         <span class="mut"> · {{ shared_row.n_accounts }} accounts no team owns at the bar · pays nobody</span>
         <span class="mut" style="float:right">book ${{ '{:,.0f}'.format(shared_row.profit_mo) }} vs ${{ '{:,.0f}'.format(shared_row.profit_mo_ly) }} last year →
           <span class="{{ 'neg' if shared_row.gap_mo < 0 else ('pos' if shared_row.gap_mo > 0 else 'mut') }}"><b>{{ '−$' + '{:,.0f}'.format(-shared_row.gap_mo) if shared_row.gap_mo < 0 else '+$' + '{:,.0f}'.format(shared_row.gap_mo) }}</b></span>
           · cumulative <b>{{ '−$' + '{:,.0f}'.format(-shared_row.cum_gap) if shared_row.cum_gap < 0 else '$' + '{:,.0f}'.format(shared_row.cum_gap) }}</b>
           · <a href="/team/{{ shared_row.team }}?m={{ m }}">accounts</a> · <a href="/accounts?view=shared">assignment</a></span>
+      </td></tr>
+      <tr class="detail shared" id="r-Shared" {{ '' if is_open else 'hidden' }}><td colspan="{{ ncol }}">
+        {% if shared_book %}
+        <div class="dwrap">
+          <div class="dcol">
+            <h4>{{ shared_book.label }} for the shared book</h4>
+            <table class="brk">
+              <tr><td>Profit this month, {{ shared_book.n }} accounts</td><td class="num">${{ '{:,.0f}'.format(shared_book.book) }}</td></tr>
+              <tr class="sub"><td>same accounts, same month last year</td><td class="num">${{ '{:,.0f}'.format(shared_book.ly_book) }}</td></tr>
+              <tr class="sum"><td>Gap this month</td><td class="num {{ 'neg' if shared_book.gap < 0 }}">{{ '−$' + '{:,.0f}'.format(-shared_book.gap) if shared_book.gap < 0 else '+$' + '{:,.0f}'.format(shared_book.gap) }}</td></tr>
+              <tr class="note"><td>Cycle gap so far</td><td class="num">{{ '−$' + '{:,.0f}'.format(-shared_book.cum_gap) if shared_book.cum_gap < 0 else '$' + '{:,.0f}'.format(shared_book.cum_gap) }}</td></tr>
+            </table>
+            <p class="hint" style="margin:10px 0 0">No team wrote {{ pct|int }}% of these accounts' orders, so they pay nobody.
+              <b>Who sells it</b> is each rep's share of the account's orders over the last 12 months — an account
+              one rep nearly owns is a candidate to <a href="/accounts?view=shared">assign</a>; a real split is fine as it is.</p>
+          </div>
+          <div class="dcol wide">
+            <h4>Shared accounts — best first · click one for its {{ m[5:]|int|month_name }} invoices</h4>
+            <div class="scroll">
+            <table class="sb">
+              <thead><tr><th>Customer</th><th class="num">This month</th><th class="num">Same month last yr</th><th class="num">Gap</th><th class="num">Cycle gap</th><th>Who sells it (12 mo)</th></tr></thead>
+              <tbody>
+              {% for a in shared_book.rows %}{% set aid = 'sa-' ~ loop.index %}
+                <tr class="acct" onclick="acctog(event,'{{ aid }}')">
+                  <td><span class="tg" id="tg-{{ aid }}">▸</span>{{ a.customer }}{% if a.is_young %} <span class="st wo">new</span>{% endif %}</td>
+                  <td class="num">${{ '{:,.0f}'.format(a.ty_mo) }}</td><td class="num mut">${{ '{:,.0f}'.format(a.ly_mo) }}</td>
+                  <td class="num {{ 'neg' if a.gap_mo < 0 else ('pos' if a.gap_mo > 0) }}">{{ '−$' + '{:,.0f}'.format(-a.gap_mo) if a.gap_mo < 0 else '+$' + '{:,.0f}'.format(a.gap_mo) }}</td>
+                  <td class="num {{ 'neg' if a.cum_gap < 0 }}">{{ '−$' + '{:,.0f}'.format(-a.cum_gap) if a.cum_gap < 0 else '$' + '{:,.0f}'.format(a.cum_gap) }}</td>
+                  <td class="sellers">{% for rep, n, pct_ in a.sellers %}{{ rep }} {{ '%.0f'|format(pct_ * 100) }}%{{ ' · ' if not loop.last }}{% endfor %}<span class="mut"> ({{ a.n_orders }} orders)</span></td>
+                </tr>
+                <tr class="ainv" id="{{ aid }}" hidden><td colspan="6">
+                  {% if a.invoices %}
+                  <table class="stmt">
+                    <colgroup><col class="d"><col class="i"><col><col class="a"><col class="s"></colgroup>
+                    <thead><tr><th>Date</th><th>Invoice</th><th>Written by</th><th class="num">Amount</th><th>Status</th></tr></thead>
+                    <tbody>
+                    {% for i in a.invoices %}
+                      <tr class="{{ 'ok' if i.paid else 'miss' }}">
+                        <td class="mut">{{ i.date.strftime('%b %-d') }}</td><td><a href="/invoice/{{ i.sop_number }}" onclick="invtog(event,'{{ i.sop_number }}')" style="color:var(--accent-2);text-decoration:none;font-weight:600" title="Click to see the lines on this invoice">{{ i.sop_number }}</a></td>
+                        <td>{{ i.associate or '—' }}</td><td class="num">${{ '{:,.0f}'.format(i.amount) }}</td>
+                        <td>{% if i.written_off %}<span class="st wo">written off</span>{% elif i.paid %}<span class="st ok">collected</span>{% else %}<span class="st miss">missing</span>{% endif %}</td>
+                      </tr>
+                    {% endfor %}
+                    </tbody>
+                  </table>
+                  {% else %}<p class="hint" style="margin:4px 0">No invoices in {{ shared_book.label }}.</p>{% endif %}
+                </td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+        {% else %}<p class="hint">Nothing in the shared book this month.</p>{% endif %}
       </td></tr>
     {% endif %}
     </tbody>
