@@ -167,3 +167,25 @@ def test_paid_file_that_skips_older_months_is_called_out():
         assert res2["untouched"] == [] and "WARNING" not in service.collected_upload_message(res2)
     finally:
         s.close(); teardown()
+
+
+def test_assistant_tool_output_is_strict_json():
+    """Tool results go to Gemini as JSON; a pandas NaN (e.g. the shared book's growth target) must become null,
+    never a bare NaN literal — Gemini rejects that request with HTTP 400 'Invalid JSON payload'."""
+    import json, math
+    from webfix import build, teardown
+    from app import assistant as AS
+    assert AS._jsonsafe({"a": float("nan"), "b": [1.5, float("inf")], "c": {"d": None}}) == {"a": None, "b": [1.5, None], "c": {"d": None}}
+    assert AS._money(float("nan")) == 0.0 and AS._money(None) == 0.0 and AS._money(12.345) == 12.35
+    _, Session = build(october=True)
+    s = Session()
+    try:
+        T = AS.Tools(s)
+        for name in ("growth", "pay", "falling_behind", "late_payments", "new_accounts", "months", "assignments"):
+            out = T.call(name, {})
+            json.dumps(out, default=str, allow_nan=False)   # raises ValueError on NaN/inf
+        g = T.call("growth", {})
+        if "teams" in g:
+            assert all(t["target"] is None or math.isfinite(t["target"]) for t in g["teams"])
+    finally:
+        s.close(); teardown()

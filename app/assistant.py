@@ -16,7 +16,9 @@ from __future__ import annotations
 import base64
 import io
 import json
+import math
 import os
+import sys
 from datetime import datetime
 
 import pandas as pd
@@ -124,7 +126,25 @@ TOOLS = [
 
 
 def _money(x):
-    return round(float(x or 0.0), 2)
+    v = float(x or 0.0)
+    return round(v, 2) if math.isfinite(v) else 0.0
+
+
+def _jsonsafe(o):
+    """Tool output as strict JSON: NaN/inf (pandas gaps) become null. A bare NaN in the request body is not JSON
+    and Gemini answers HTTP 400 'Invalid JSON payload' — that was the 'HTTPError' the panel showed after `growth`."""
+    if isinstance(o, dict):
+        return {str(k): _jsonsafe(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_jsonsafe(v) for v in o]
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    if hasattr(o, "item") and not isinstance(o, (str, bytes)):   # numpy scalar
+        try:
+            return _jsonsafe(o.item())
+        except Exception:
+            return str(o)
+    return o
 
 
 class Tools:
@@ -261,7 +281,7 @@ class Tools:
             k = max(1, min(n or 5, 25))
             out["teams"].append({"team": t["team"], **({"note": "shared book — accounts no team owns; tracked, pays nobody"} if t["team"] == r.get("shared_name") else {}),
                                  "accounts": int(t["n_accounts"]), "cumulative_net_gap": _money(t["cum_growth"]),
-                                 "target": (_money(t["target"]) if t["target"] is not None else None), "growth_pay_so_far": _money(t["earned"]),
+                                 "target": (_money(t["target"]) if pd.notna(t["target"]) else None), "growth_pay_so_far": _money(t["earned"]),
                                  "top_gainers": [{"customer": names.get(a, a), "gap": _money(v["gap"])} for a, v in accts[:k]],
                                  "top_losers": [{"customer": names.get(a, a), "gap": _money(v["gap"])} for a, v in accts[-k:][::-1] if v["gap"] < 0]})
         return out
@@ -472,7 +492,7 @@ class Tools:
         if not fn or name.startswith("_") or name == "call":
             return {"error": f"no tool {name}"}
         try:
-            return fn(**args)
+            return _jsonsafe(fn(**args))
         except TypeError as e:
             return {"error": f"bad arguments: {e}"}
         except Exception as e:
@@ -490,14 +510,29 @@ def _gemini_tools() -> list:
     return [{"functionDeclarations": decls}]
 
 
+class GeminiHTTPError(Exception):
+    def __init__(self, code: int, detail: str):
+        super().__init__(f"HTTP {code}: {detail}")
+        self.code, self.detail = code, detail
+
+
 def _gemini_post(body: dict) -> dict:
-    import urllib.request
+    import urllib.error, urllib.request
     key = _secret("GEMINI_API_KEY")
     req = urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
                                  headers={"Content-Type": "application/json", "x-goog-api-key": key},
-                                 data=json.dumps(body).encode())
-    with urllib.request.urlopen(req, timeout=90) as r:
-        return json.loads(r.read())
+                                 data=json.dumps(body, allow_nan=False).encode())
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", "replace")[:600]
+        except Exception:
+            pass
+        print(f"[assistant] Gemini HTTP {e.code}: {detail}", file=sys.stderr, flush=True)
+        raise GeminiHTTPError(e.code, detail) from e
 
 
 def _run_gemini(convo: list, tools: "Tools", system: str, used: list) -> str:
@@ -545,7 +580,12 @@ def run(messages: list, db, rep_only: str | None = None, client=None) -> dict:
     if client is None and cfg["backbone"] == "gemini":
         try:
             reply = _run_gemini(convo, tools, system, used)
+        except GeminiHTTPError as e:
+            hint = {429: "it is rate-limited", 503: "it is overloaded"}.get(e.code, "")
+            return {"reply": f"The assistant hit an error talking to Gemini (HTTP {e.code}{', ' + hint if hint else ''}). Try again in a moment.",
+                    "images": tools.images, "used": used}
         except Exception as e:
+            print(f"[assistant] Gemini turn failed: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
             return {"reply": f"The assistant hit an error talking to Gemini ({type(e).__name__}). Try again in a moment.",
                     "images": tools.images, "used": used}
         return {"reply": reply or "(no answer)", "images": tools.images, "used": used, "model": GEMINI_MODEL}
